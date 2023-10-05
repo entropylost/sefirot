@@ -1,0 +1,12 @@
+[package]
+name = "sefirot"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+generational-arena = "0.2.9"
+petgraph = "0.6.4"
+
+[dependencies.luisa_compute]
+git = "https://github.com/iMplode-nZ/luisa-compute-rs"
+branch = "main"

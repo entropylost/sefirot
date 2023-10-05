@@ -1,0 +1,194 @@
+use std::sync::{Arc, Weak};
+
+use super::*;
+
+impl<T: EmanationType> Emanation<T> {
+    pub fn create_soa_fields<S: Structure>(
+        &mut self,
+        device: &Device,
+        index: &ArrayIndex<T>,
+        prefix: Option<impl AsRef<str>>,
+        values: &[S],
+    ) -> S::WithMapping<FieldMapping<T>> {
+        assert_eq!(values.len(), index.length as usize);
+        let prefix = prefix.map(|x| x.as_ref().to_string());
+        S::apply(CreateArrayField {
+            emanation: self,
+            device,
+            index,
+            prefix,
+            values,
+        })
+    }
+    pub fn create_aos_fields<S: Structure>(
+        &mut self,
+        device: &Device,
+        index: &ArrayIndex<T>,
+        prefix: Option<impl AsRef<str>>,
+        values: &[S],
+    ) -> S::WithMapping<FieldMapping<T>> {
+        self.create_aos_fields_with_struct_field(device, index, prefix, values)
+            .1
+    }
+    pub fn create_aos_fields_with_struct_field<S: Structure>(
+        &mut self,
+        device: &Device,
+        index: &ArrayIndex<T>,
+        prefix: Option<impl AsRef<str>>,
+        values: &[S],
+    ) -> (Field<Expr<S>, T>, S::WithMapping<FieldMapping<T>>) {
+        assert_eq!(values.len(), index.length as usize);
+        let struct_field = self.create_field(None::<String>);
+        let buffer = device.create_buffer_from_slice(values);
+        let struct_accessor = ArrayAccessor {
+            index: index.clone(),
+            buffer,
+        };
+        let struct_accessor = Arc::downgrade(&self.bind(struct_field, struct_accessor));
+
+        let prefix = prefix.map(|x| x.as_ref().to_string());
+        let fields = S::apply(CreateStructArrayField {
+            emanation: self,
+            prefix,
+            struct_field,
+            struct_accessor,
+        });
+        (struct_field, fields)
+    }
+}
+
+struct CreateArrayField<'a, S: Structure, T: EmanationType> {
+    emanation: &'a mut Emanation<T>,
+    device: &'a Device,
+    index: &'a ArrayIndex<T>,
+    prefix: Option<String>,
+    values: &'a [S],
+}
+impl<S: Structure, T: EmanationType> ValueMapping<S> for CreateArrayField<'_, S, T> {
+    type M = FieldMapping<T>;
+    fn map<Z: Selector<S>>(&mut self, name: &'static str) -> Field<Expr<Z::Result>, T> {
+        let field_name = self
+            .prefix
+            .as_ref()
+            .map(|prefix| prefix.clone() + name)
+            .unwrap_or(name.to_string());
+        let buffer = self
+            .device
+            .create_buffer_from_fn(self.values.len(), |i| Z::select(&self.values[i]).clone());
+        self.emanation
+            .create_array_field_from_buffer(self.index, Some(field_name), buffer)
+    }
+}
+
+struct CreateStructArrayField<'a, S: Structure, T: EmanationType> {
+    emanation: &'a mut Emanation<T>,
+    prefix: Option<String>,
+    struct_field: Field<Expr<S>, T>,
+    struct_accessor: Weak<dyn DynAccessor<T>>,
+}
+impl<S: Structure, T: EmanationType> ValueMapping<S> for CreateStructArrayField<'_, S, T> {
+    type M = FieldMapping<T>;
+    fn map<Z: Selector<S>>(&mut self, name: &'static str) -> Field<Expr<Z::Result>, T> {
+        let field_name = self
+            .prefix
+            .as_ref()
+            .map(|prefix| prefix.clone() + name)
+            .unwrap_or(name.to_string());
+        let field = self.emanation.create_field(Some(field_name));
+        let accessor = StructArrayAccessor {
+            struct_field: self.struct_field,
+            struct_accessor: self.struct_accessor.clone(),
+            _marker: PhantomData::<Z>,
+        };
+        self.emanation.bind(field, accessor);
+        field
+    }
+}
+
+pub trait Selector<S: Structure>: 'static {
+    type Result: Value;
+    fn select_expr(structure: &Expr<S>) -> Expr<Self::Result>;
+    fn select_var(structure: &Var<S>) -> Var<Self::Result>;
+    fn select(structure: &S) -> &Self::Result;
+    fn select_mapped<M: Mapping>(structure: &S::WithMapping<M>) -> &M::Result<Self::Result>;
+}
+
+pub trait Mapping: 'static {
+    type Result<X: Value>;
+}
+
+pub struct BufferMapping;
+impl Mapping for BufferMapping {
+    type Result<X: Value> = Buffer<X>;
+}
+
+pub struct FieldMapping<T: EmanationType>(PhantomData<T>);
+impl<T: EmanationType> Mapping for FieldMapping<T> {
+    type Result<X: Value> = Field<Expr<X>, T>;
+}
+
+pub trait ValueMapping<S: Structure> {
+    type M: Mapping;
+    fn map<Z: Selector<S>>(
+        &mut self,
+        name: &'static str,
+    ) -> <Self::M as Mapping>::Result<Z::Result>;
+}
+
+pub trait Structure: Value {
+    type WithMapping<Mapping>;
+    fn apply<M: Mapping>(f: impl ValueMapping<Self, M = M>) -> Self::WithMapping<M>;
+}
+
+struct StructArrayAccessor<Z: Selector<S>, S: Structure, T: EmanationType> {
+    struct_field: Field<Expr<S>, T>,
+    struct_accessor: Weak<dyn DynAccessor<T>>,
+    _marker: PhantomData<Z>,
+}
+
+impl<Z: Selector<S>, S: Structure, T: EmanationType> Accessor<T> for StructArrayAccessor<Z, S, T> {
+    type V = Expr<Z::Result>;
+    type C = ();
+
+    fn get(
+        &self,
+        element: &mut Element<T>,
+        _field: Field<Self::V, T>,
+    ) -> Result<Self::V, ReadError> {
+        let structure = element.get(self.struct_field);
+        Ok(Z::select_expr(structure))
+    }
+
+    fn set(
+        &self,
+        element: &mut Element<T>,
+        _field: Field<Self::V, T>,
+        value: &Self::V,
+    ) -> Result<(), WriteError> {
+        let struct_accessor = self.struct_accessor.upgrade().unwrap();
+        if let Some(structure) = element.cache.get_mut(&self.struct_field.raw) {
+            let structure = structure
+                .downcast_mut::<<ArrayAccessor<S, T> as Accessor<T>>::C>()
+                .unwrap();
+            Z::select_var(&structure.var).store(value);
+        } else {
+            let _ = DynAccessor::get(&*struct_accessor, element, self.struct_field.raw);
+            element.unsaved_fields.insert(self.struct_field.raw);
+            let structure = element
+                .cache
+                .get_mut(&self.struct_field.raw)
+                .unwrap()
+                .downcast_mut::<<ArrayAccessor<S, T> as Accessor<T>>::C>()
+                .unwrap();
+
+            Z::select_var(&structure.var).store(value);
+        }
+        Ok(())
+    }
+
+    fn save(&self, _element: &mut Element<T>, _field: Field<Self::V, T>) {}
+
+    fn can_write(&self) -> bool {
+        true
+    }
+}
