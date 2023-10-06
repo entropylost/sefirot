@@ -88,7 +88,7 @@ pub trait Accessor<T: EmanationType>: 'static {
     fn get_cache<'a>(
         &'a self,
         element: &'a mut Element<T>,
-        field: &Field<Self::V, T>,
+        field: Field<Self::V, T>,
     ) -> Option<&'a mut Self::C> {
         element
             .cache
@@ -98,7 +98,7 @@ pub trait Accessor<T: EmanationType>: 'static {
     fn get_or_insert_cache<'a>(
         &'a self,
         element: &'a mut Element<T>,
-        field: &Field<Self::V, T>,
+        field: Field<Self::V, T>,
         f: impl FnOnce() -> Self::C,
     ) -> &'a mut Self::C {
         element

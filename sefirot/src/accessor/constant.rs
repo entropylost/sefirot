@@ -16,7 +16,7 @@ impl<V: Value, T: EmanationType> Accessor<T> for ConstantAccessor<V, T> {
         element: &mut Element<T>,
         field: Field<Self::V, T>,
     ) -> Result<Self::V, ReadError> {
-        if let Some(expr) = self.get_cache(element, &field) {
+        if let Some(expr) = self.get_cache(element, field) {
             Ok(expr.clone())
         } else {
             let value = self.value.clone();
