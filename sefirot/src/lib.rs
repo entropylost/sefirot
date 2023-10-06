@@ -1,3 +1,7 @@
+// See commit 058f099b2e05089a498b9fe881b1f0ee10f847fd for a version that doesn't need these.
+#![feature(unboxed_closures)]
+#![feature(fn_traits)]
+
 pub mod accessor;
 pub mod domain;
 pub mod element;

@@ -176,7 +176,7 @@ impl<Z: Selector<S>, S: Structure, T: EmanationType> Accessor<T> for StructArray
         _field: Field<Self::V, T>,
     ) -> Result<Self::V, ReadError> {
         let structure = element.get(self.struct_field);
-        Ok(Z::select_expr(structure))
+        Ok(Z::select_expr(&structure))
     }
 
     fn set(

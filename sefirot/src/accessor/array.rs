@@ -77,7 +77,7 @@ impl<V: Value, T: EmanationType> Accessor<T> for ArrayAccessor<V, T> {
         if let Some(cache) = self.get_cache(element, field) {
             Ok(cache.var.load())
         } else {
-            let value = self.buffer.read(*element.get(self.index.field));
+            let value = self.buffer.read(element.get(self.index.field));
             self.insert_cache(element, field, SimpleCache { var: value.var() });
             Ok(value)
         }
@@ -98,7 +98,7 @@ impl<V: Value, T: EmanationType> Accessor<T> for ArrayAccessor<V, T> {
 
     fn save(&self, element: &mut Element<T>, field: Field<Self::V, T>) {
         self.buffer.write(
-            *element.get(self.index.field),
+            element.get(self.index.field),
             self.get_cache(element, field).unwrap().var.load(),
         );
     }

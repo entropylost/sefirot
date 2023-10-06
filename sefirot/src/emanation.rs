@@ -1,6 +1,7 @@
 use std::any::{Any, TypeId};
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::ops::{Deref, DerefMut};
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
@@ -35,7 +36,7 @@ impl<V: Any, T: EmanationType> DerefMut for FieldAccess<'_, '_, V, T> {
 impl<V: Any, T: EmanationType> Drop for FieldAccess<'_, '_, V, T> {
     fn drop(&mut self) {
         if self.changed {
-            self.el.set(&self.field, &self.value);
+            self.el.set(self.field, &self.value);
         }
     }
 }
@@ -77,6 +78,12 @@ impl<V: Any, T: EmanationType> Field<V, T> {
             emanation_id: id,
             _marker: PhantomData,
         }
+    }
+}
+impl<V: Any, T: EmanationType> FnOnce<(&mut Element<'_, T>,)> for Field<V, T> {
+    type Output = V;
+    extern "rust-call" fn call_once(self, args: (&mut Element<T>,)) -> Self::Output {
+        args.0.get(self)
     }
 }
 

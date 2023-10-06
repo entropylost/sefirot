@@ -79,7 +79,7 @@ impl<T: EmanationType> Element<'_, T> {
             .insert(field.raw, Arc::new(accessor));
     }
 
-    pub fn get<V: Any>(&mut self, field: Field<V, T>) -> &V {
+    pub fn get<V: Any>(&mut self, field: Field<V, T>) -> V {
         let field = field.raw;
         self.context
             .context
