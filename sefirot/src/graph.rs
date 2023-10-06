@@ -180,7 +180,7 @@ impl<'a> ComputeGraph<'a> {
 
         for (handle, graph_node) in &node_map {
             let node = &mut self.nodes[handle.0];
-            let mut outgoing = std::mem::replace(&mut node.outgoing, HashSet::new());
+            let mut outgoing = std::mem::take(&mut node.outgoing);
             let allowed_outgoing = reduction
                 .neighbors(revmap[graph_node.index()])
                 .collect::<HashSet<_>>();
@@ -192,6 +192,7 @@ impl<'a> ComputeGraph<'a> {
                     false
                 }
             });
+            self.nodes[handle.0].outgoing = outgoing;
         }
     }
     fn order(&self) -> Vec<NodeHandle> {
@@ -224,7 +225,7 @@ impl<'a> ComputeGraph<'a> {
                 .unwrap()
                 .nodes
                 .len(),
-            "Error: Graph is not connected."
+            "Graph is not connected."
         );
         self.reduce_transitive();
         self.reduce_fences();
@@ -243,13 +244,8 @@ impl<'a> ComputeGraph<'a> {
         let scope = device.default_stream().scope();
         scope.submit_with_callback(commands, || {});
     }
-    pub fn add(&mut self, node: NodeData<'a>) -> NodeHandle {
-        NodeHandle(self.nodes.insert(Node {
-            incoming: HashSet::new(),
-            outgoing: HashSet::new(),
-            parent: None,
-            data: node,
-        }))
+    pub fn add<'b>(&'b mut self, f: impl AddToComputeGraph<'a, 'b>) -> NodeHandle {
+        f.add(self)
     }
     pub fn root(&self) -> NodeHandle {
         self.root
@@ -330,5 +326,27 @@ impl NodeRef<'_, '_> {
         nodes.insert(self.handle);
         self.graph.nodes[self.handle.0].parent = Some(node);
         self
+    }
+}
+
+pub trait AddToComputeGraph<'a, 'b> {
+    fn add(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle;
+}
+impl<'a, 'b> AddToComputeGraph<'a, 'b> for NodeData<'a> {
+    fn add(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle {
+        NodeHandle(graph.nodes.insert(Node {
+            incoming: HashSet::new(),
+            outgoing: HashSet::new(),
+            parent: None,
+            data: self,
+        }))
+    }
+}
+impl<'a: 'b, 'b, F> AddToComputeGraph<'a, 'b> for F
+where
+    F: FnOnce(&'b mut ComputeGraph<'a>) -> NodeHandle,
+{
+    fn add(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle {
+        self(graph)
     }
 }

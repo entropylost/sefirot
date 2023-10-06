@@ -40,7 +40,9 @@ impl KernelArg for Context {
         }
     }
 }
-impl AsKernelArg<Context> for Context {}
+impl AsKernelArg for Context {
+    type Output = Self;
+}
 impl Context {
     pub fn new() -> Self {
         Self {

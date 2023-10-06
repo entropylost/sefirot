@@ -1,5 +1,7 @@
 use std::sync::{Arc, Weak};
 
+use luisa::lang::ir::TypeOf;
+
 use super::*;
 
 impl<T: EmanationType> Emanation<T> {
@@ -9,7 +11,7 @@ impl<T: EmanationType> Emanation<T> {
         index: &ArrayIndex<T>,
         prefix: Option<impl AsRef<str>>,
         values: &[S],
-    ) -> S::WithMapping<FieldMapping<T>> {
+    ) -> S::Map<Field<Expr<__>, T>> {
         assert_eq!(values.len(), index.length as usize);
         let prefix = prefix.map(|x| x.as_ref().to_string());
         S::apply(CreateArrayField {
@@ -26,7 +28,7 @@ impl<T: EmanationType> Emanation<T> {
         index: &ArrayIndex<T>,
         prefix: Option<impl AsRef<str>>,
         values: &[S],
-    ) -> S::WithMapping<FieldMapping<T>> {
+    ) -> S::Map<Field<Expr<__>, T>> {
         self.create_aos_fields_with_struct_field(device, index, prefix, values)
             .1
     }
@@ -36,7 +38,7 @@ impl<T: EmanationType> Emanation<T> {
         index: &ArrayIndex<T>,
         prefix: Option<impl AsRef<str>>,
         values: &[S],
-    ) -> (Field<Expr<S>, T>, S::WithMapping<FieldMapping<T>>) {
+    ) -> (Field<Expr<S>, T>, S::Map<Field<Expr<__>, T>>) {
         assert_eq!(values.len(), index.length as usize);
         let struct_field = self.create_field(None::<String>);
         let buffer = device.create_buffer_from_slice(values);
@@ -65,16 +67,16 @@ struct CreateArrayField<'a, S: Structure, T: EmanationType> {
     values: &'a [S],
 }
 impl<S: Structure, T: EmanationType> ValueMapping<S> for CreateArrayField<'_, S, T> {
-    type M = FieldMapping<T>;
+    type M = Field<Expr<__>, T>;
     fn map<Z: Selector<S>>(&mut self, name: &'static str) -> Field<Expr<Z::Result>, T> {
         let field_name = self
             .prefix
             .as_ref()
             .map(|prefix| prefix.clone() + name)
             .unwrap_or(name.to_string());
-        let buffer = self
-            .device
-            .create_buffer_from_fn(self.values.len(), |i| Z::select(&self.values[i]).clone());
+        let buffer = self.device.create_buffer_from_fn(self.values.len(), |i| {
+            Z::select_ref(&self.values[i]).clone()
+        });
         self.emanation
             .create_array_field_from_buffer(self.index, Some(field_name), buffer)
     }
@@ -87,7 +89,7 @@ struct CreateStructArrayField<'a, S: Structure, T: EmanationType> {
     struct_accessor: Weak<dyn DynAccessor<T>>,
 }
 impl<S: Structure, T: EmanationType> ValueMapping<S> for CreateStructArrayField<'_, S, T> {
-    type M = FieldMapping<T>;
+    type M = Field<Expr<__>, T>;
     fn map<Z: Selector<S>>(&mut self, name: &'static str) -> Field<Expr<Z::Result>, T> {
         let field_name = self
             .prefix
@@ -109,21 +111,39 @@ pub trait Selector<S: Structure>: 'static {
     type Result: Value;
     fn select_expr(structure: &Expr<S>) -> Expr<Self::Result>;
     fn select_var(structure: &Var<S>) -> Var<Self::Result>;
-    fn select(structure: &S) -> &Self::Result;
-    fn select_mapped<M: Mapping>(structure: &S::WithMapping<M>) -> &M::Result<Self::Result>;
+
+    fn select_ref(structure: &S) -> &Self::Result;
+    fn select_mut(structure: &mut S) -> &mut Self::Result;
+    fn select(structure: S) -> Self::Result;
 }
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum __ {}
+const _: () = {
+    impl TypeOf for __ {
+        fn type_() -> luisa::lang::ir::CArc<luisa::lang::ir::Type> {
+            panic!("__ is a dummy type for creating `Mapping`s and should not be used");
+        }
+    }
+    luisa::impl_simple_expr_proxy!([] __Expr for __);
+    luisa::impl_simple_var_proxy!([] __Var for __);
+    luisa::impl_simple_atomic_ref_proxy!([] __Ref for __);
+    impl Value for __ {
+        type Expr = __Expr;
+        type Var = __Var;
+        type AtomicRef = __Ref;
+    }
+};
 
 pub trait Mapping: 'static {
     type Result<X: Value>;
 }
 
-pub struct BufferMapping;
-impl Mapping for BufferMapping {
+impl Mapping for Buffer<__> {
     type Result<X: Value> = Buffer<X>;
 }
 
-pub struct FieldMapping<T: EmanationType>(PhantomData<T>);
-impl<T: EmanationType> Mapping for FieldMapping<T> {
+impl<T: EmanationType> Mapping for Field<Expr<__>, T> {
     type Result<X: Value> = Field<Expr<X>, T>;
 }
 
@@ -136,8 +156,8 @@ pub trait ValueMapping<S: Structure> {
 }
 
 pub trait Structure: Value {
-    type WithMapping<Mapping>;
-    fn apply<M: Mapping>(f: impl ValueMapping<Self, M = M>) -> Self::WithMapping<M>;
+    type Map<M: Mapping>;
+    fn apply<M: Mapping>(f: impl ValueMapping<Self, M = M>) -> Self::Map<M>;
 }
 
 struct StructArrayAccessor<Z: Selector<S>, S: Structure, T: EmanationType> {

@@ -14,7 +14,17 @@ static NEXT_EMANATION_ID: AtomicU64 = AtomicU64::new(0);
 // States what the original ID is; eg: Particles for example.
 pub trait EmanationType: Sync + Send + Debug + Copy + Eq + 'static {}
 
-#[derive(Clone, Copy)]
+impl<V: Any, T: EmanationType> Clone for Field<V, T> {
+    fn clone(&self) -> Self {
+        Self {
+            raw: self.raw,
+            emanation_id: self.emanation_id,
+            _marker: PhantomData,
+        }
+    }
+}
+impl<V: Any, T: EmanationType> Copy for Field<V, T> {}
+
 pub struct Field<V: Any, T: EmanationType> {
     pub(crate) raw: RawFieldHandle,
     pub(crate) emanation_id: u64,
@@ -22,7 +32,10 @@ pub struct Field<V: Any, T: EmanationType> {
 }
 impl<V: Any, T: EmanationType> Debug for Field<V, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Field").field("raw", &self.raw).finish()
+        f.debug_struct("Field")
+            .field("raw", &self.raw)
+            .field("emanation_id", &self.emanation_id)
+            .finish()
     }
 }
 impl<V: Any, T: EmanationType> PartialEq for Field<V, T> {

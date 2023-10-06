@@ -6,6 +6,8 @@ edition = "2021"
 [dependencies]
 generational-arena = "0.2.9"
 petgraph = "0.6.4"
+pretty-type-name = "1.0.1"
+sefirot_macro = { path = "../sefirot_macro" }
 
 [dependencies.luisa_compute]
 git = "https://github.com/iMplode-nZ/luisa-compute-rs"

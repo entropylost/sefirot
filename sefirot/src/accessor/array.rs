@@ -2,7 +2,7 @@ use crate::domain::{IndexDomain, IndexEmanation};
 
 use super::*;
 
-mod structure;
+pub mod structure;
 
 impl<T: EmanationType> Emanation<T> {
     pub fn create_index(&mut self, length: u32) -> ArrayIndex<T> {
@@ -45,12 +45,13 @@ pub struct ArrayIndex<T: EmanationType> {
     pub length: u32,
 }
 
-impl<T: EmanationType> IndexEmanation<Expr<u32>, T> for ArrayIndex<T> {
+impl<T: EmanationType> IndexEmanation<Expr<u32>> for ArrayIndex<T> {
+    type T = T;
     fn bind_fields(&self, idx: Expr<u32>, element: &mut Element<T>) {
         element.bind(self.field, ExprAccessor::new(idx));
     }
 }
-impl<T: EmanationType> IndexDomain<T> for ArrayIndex<T> {
+impl<T: EmanationType> IndexDomain for ArrayIndex<T> {
     type I = Expr<u32>;
     fn get_index(&self) -> Self::I {
         dispatch_id().x
