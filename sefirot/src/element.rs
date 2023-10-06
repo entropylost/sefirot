@@ -74,12 +74,12 @@ impl<T: EmanationType> Element<'_, T> {
             .clone()
     }
 
-    pub fn bind<V: Any>(&mut self, field: Field<V, T>, accessor: impl Accessor<T, V = V>) {
+    pub fn bind<V: Any>(&mut self, field: &Field<V, T>, accessor: impl Accessor<T, V = V>) {
         self.overridden_accessors
             .insert(field.raw, Arc::new(accessor));
     }
 
-    pub fn get<V: Any>(&mut self, field: Field<V, T>) -> &V {
+    pub fn get<V: Any>(&mut self, field: &Field<V, T>) -> V {
         let field = field.raw;
         self.context
             .context
@@ -92,7 +92,7 @@ impl<T: EmanationType> Element<'_, T> {
         *accessor.get(self, field).unwrap().downcast().unwrap()
     }
 
-    pub fn set<V: Any>(&mut self, field: Field<V, T>, value: &V) {
+    pub fn set<V: Any>(&mut self, field: &Field<V, T>, value: &V) {
         if !self.can_write {
             panic!("Cannot write to this element");
         }

@@ -1,6 +1,7 @@
 use std::any::{Any, TypeId};
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::ops::{Deref, DerefMut};
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
@@ -14,22 +15,51 @@ static NEXT_EMANATION_ID: AtomicU64 = AtomicU64::new(0);
 // States what the original ID is; eg: Particles for example.
 pub trait EmanationType: Sync + Send + Debug + Copy + Eq + 'static {}
 
+pub struct FieldAccess<'a: 'b, 'b, V: Any, T: EmanationType> {
+    el: &'b mut Element<'a, T>,
+    field: Field<V, T>,
+    value: V,
+    changed: bool,
+}
+impl<V: Any, T: EmanationType> Deref for FieldAccess<'_, '_, V, T> {
+    type Target = V;
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+impl<V: Any, T: EmanationType> DerefMut for FieldAccess<'_, '_, V, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.changed = true;
+        &mut self.value
+    }
+}
+impl<V: Any, T: EmanationType> Drop for FieldAccess<'_, '_, V, T> {
+    fn drop(&mut self) {
+        if self.changed {
+            self.el.set(&self.field, &self.value);
+        }
+    }
+}
+
 impl<V: Any, T: EmanationType> Clone for Field<V, T> {
     fn clone(&self) -> Self {
         Self {
             raw: self.raw,
             emanation_id: self.emanation_id,
+            f: self.f.clone(),
             _marker: PhantomData,
         }
     }
 }
-impl<V: Any, T: EmanationType> Copy for Field<V, T> {}
+// impl<V: Any, T: EmanationType> Copy for Field<V, T> {}
 
 pub struct Field<V: Any, T: EmanationType> {
     pub(crate) raw: RawFieldHandle,
     pub(crate) emanation_id: u64,
+    pub(crate) f: Arc<dyn for<'a, 'b> Fn(&'a mut Element<'b, T>) -> FieldAccess<'a, 'b, V, T>>,
     pub(crate) _marker: PhantomData<(V, T)>,
 }
+
 impl<V: Any, T: EmanationType> Debug for Field<V, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Field")
@@ -44,11 +74,27 @@ impl<V: Any, T: EmanationType> PartialEq for Field<V, T> {
     }
 }
 impl<V: Any, T: EmanationType> Eq for Field<V, T> {}
+impl<V: Any, T: EmanationType> Deref for Field<V, T> {
+    type Target = dyn for<'a, 'b> Fn(&'a mut Element<'b, T>) -> FieldAccess<'a, 'b, V, T>;
+    fn deref(&self) -> &Self::Target {
+        &*self.f
+    }
+}
 impl<V: Any, T: EmanationType> Field<V, T> {
     pub fn from_raw(field: RawFieldHandle, id: u64) -> Self {
         Self {
             raw: field,
             emanation_id: id,
+            f: Arc::new(move |el| {
+                let field = Self::from_raw(field, id);
+                let value = el.get(&field);
+                FieldAccess {
+                    el,
+                    field,
+                    value,
+                    changed: false,
+                }
+            }),
             _marker: PhantomData,
         }
     }
@@ -99,16 +145,12 @@ impl<T: EmanationType> Emanation<T> {
             ty: TypeId::of::<V>(),
             accessor: None,
         }));
-        Field {
-            raw,
-            emanation_id: self.id,
-            _marker: PhantomData,
-        }
+        Field::from_raw(raw, self.id)
     }
 
     pub fn bind<V: Any>(
         &mut self,
-        field: Field<V, T>,
+        field: &Field<V, T>,
         accessor: impl Accessor<T, V = V>,
     ) -> Arc<dyn DynAccessor<T>> {
         let a = Arc::new(accessor);

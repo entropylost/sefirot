@@ -34,7 +34,7 @@ impl<T: EmanationType> Emanation<T> {
             index: index.clone(),
             buffer,
         };
-        self.bind(field, accessor);
+        self.bind(&field, accessor);
         field
     }
 }
@@ -48,7 +48,7 @@ pub struct ArrayIndex<T: EmanationType> {
 impl<T: EmanationType> IndexEmanation<Expr<u32>> for ArrayIndex<T> {
     type T = T;
     fn bind_fields(&self, idx: Expr<u32>, element: &mut Element<T>) {
-        element.bind(self.field, ExprAccessor::new(idx));
+        element.bind(&self.field, ExprAccessor::new(idx));
     }
 }
 impl<T: EmanationType> IndexDomain for ArrayIndex<T> {
@@ -74,10 +74,10 @@ impl<V: Value, T: EmanationType> Accessor<T> for ArrayAccessor<V, T> {
         element: &mut Element<T>,
         field: Field<Self::V, T>,
     ) -> Result<Self::V, ReadError> {
-        if let Some(cache) = self.get_cache(element, field) {
+        if let Some(cache) = self.get_cache(element, &field) {
             Ok(cache.var.load())
         } else {
-            let value = self.buffer.read(*element.get(self.index.field));
+            let value = self.buffer.read(element.get(&self.index.field));
             self.insert_cache(element, field, SimpleCache { var: value.var() });
             Ok(value)
         }
@@ -88,7 +88,7 @@ impl<V: Value, T: EmanationType> Accessor<T> for ArrayAccessor<V, T> {
         field: Field<Self::V, T>,
         value: &Self::V,
     ) -> Result<(), WriteError> {
-        if let Some(cache) = self.get_cache(element, field) {
+        if let Some(cache) = self.get_cache(element, &field) {
             cache.var.store(value.clone());
         } else {
             self.insert_cache(element, field, SimpleCache { var: value.var() });
@@ -98,8 +98,8 @@ impl<V: Value, T: EmanationType> Accessor<T> for ArrayAccessor<V, T> {
 
     fn save(&self, element: &mut Element<T>, field: Field<Self::V, T>) {
         self.buffer.write(
-            *element.get(self.index.field),
-            self.get_cache(element, field).unwrap().var.load(),
+            element.get(&self.index.field),
+            self.get_cache(element, &field).unwrap().var.load(),
         );
     }
 

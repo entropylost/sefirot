@@ -46,13 +46,13 @@ impl<T: EmanationType> Emanation<T> {
             index: index.clone(),
             buffer,
         };
-        let struct_accessor = Arc::downgrade(&self.bind(struct_field, struct_accessor));
+        let struct_accessor = Arc::downgrade(&self.bind(&struct_field, struct_accessor));
 
         let prefix = prefix.map(|x| x.as_ref().to_string());
         let fields = S::apply(CreateStructArrayField {
             emanation: self,
             prefix,
-            struct_field,
+            struct_field: struct_field.clone(),
             struct_accessor,
         });
         (struct_field, fields)
@@ -98,11 +98,11 @@ impl<S: Structure, T: EmanationType> ValueMapping<S> for CreateStructArrayField<
             .unwrap_or(name.to_string());
         let field = self.emanation.create_field(Some(field_name));
         let accessor = StructArrayAccessor {
-            struct_field: self.struct_field,
+            struct_field: self.struct_field.clone(),
             struct_accessor: self.struct_accessor.clone(),
             _marker: PhantomData::<Z>,
         };
-        self.emanation.bind(field, accessor);
+        self.emanation.bind(&field, accessor);
         field
     }
 }
@@ -175,8 +175,8 @@ impl<Z: Selector<S>, S: Structure, T: EmanationType> Accessor<T> for StructArray
         element: &mut Element<T>,
         _field: Field<Self::V, T>,
     ) -> Result<Self::V, ReadError> {
-        let structure = element.get(self.struct_field);
-        Ok(Z::select_expr(structure))
+        let structure = element.get(&self.struct_field);
+        Ok(Z::select_expr(&structure))
     }
 
     fn set(
