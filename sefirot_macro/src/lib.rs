@@ -10,6 +10,7 @@ fn derive_structure_impl(input: DeriveInput) -> TokenStream {
 
     let st_name = input.ident;
     let generics = input.generics;
+    let vis = input.vis;
     let sf_path = quote! { ::sefirot::accessor::array::structure };
     let luisa_path = quote! { ::sefirot::prelude::luisa::lang::types };
     let mapped_st_name = Ident::new(&format!("{}Mapped", st_name), st_name.span());
@@ -60,7 +61,8 @@ fn derive_structure_impl(input: DeriveInput) -> TokenStream {
         let fi = &field_names[i];
         let ft = &field_types[i];
         quote! {
-            pub enum #sel {}
+            #[allow(non_camel_case_types)]
+            #vis enum #sel {}
             impl<#(#generics),*> #sf_path::Selector<#st_name<#(#generics_stripped),*>> for #sel #where_clause {
                 type Result = #ft;
                 fn select_expr(structure: &#luisa_path::Expr<#st_name<#(#generics_stripped),*>>) -> Expr<Self::Result> {
@@ -104,9 +106,9 @@ fn derive_structure_impl(input: DeriveInput) -> TokenStream {
     };
 
     quote! {
+        #vis struct #mapped_st_name<#(#generics,)* _Map: #sf_path::Mapping> #where_clause #mapped_fields_decl
         const _: () = {
             #(#selectors)*
-            pub struct #mapped_st_name<#(#generics,)* _Map: #sf_path::Mapping> #where_clause #mapped_fields_decl
             impl<#(#generics),*> #sf_path::Structure for #st_name<#(#generics_stripped),*> #where_clause {
                 type Map<M: #sf_path::Mapping> = #mapped_st_name<#(#generics_stripped,)* M>;
                 fn apply<M: #sf_path::Mapping>(mut f: impl #sf_path::ValueMapping<Self, M = M>) -> Self::Map<M> {

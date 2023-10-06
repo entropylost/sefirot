@@ -170,32 +170,28 @@ impl<Z: Selector<S>, S: Structure, T: EmanationType> Accessor<T> for StructArray
     type V = Expr<Z::Result>;
     type C = ();
 
-    fn get(
-        &self,
-        element: &mut Element<T>,
-        _field: Field<Self::V, T>,
-    ) -> Result<Self::V, ReadError> {
+    fn get(&self, element: &Element<T>, _field: Field<Self::V, T>) -> Result<Self::V, ReadError> {
         let structure = element.get(self.struct_field);
         Ok(Z::select_expr(&structure))
     }
 
     fn set(
         &self,
-        element: &mut Element<T>,
+        element: &Element<T>,
         _field: Field<Self::V, T>,
         value: &Self::V,
     ) -> Result<(), WriteError> {
         let struct_accessor = self.struct_accessor.upgrade().unwrap();
-        if let Some(structure) = element.cache.get_mut(&self.struct_field.raw) {
+        if let Some(structure) = element.cache.lock().get_mut(&self.struct_field.raw) {
             let structure = structure
                 .downcast_mut::<<ArrayAccessor<S, T> as Accessor<T>>::C>()
                 .unwrap();
             Z::select_var(&structure.var).store(value);
         } else {
             let _ = DynAccessor::get(&*struct_accessor, element, self.struct_field.raw);
-            element.unsaved_fields.insert(self.struct_field.raw);
-            let structure = element
-                .cache
+            element.unsaved_fields.lock().insert(self.struct_field.raw);
+            let mut cache = element.cache.lock();
+            let structure = cache
                 .get_mut(&self.struct_field.raw)
                 .unwrap()
                 .downcast_mut::<<ArrayAccessor<S, T> as Accessor<T>>::C>()
@@ -206,7 +202,7 @@ impl<Z: Selector<S>, S: Structure, T: EmanationType> Accessor<T> for StructArray
         Ok(())
     }
 
-    fn save(&self, _element: &mut Element<T>, _field: Field<Self::V, T>) {}
+    fn save(&self, _element: &Element<T>, _field: Field<Self::V, T>) {}
 
     fn can_write(&self) -> bool {
         true

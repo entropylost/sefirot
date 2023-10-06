@@ -69,11 +69,7 @@ impl<V: Value, T: EmanationType> Accessor<T> for ArrayAccessor<V, T> {
     type V = Expr<V>;
     type C = SimpleCache<V>;
 
-    fn get(
-        &self,
-        element: &mut Element<T>,
-        field: Field<Self::V, T>,
-    ) -> Result<Self::V, ReadError> {
+    fn get(&self, element: &Element<T>, field: Field<Self::V, T>) -> Result<Self::V, ReadError> {
         if let Some(cache) = self.get_cache(element, field) {
             Ok(cache.var.load())
         } else {
@@ -84,7 +80,7 @@ impl<V: Value, T: EmanationType> Accessor<T> for ArrayAccessor<V, T> {
     }
     fn set(
         &self,
-        element: &mut Element<T>,
+        element: &Element<T>,
         field: Field<Self::V, T>,
         value: &Self::V,
     ) -> Result<(), WriteError> {
@@ -96,7 +92,7 @@ impl<V: Value, T: EmanationType> Accessor<T> for ArrayAccessor<V, T> {
         Ok(())
     }
 
-    fn save(&self, element: &mut Element<T>, field: Field<Self::V, T>) {
+    fn save(&self, element: &Element<T>, field: Field<Self::V, T>) {
         self.buffer.write(
             element.get(self.index.field),
             self.get_cache(element, field).unwrap().var.load(),

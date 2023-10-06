@@ -33,10 +33,10 @@ impl<T: EmanationType> Emanation<T> {
 
             let mut element = Element {
                 emanation: self,
-                overridden_accessors: HashMap::new(),
+                overridden_accessors: Mutex::new(HashMap::new()),
                 context: &context,
-                cache: HashMap::new(),
-                unsaved_fields: HashSet::new(),
+                cache: Mutex::new(HashMap::new()),
+                unsaved_fields: Mutex::new(HashSet::new()),
                 can_write: true,
             };
             domain.before_record(&mut element);
@@ -195,10 +195,10 @@ pub trait KernelFunction<T: EmanationType, S> {
 
 macro_rules! impl_kernel_function {
     () => {
-        impl<T: EmanationType, F> KernelFunction<T, fn()> for F where F: Fn(Element<T>) {
+        impl<T: EmanationType, F> KernelFunction<T, fn()> for F where F: Fn(&Element<T>) {
             type Signature = fn();
             fn execute(self, el: Element<T>) {
-                self(el);
+                self(&el);
             }
         }
     };
@@ -211,7 +211,7 @@ macro_rules! impl_kernel_function {
             #[allow(non_snake_case)]
             #[allow(unused_variables)]
             fn execute(self, el: Element<T>) {
-                let mut builder = el.context.builder.lock().unwrap();
+                let mut builder = el.context.builder.lock();
                 let $T0 = $T0::def_param(&mut builder);
                 $(let $Tn = $Tn::def_param(&mut builder);)*
 

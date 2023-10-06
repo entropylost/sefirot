@@ -1,5 +1,7 @@
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+
+use parking_lot::Mutex;
 
 use luisa::runtime::KernelBuilder;
 
@@ -27,10 +29,10 @@ impl<T: EmanationType> Emanation<T> {
     ) -> Element<'a, T> {
         let mut element = Element {
             emanation: self,
-            overridden_accessors: HashMap::new(),
+            overridden_accessors: Mutex::new(HashMap::new()),
             context,
-            cache: HashMap::new(),
-            unsaved_fields: HashSet::new(),
+            cache: Mutex::new(HashMap::new()),
+            unsaved_fields: Mutex::new(HashSet::new()),
             can_write: true,
         };
         indexer.bind_fields(idx, &mut element);

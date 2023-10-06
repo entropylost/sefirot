@@ -1,4 +1,6 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+
+use parking_lot::Mutex;
 
 use super::*;
 
@@ -11,23 +13,19 @@ impl<V: Value, T: EmanationType> Accessor<T> for ConstantAccessor<V, T> {
     type V = Expr<V>;
     type C = Expr<V>;
 
-    fn get(
-        &self,
-        element: &mut Element<T>,
-        field: Field<Self::V, T>,
-    ) -> Result<Self::V, ReadError> {
+    fn get(&self, element: &Element<T>, field: Field<Self::V, T>) -> Result<Self::V, ReadError> {
         if let Some(expr) = self.get_cache(element, field) {
             Ok(expr.clone())
         } else {
             let value = self.value.clone();
-            let expr = element.context.bind(move || *value.lock().unwrap());
+            let expr = element.context.bind(move || *value.lock());
             self.insert_cache(element, field, expr.clone());
             Ok(expr)
         }
     }
     fn set(
         &self,
-        _element: &mut Element<T>,
+        _element: &Element<T>,
         _field: Field<Self::V, T>,
         _value: &Self::V,
     ) -> Result<(), WriteError> {
@@ -35,7 +33,7 @@ impl<V: Value, T: EmanationType> Accessor<T> for ConstantAccessor<V, T> {
             message: "Cannot write to `ConstantAccessor`".to_string(),
         })
     }
-    fn save(&self, _element: &mut Element<T>, _field: Field<Self::V, T>) {}
+    fn save(&self, _element: &Element<T>, _field: Field<Self::V, T>) {}
 
     fn can_write(&self) -> bool {
         false

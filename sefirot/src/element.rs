@@ -1,6 +1,8 @@
 use std::any::Any;
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+
+use parking_lot::Mutex;
 
 use luisa_compute::runtime::{AsKernelArg, KernelArg, KernelArgEncoder, KernelBuilder};
 
@@ -14,14 +16,10 @@ pub struct KernelContext<'a> {
 }
 impl KernelContext<'_> {
     pub fn bind<V: Value>(&self, access: impl Fn() -> V + 'static) -> Expr<V> {
-        let mut builder = self.builder.lock().unwrap();
-        self.context
-            .bindings
-            .lock()
-            .unwrap()
-            .push(Box::new(move |encoder| {
-                encoder.uniform(access());
-            }));
+        let mut builder = self.builder.lock();
+        self.context.bindings.lock().push(Box::new(move |encoder| {
+            encoder.uniform(access());
+        }));
         builder.uniform::<V>()
     }
 }
@@ -35,7 +33,7 @@ pub struct Context {
 impl KernelArg for Context {
     type Parameter = ();
     fn encode(&self, encoder: &mut KernelArgEncoder) {
-        for binding in self.bindings.lock().unwrap().iter() {
+        for binding in self.bindings.lock().iter() {
             binding(encoder);
         }
     }
@@ -55,16 +53,16 @@ impl Context {
 
 pub struct Element<'a, T: EmanationType> {
     pub(crate) emanation: &'a Emanation<T>,
-    pub(crate) overridden_accessors: HashMap<RawFieldHandle, Arc<dyn DynAccessor<T>>>,
+    pub(crate) overridden_accessors: Mutex<HashMap<RawFieldHandle, Arc<dyn DynAccessor<T>>>>,
     pub context: &'a KernelContext<'a>,
-    pub cache: HashMap<RawFieldHandle, Box<dyn Any>>,
-    pub unsaved_fields: HashSet<RawFieldHandle>,
+    pub cache: Mutex<HashMap<RawFieldHandle, Box<dyn Any>>>,
+    pub unsaved_fields: Mutex<HashSet<RawFieldHandle>>,
     pub(crate) can_write: bool,
 }
 
 impl<T: EmanationType> Element<'_, T> {
     fn get_accessor(&self, field: RawFieldHandle) -> Arc<dyn DynAccessor<T>> {
-        if let Some(accessor) = self.overridden_accessors.get(&field) {
+        if let Some(accessor) = self.overridden_accessors.lock().get(&field) {
             return accessor.clone();
         }
         self.emanation.fields[field.0]
@@ -74,44 +72,35 @@ impl<T: EmanationType> Element<'_, T> {
             .clone()
     }
 
-    pub fn bind<V: Any>(&mut self, field: Field<V, T>, accessor: impl Accessor<T, V = V>) {
+    pub fn bind<V: Any>(&self, field: Field<V, T>, accessor: impl Accessor<T, V = V>) {
         self.overridden_accessors
+            .lock()
             .insert(field.raw, Arc::new(accessor));
     }
 
-    pub fn get<V: Any>(&mut self, field: Field<V, T>) -> V {
+    pub fn get<V: Any>(&self, field: Field<V, T>) -> V {
         let field = field.raw;
-        self.context
-            .context
-            .accessed_fields
-            .lock()
-            .unwrap()
-            .insert(field);
+        self.context.context.accessed_fields.lock().insert(field);
 
         let accessor = self.get_accessor(field);
         *accessor.get(self, field).unwrap().downcast().unwrap()
     }
 
-    pub fn set<V: Any>(&mut self, field: Field<V, T>, value: &V) {
+    pub fn set<V: Any>(&self, field: Field<V, T>, value: &V) {
         if !self.can_write {
             panic!("Cannot write to this element");
         }
         let field = field.raw;
-        self.context
-            .context
-            .mutated_fields
-            .lock()
-            .unwrap()
-            .insert(field);
+        self.context.context.mutated_fields.lock().insert(field);
 
         let accessor = self.get_accessor(field);
         accessor.set(self, field, value).unwrap();
 
-        self.unsaved_fields.insert(field);
+        self.unsaved_fields.lock().insert(field);
     }
 
-    pub fn save(&mut self) {
-        let unsaved_fields = self.unsaved_fields.drain().collect::<Vec<_>>();
+    pub fn save(&self) {
+        let unsaved_fields = self.unsaved_fields.lock().drain().collect::<Vec<_>>();
         for field in unsaved_fields {
             self.get_accessor(field).save(self, field);
         }

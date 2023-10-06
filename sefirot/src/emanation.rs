@@ -16,7 +16,7 @@ static NEXT_EMANATION_ID: AtomicU64 = AtomicU64::new(0);
 pub trait EmanationType: Sync + Send + Debug + Copy + Eq + 'static {}
 
 pub struct FieldAccess<'a: 'b, 'b, V: Any, T: EmanationType> {
-    el: &'b mut Element<'a, T>,
+    el: &'b Element<'a, T>,
     field: Field<V, T>,
     value: V,
     changed: bool,
@@ -80,10 +80,16 @@ impl<V: Any, T: EmanationType> Field<V, T> {
         }
     }
 }
-impl<V: Any, T: EmanationType> FnOnce<(&mut Element<'_, T>,)> for Field<V, T> {
-    type Output = V;
-    extern "rust-call" fn call_once(self, args: (&mut Element<T>,)) -> Self::Output {
-        args.0.get(self)
+impl<'a: 'b, 'b, V: Any, T: EmanationType> FnOnce<(&'b Element<'a, T>,)> for Field<V, T> {
+    type Output = FieldAccess<'a, 'b, V, T>;
+    extern "rust-call" fn call_once(self, args: (&'b Element<'a, T>,)) -> Self::Output {
+        let v = args.0.get(self);
+        FieldAccess {
+            el: args.0,
+            field: self,
+            value: v,
+            changed: false,
+        }
     }
 }
 
