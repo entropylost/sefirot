@@ -79,13 +79,10 @@ impl<V: Any, T: EmanationType> Field<V, T> {
             _marker: PhantomData,
         }
     }
-}
-impl<'a: 'b, 'b, V: Any, T: EmanationType> FnOnce<(&'b Element<'a, T>,)> for Field<V, T> {
-    type Output = FieldAccess<'a, 'b, V, T>;
-    extern "rust-call" fn call_once(self, args: (&'b Element<'a, T>,)) -> Self::Output {
-        let v = args.0.get(self);
+    pub fn at<'a: 'b, 'b>(self, el: &'b Element<'a, T>) -> FieldAccess<'a, 'b, V, T> {
+        let v = el.get(self);
         FieldAccess {
-            el: args.0,
+            el,
             field: self,
             value: v,
             changed: false,

@@ -149,12 +149,12 @@ impl VisitMut for RewriteIndexVisitor {
                 if np {
                     *expr = parse_quote! {
                         #(#attrs)*
-                        (*#n_expr(#index))
+                        (*#n_expr.at(#index))
                     };
                 } else {
                     *expr = parse_quote! {
                         #(#attrs)*
-                        *#n_expr(#index)
+                        *#n_expr.at(#index)
                     }
                 }
             }
