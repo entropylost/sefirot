@@ -41,17 +41,10 @@ impl<V: Any, T: EmanationType> Drop for FieldAccess<'_, '_, V, T> {
     }
 }
 
-impl<V: Any, T: EmanationType> Clone for Field<V, T> {
-    fn clone(&self) -> Self {
-        Self {
-            raw: self.raw,
-            emanation_id: self.emanation_id,
-            _marker: PhantomData,
-        }
-    }
-}
-impl<V: Any, T: EmanationType> Copy for Field<V, T> {}
-
+#[cfg_attr(
+    feature = "bevy",
+    derive(bevy_ecs::prelude::Resource, bevy_ecs::prelude::Component)
+)]
 pub struct Field<V: Any, T: EmanationType> {
     pub(crate) raw: RawFieldHandle,
     pub(crate) emanation_id: u64,
@@ -71,6 +64,17 @@ impl<V: Any, T: EmanationType> PartialEq for Field<V, T> {
     }
 }
 impl<V: Any, T: EmanationType> Eq for Field<V, T> {}
+impl<V: Any, T: EmanationType> Clone for Field<V, T> {
+    fn clone(&self) -> Self {
+        Self {
+            raw: self.raw,
+            emanation_id: self.emanation_id,
+            _marker: PhantomData,
+        }
+    }
+}
+impl<V: Any, T: EmanationType> Copy for Field<V, T> {}
+
 impl<V: Any, T: EmanationType> Field<V, T> {
     pub fn from_raw(field: RawFieldHandle, id: u64) -> Self {
         Self {
@@ -108,6 +112,10 @@ impl<T: EmanationType> Debug for RawField<T> {
     }
 }
 
+#[cfg_attr(
+    feature = "bevy",
+    derive(bevy_ecs::prelude::Resource, bevy_ecs::prelude::Component)
+)]
 #[derive(Debug)]
 pub struct Emanation<T: EmanationType> {
     pub(crate) id: u64,

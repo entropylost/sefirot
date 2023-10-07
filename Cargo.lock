@@ -485,6 +485,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_sefirot"
+version = "0.1.0"
+dependencies = [
+ "bevy_luisa",
+ "bevy_sefirot_macro",
+ "once_cell",
+ "sefirot",
+]
+
+[[package]]
+name = "bevy_sefirot_macro"
+version = "0.1.0"
+dependencies = [
+ "prettyplease",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.38",
+]
+
+[[package]]
 name = "bevy_tasks"
 version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2013,6 +2033,7 @@ dependencies = [
 name = "sefirot"
 version = "0.1.0"
 dependencies = [
+ "bevy_ecs",
  "generational-arena",
  "luisa_compute",
  "parking_lot",

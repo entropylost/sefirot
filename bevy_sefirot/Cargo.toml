@@ -1,0 +1,10 @@
+[package]
+name = "bevy_sefirot"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy_sefirot_macro = { path = "../bevy_sefirot_macro" }
+bevy_luisa = { path = "../bevy_luisa" }
+sefirot = { path = "../sefirot", features = ["bevy"] }
+once_cell = "1.18.0"

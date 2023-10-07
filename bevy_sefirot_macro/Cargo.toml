@@ -1,5 +1,5 @@
 [package]
-name = "sefirot_macro"
+name = "bevy_sefirot_macro"
 version = "0.1.0"
 edition = "2021"
 
@@ -12,10 +12,7 @@ quote = "1.0"
 
 [dependencies.syn]
 version = "2.0"
-features = ["full", "visit-mut"]
+features = ["full"]
 
 [dev-dependencies]
 prettyplease = "0.2.15"
-
-[features]
-bevy = []

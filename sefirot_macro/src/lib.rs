@@ -106,7 +106,17 @@ fn derive_structure_impl(input: DeriveInput) -> TokenStream {
         }
     };
 
+    let bevy_derives = if cfg!(feature = "bevy") {
+        quote! {
+            #[derive(::sefirot::_bevy_ecs::prelude::Resource, ::sefirot::_bevy_ecs::prelude::Component)]
+        }
+    } else {
+        quote!()
+    };
+
     quote! {
+        #bevy_derives
+        #[derive(Debug, Clone, PartialEq, Eq)]
         #vis struct #mapped_st_name<#(#generics,)* _Map: #sf_path::Mapping> #where_clause #mapped_fields_decl
         const _: () = {
             #(#selectors)*

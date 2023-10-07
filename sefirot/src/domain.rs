@@ -11,10 +11,8 @@ use crate::element::{Context, KernelContext};
 use crate::graph::{AddToComputeGraph, CommandNode, ComputeGraph, NodeData, NodeHandle};
 use crate::prelude::*;
 
-mod kernel;
-use kernel::Kernel;
-
-use self::kernel::{KernelArgs, KernelSignature};
+pub mod kernel;
+use kernel::{Kernel, KernelArgs, KernelSignature};
 
 pub trait IndexEmanation<I> {
     type T: EmanationType;
