@@ -2020,6 +2020,7 @@ dependencies = [
  "pretty-type-name",
  "rand",
  "sefirot_macro",
+ "winit",
 ]
 
 [[package]]

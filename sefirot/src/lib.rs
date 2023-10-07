@@ -7,8 +7,9 @@ pub mod domain;
 pub mod element;
 pub mod emanation;
 pub mod graph;
+pub mod ops;
 
-pub use sefirot_macro::*;
+pub use {luisa_compute as luisa, sefirot_macro as macros};
 
 pub mod prelude {
     pub use crate::accessor::Accessor;
@@ -17,5 +18,5 @@ pub mod prelude {
     pub use crate::emanation::{Emanation, EmanationType, Field};
     pub use luisa::prelude::*;
     pub use luisa_compute as luisa;
-    pub use sefirot_macro::Structure;
+    pub use sefirot_macro::{track, tracked, Structure};
 }

@@ -65,16 +65,18 @@ where
         args: impl KernelArgs<S = S>,
     ) -> NodeHandle {
         let dispatch_size = kernel.domain.dispatch_size();
-        graph.add(NodeData::Command(CommandNode {
-            context: kernel.context.clone(),
-            command: KernelArgs::dispatch_with_size_async(
-                &kernel.raw,
-                dispatch_size,
-                &*kernel.context,
-                args,
-            ),
-            debug_name: kernel.debug_name.clone(),
-        }))
+        graph
+            .add(NodeData::Command(CommandNode {
+                context: kernel.context.clone(),
+                command: KernelArgs::dispatch_with_size_async(
+                    &kernel.raw,
+                    dispatch_size,
+                    &*kernel.context,
+                    args,
+                ),
+                debug_name: kernel.debug_name.clone(),
+            }))
+            .id()
     }
 }
 

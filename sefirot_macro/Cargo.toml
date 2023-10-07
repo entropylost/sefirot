@@ -12,7 +12,7 @@ quote = "1.0"
 
 [dependencies.syn]
 version = "2.0"
-features = ["full"]
+features = ["full", "visit-mut"]
 
 [dev-dependencies]
 prettyplease = "0.2.15"

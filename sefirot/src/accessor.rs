@@ -2,6 +2,7 @@ use std::any::{Any, TypeId};
 use std::marker::PhantomData;
 
 use parking_lot::{MappedMutexGuard, MutexGuard};
+use pretty_type_name::pretty_type_name;
 
 use crate::emanation::RawFieldHandle;
 use crate::prelude::*;
@@ -30,6 +31,9 @@ pub trait DynAccessor<T: EmanationType> {
     fn save(&self, element: &Element<T>, field: RawFieldHandle);
     fn can_write(&self) -> bool;
     fn value_type(&self) -> TypeId;
+    fn value_type_name(&self) -> String;
+    fn self_type(&self) -> TypeId;
+    fn self_type_name(&self) -> String;
 }
 impl<X, T: EmanationType> DynAccessor<T> for X
 where
@@ -59,6 +63,15 @@ where
     }
     fn value_type(&self) -> TypeId {
         TypeId::of::<X::V>()
+    }
+    fn value_type_name(&self) -> String {
+        pretty_type_name::<X::V>()
+    }
+    fn self_type(&self) -> TypeId {
+        TypeId::of::<X>()
+    }
+    fn self_type_name(&self) -> String {
+        pretty_type_name::<X>()
     }
 }
 

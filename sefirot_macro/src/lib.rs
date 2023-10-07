@@ -1,6 +1,7 @@
 use proc_macro2::TokenStream;
-use quote::{quote, ToTokens};
+use quote::{quote, quote_spanned, ToTokens};
 use syn::spanned::Spanned;
+use syn::visit_mut::VisitMut;
 use syn::*;
 
 fn derive_structure_impl(input: DeriveInput) -> TokenStream {
@@ -12,7 +13,7 @@ fn derive_structure_impl(input: DeriveInput) -> TokenStream {
     let generics = input.generics;
     let vis = input.vis;
     let sf_path = quote! { ::sefirot::accessor::array::structure };
-    let luisa_path = quote! { ::sefirot::prelude::luisa::lang::types };
+    let luisa_path = quote! { ::sefirot::luisa::lang::types };
     let mapped_st_name = Ident::new(&format!("{}Mapped", st_name), st_name.span());
     let where_clause = generics.where_clause;
     let generics = generics.params.into_iter().collect::<Vec<_>>();
@@ -126,8 +127,107 @@ pub fn derive_structure(tokens: proc_macro::TokenStream) -> proc_macro::TokenStr
     proc_macro::TokenStream::from(tokens)
 }
 
+struct RewriteIndexVisitor {
+    needs_parens: bool,
+}
+impl VisitMut for RewriteIndexVisitor {
+    fn visit_expr_mut(&mut self, expr: &mut Expr) {
+        let np = self.needs_parens;
+        self.needs_parens = true;
+        match expr {
+            Expr::Binary(node) => {
+                self.needs_parens = false;
+                self.visit_expr_mut(&mut node.left);
+                self.needs_parens = false;
+                self.visit_expr_mut(&mut node.right);
+                return;
+            }
+            Expr::Index(node) => {
+                let n_expr = &node.expr;
+                let index = &node.index;
+                let attrs = &node.attrs;
+                if np {
+                    *expr = parse_quote! {
+                        #(#attrs)*
+                        (*#n_expr(#index))
+                    };
+                } else {
+                    *expr = parse_quote! {
+                        #(#attrs)*
+                        *#n_expr(#index)
+                    }
+                }
+            }
+            Expr::Macro(expr) => {
+                let path = &expr.mac.path;
+                if path.leading_colon.is_none()
+                    && path.segments.len() == 1
+                    && path.segments[0].arguments.is_none()
+                {
+                    let ident = &path.segments[0].ident;
+                    if *ident == "escape" {
+                        return;
+                    }
+                }
+            }
+            _ => {}
+        }
+        visit_mut::visit_expr_mut(self, expr);
+    }
+}
+
+fn track2_impl(mut ast: Expr) -> TokenStream {
+    (RewriteIndexVisitor { needs_parens: true }).visit_expr_mut(&mut ast);
+
+    quote!(::sefirot::luisa::prelude::track!(#ast))
+}
+
+#[proc_macro]
+pub fn track(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input = TokenStream::from(input);
+    let input = quote!({ #input });
+    let input = proc_macro::TokenStream::from(input);
+    track2_impl(parse_macro_input!(input as Expr)).into()
+}
+
+#[proc_macro_attribute]
+pub fn tracked(
+    _attr: proc_macro::TokenStream,
+    item: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    let item = syn::parse_macro_input!(item as ItemFn);
+    let body = &item.block;
+    let body = proc_macro::TokenStream::from(quote!({ #body }));
+    let body = track2_impl(parse_macro_input!(body as Expr));
+    let attrs = &item.attrs;
+    let sig = &item.sig;
+    let vis = &item.vis;
+    quote_spanned!(item.span()=> #(#attrs)* #vis #sig { #body }).into()
+}
+
 #[test]
-fn test_kernel() {
+fn test_track2() {
+    let input = parse_quote! {
+        {
+            |el: &Element<Particles>, dt: Expr<f32>| {
+                position[el] += velocity[el] * dt;
+                let pos = position[el].cast_u32();
+
+                display.write(pos, Vec4::splat(1.0));
+            }
+        }
+    };
+    let f = track2_impl(input);
+    let file: File = parse_quote!(
+        fn main() {
+            #f
+        }
+    );
+    panic!("{}", prettyplease::unparse(&file));
+}
+
+#[test]
+fn test_derive() {
     let input = parse_quote! {
         struct S {
             a: u32,
@@ -135,7 +235,6 @@ fn test_kernel() {
         }
     };
     let f = derive_structure_impl(input);
-    // panic!("{}", f);
     let file: File = parse_quote!(#f);
     panic!("{}", prettyplease::unparse(&file));
 }

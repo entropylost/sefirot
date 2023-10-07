@@ -136,8 +136,8 @@ impl<'a> ComputeGraph<'a> {
             let container = self.remove(handle).unwrap();
             let parent = container.parent.unwrap();
             let nodes = &container.data.container_ref().unwrap().nodes;
-            let start = self.add(NodeData::fence());
-            let end = self.add(NodeData::fence());
+            let start = self.add(NodeData::fence()).id();
+            let end = self.add(NodeData::fence()).id();
             self.on(start)
                 .before(end)
                 .before_all(nodes)
@@ -218,7 +218,7 @@ impl<'a> ComputeGraph<'a> {
     pub fn execute(mut self, device: &Device) {
         self.reduce_containers();
         assert_eq!(
-            self.nodes.len(),
+            self.nodes.len() - 1,
             self.nodes[self.root.0]
                 .data
                 .container_ref()
@@ -244,8 +244,12 @@ impl<'a> ComputeGraph<'a> {
         let scope = device.default_stream().scope();
         scope.submit_with_callback(commands, || {});
     }
-    pub fn add<'b>(&'b mut self, f: impl AddToComputeGraph<'a, 'b>) -> NodeHandle {
-        f.add(self)
+    pub fn add<'b>(&'b mut self, f: impl AddToComputeGraph<'a>) -> NodeRef<'b, 'a> {
+        let id = f.add(self);
+        let root = self.root;
+        let mut node = self.on(id);
+        node.parent(root);
+        node
     }
     pub fn root(&self) -> NodeHandle {
         self.root
@@ -284,6 +288,9 @@ pub struct NodeRef<'b, 'a: 'b> {
     graph: &'b mut ComputeGraph<'a>,
 }
 impl NodeRef<'_, '_> {
+    pub fn id(&self) -> NodeHandle {
+        self.handle
+    }
     pub fn before(&mut self, node: NodeHandle) -> &mut Self {
         self.graph.nodes[self.handle.0].outgoing.insert(node);
         self.graph.nodes[node.0].incoming.insert(self.handle);
@@ -307,6 +314,7 @@ impl NodeRef<'_, '_> {
         self
     }
     pub fn child(&mut self, node: NodeHandle) -> &mut Self {
+        self.graph.on(node).detach();
         let ContainerNode { nodes } = self.graph.nodes[self.handle.0]
             .data
             .container_mut()
@@ -321,7 +329,20 @@ impl NodeRef<'_, '_> {
         }
         self
     }
+    pub fn detach(&mut self) -> &mut Self {
+        if let Some(parent) = self.graph.nodes[self.handle.0].parent {
+            self.graph.nodes[parent.0]
+                .data
+                .container_mut()
+                .unwrap()
+                .nodes
+                .remove(&self.handle);
+            self.graph.nodes[self.handle.0].parent = None;
+        }
+        self
+    }
     pub fn parent(&mut self, node: NodeHandle) -> &mut Self {
+        self.detach();
         let ContainerNode { nodes } = self.graph.nodes[node.0].data.container_mut().unwrap();
         nodes.insert(self.handle);
         self.graph.nodes[self.handle.0].parent = Some(node);
@@ -329,11 +350,11 @@ impl NodeRef<'_, '_> {
     }
 }
 
-pub trait AddToComputeGraph<'a, 'b> {
-    fn add(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle;
+pub trait AddToComputeGraph<'a> {
+    fn add<'b>(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle;
 }
-impl<'a, 'b> AddToComputeGraph<'a, 'b> for NodeData<'a> {
-    fn add(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle {
+impl<'a> AddToComputeGraph<'a> for NodeData<'a> {
+    fn add<'b>(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle {
         NodeHandle(graph.nodes.insert(Node {
             incoming: HashSet::new(),
             outgoing: HashSet::new(),
@@ -342,11 +363,16 @@ impl<'a, 'b> AddToComputeGraph<'a, 'b> for NodeData<'a> {
         }))
     }
 }
-impl<'a: 'b, 'b, F> AddToComputeGraph<'a, 'b> for F
+impl<'a, F> AddToComputeGraph<'a> for F
 where
-    F: FnOnce(&'b mut ComputeGraph<'a>) -> NodeHandle,
+    F: for<'b> FnOnce(&'b mut ComputeGraph<'a>) -> NodeHandle,
 {
-    fn add(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle {
+    fn add<'b>(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle {
         self(graph)
+    }
+}
+impl<'a> AddToComputeGraph<'a> for Command<'a, 'a> {
+    fn add<'b>(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle {
+        NodeData::command(self, None::<String>).add(graph)
     }
 }

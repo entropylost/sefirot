@@ -9,11 +9,10 @@ impl<T: EmanationType> Emanation<T> {
         &mut self,
         device: &Device,
         index: &ArrayIndex<T>,
-        prefix: Option<impl AsRef<str>>,
+        prefix: Option<String>,
         values: &[S],
     ) -> S::Map<Field<Expr<__>, T>> {
         assert_eq!(values.len(), index.length as usize);
-        let prefix = prefix.map(|x| x.as_ref().to_string());
         S::apply(CreateArrayField {
             emanation: self,
             device,
@@ -26,7 +25,7 @@ impl<T: EmanationType> Emanation<T> {
         &mut self,
         device: &Device,
         index: &ArrayIndex<T>,
-        prefix: Option<impl AsRef<str>>,
+        prefix: Option<String>,
         values: &[S],
     ) -> S::Map<Field<Expr<__>, T>> {
         self.create_aos_fields_with_struct_field(device, index, prefix, values)
@@ -36,7 +35,7 @@ impl<T: EmanationType> Emanation<T> {
         &mut self,
         device: &Device,
         index: &ArrayIndex<T>,
-        prefix: Option<impl AsRef<str>>,
+        prefix: Option<String>,
         values: &[S],
     ) -> (Field<Expr<S>, T>, S::Map<Field<Expr<__>, T>>) {
         assert_eq!(values.len(), index.length as usize);
@@ -48,7 +47,6 @@ impl<T: EmanationType> Emanation<T> {
         };
         let struct_accessor = Arc::downgrade(&self.bind(struct_field, struct_accessor));
 
-        let prefix = prefix.map(|x| x.as_ref().to_string());
         let fields = S::apply(CreateStructArrayField {
             emanation: self,
             prefix,
@@ -182,6 +180,7 @@ impl<Z: Selector<S>, S: Structure, T: EmanationType> Accessor<T> for StructArray
         value: &Self::V,
     ) -> Result<(), WriteError> {
         let struct_accessor = self.struct_accessor.upgrade().unwrap();
+        element.unsaved_fields.lock().insert(self.struct_field.raw);
         if let Some(structure) = element.cache.lock().get_mut(&self.struct_field.raw) {
             let structure = structure
                 .downcast_mut::<<ArrayAccessor<S, T> as Accessor<T>>::C>()
@@ -189,7 +188,6 @@ impl<Z: Selector<S>, S: Structure, T: EmanationType> Accessor<T> for StructArray
             Z::select_var(&structure.var).store(value);
         } else {
             let _ = DynAccessor::get(&*struct_accessor, element, self.struct_field.raw);
-            element.unsaved_fields.lock().insert(self.struct_field.raw);
             let mut cache = element.cache.lock();
             let structure = cache
                 .get_mut(&self.struct_field.raw)

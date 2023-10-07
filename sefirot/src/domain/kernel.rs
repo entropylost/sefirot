@@ -48,6 +48,7 @@ impl<T: EmanationType> Emanation<T> {
             raw: device.compile_kernel_def_with_options(
                 &kernel,
                 KernelBuildOptions {
+                    async_compile: true,
                     name: None, // TODO: Currently, using a name causes caching to behave weirdly.
                     ..Default::default()
                 },
@@ -64,8 +65,8 @@ macro_rules! impl_kernel {
             pub fn dispatch_blocking(&self) {
                 Domain::dispatch(self, ())
             }
-            pub fn dispatch<'a: 'b, 'b>(&'b self) -> impl AddToComputeGraph<'a, 'b> {
-                |graph| Domain::dispatch_async(self, graph, ())
+            pub fn dispatch<'a>(&'a self) -> impl AddToComputeGraph<'a> {
+                |graph: &mut ComputeGraph<'a>| Domain::dispatch_async(self, graph, ())
             }
         }
     };
@@ -79,9 +80,9 @@ macro_rules! impl_kernel {
             }
             #[allow(non_snake_case)]
             #[allow(unused_variables)]
-            pub fn dispatch<'a: 'b, 'b, $S0: KernelArg $(, $Sn: KernelArg)*>(&'b self, $S0: $S0 $(, $Sn: $Sn)*) -> impl AddToComputeGraph<'a, 'b>
+            pub fn dispatch<'a, $S0: KernelArg $(, $Sn: KernelArg)*>(&'a self, $S0: $S0 $(, $Sn: $Sn)*) -> impl AddToComputeGraph<'a>
             where ($S0, $($Sn),*): KernelArgs<S = fn($T0 $(, $Tn)*)> {
-                |graph| Domain::dispatch_async(self, graph, ($S0, $($Sn),*))
+                |graph: &mut ComputeGraph<'a>| Domain::dispatch_async(self, graph, ($S0, $($Sn),*))
             }
         }
         impl_kernel!( $($Tn: $Sn),* );
@@ -205,7 +206,7 @@ macro_rules! impl_kernel_function {
     ($T0:ident $(,$Tn:ident)*) => {
         impl<T: EmanationType, F, $T0: KernelParameter $(,$Tn: KernelParameter)*> KernelFunction<T, fn($T0 $(,$Tn)*)> for F
         where
-            F: Fn(Element<T>, $T0 $(,$Tn)*),
+            F: Fn(&Element<T>, $T0 $(,$Tn)*),
         {
             type Signature = fn($T0::Arg $(,$Tn::Arg)*);
             #[allow(non_snake_case)]
@@ -215,7 +216,7 @@ macro_rules! impl_kernel_function {
                 let $T0 = $T0::def_param(&mut builder);
                 $(let $Tn = $Tn::def_param(&mut builder);)*
 
-                (self)(el, $T0 $(,$Tn)*)
+                (self)(&el, $T0 $(,$Tn)*)
             }
         }
         impl_kernel_function!($($Tn),*);

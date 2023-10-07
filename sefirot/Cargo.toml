@@ -16,3 +16,4 @@ branch = "main"
 
 [dev-dependencies]
 rand = "0.8.5"
+winit = "0.28.7"
