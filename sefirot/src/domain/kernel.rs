@@ -16,10 +16,19 @@ impl<D: Domain, S: KernelSignature> Kernel<D, S> {
 }
 
 impl<T: EmanationType> Emanation<T> {
-    // Store domain with kernel.
     pub fn build_kernel<S, F: KernelFunction<T, S>, D: Domain<T = T>>(
         &self,
         device: &Device,
+        domain: D,
+        f: F,
+    ) -> Kernel<D, F::Signature> {
+        self.build_kernel_with_options(device, Default::default(), domain, f)
+    }
+
+    pub fn build_kernel_with_options<S, F: KernelFunction<T, S>, D: Domain<T = T>>(
+        &self,
+        device: &Device,
+        options: KernelBuildOptions,
         domain: D,
         f: F,
     ) -> Kernel<D, F::Signature> {
@@ -37,7 +46,6 @@ impl<T: EmanationType> Emanation<T> {
                 context: &context,
                 cache: Mutex::new(HashMap::new()),
                 unsaved_fields: Mutex::new(HashSet::new()),
-                can_write: true,
             };
             domain.before_record(&mut element);
             f.execute(element);
@@ -45,14 +53,7 @@ impl<T: EmanationType> Emanation<T> {
         let name = pretty_type_name::<F>();
         Kernel {
             domain,
-            raw: device.compile_kernel_def_with_options(
-                &kernel,
-                KernelBuildOptions {
-                    async_compile: true,
-                    name: None, // TODO: Currently, using a name causes caching to behave weirdly.
-                    ..Default::default()
-                },
-            ),
+            raw: device.compile_kernel_def_with_options(&kernel, options),
             context: Arc::new(context),
             debug_name: Some(name),
         }

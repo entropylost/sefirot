@@ -57,7 +57,6 @@ pub struct Element<'a, T: EmanationType> {
     pub context: &'a KernelContext<'a>,
     pub cache: Mutex<HashMap<RawFieldHandle, Box<dyn Any>>>,
     pub unsaved_fields: Mutex<HashSet<RawFieldHandle>>,
-    pub(crate) can_write: bool,
 }
 
 impl<T: EmanationType> Element<'_, T> {
@@ -87,9 +86,6 @@ impl<T: EmanationType> Element<'_, T> {
     }
 
     pub fn set<V: Any>(&self, field: Field<V, T>, value: &V) {
-        if !self.can_write {
-            panic!("Cannot write to this element");
-        }
         let field = field.raw;
         self.context.context.mutated_fields.lock().insert(field);
 
@@ -104,10 +100,6 @@ impl<T: EmanationType> Element<'_, T> {
         for field in unsaved_fields {
             self.get_accessor(field).save(self, field);
         }
-    }
-
-    pub fn can_write(&self) -> bool {
-        self.can_write
     }
 }
 impl<T: EmanationType> Drop for Element<'_, T> {

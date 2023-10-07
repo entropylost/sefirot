@@ -33,7 +33,6 @@ impl<T: EmanationType> Emanation<T> {
             context,
             cache: Mutex::new(HashMap::new()),
             unsaved_fields: Mutex::new(HashSet::new()),
-            can_write: true,
         };
         indexer.bind_fields(idx, &mut element);
         element
