@@ -1,5 +1,5 @@
 use sefirot::domain::kernel::KernelSignature;
-use sefirot::prelude::Kernel;
+use sefirot::prelude::{EmanationType, Kernel};
 use std::ops::Deref;
 use std::sync::OnceLock;
 
@@ -15,19 +15,19 @@ pub mod prelude {
     pub use {bevy_luisa, sefirot};
 }
 
-pub struct KernelCell<S: KernelSignature>(OnceLock<Kernel<S>>);
+pub struct KernelCell<T: EmanationType, S: KernelSignature>(OnceLock<Kernel<T, S>>);
 
-impl<S: KernelSignature> Deref for KernelCell<S> {
-    type Target = Kernel<S>;
+impl<T: EmanationType, S: KernelSignature> Deref for KernelCell<T, S> {
+    type Target = Kernel<T, S>;
     fn deref(&self) -> &Self::Target {
         self.0.get().unwrap()
     }
 }
-impl<S: KernelSignature> KernelCell<S> {
+impl<T: EmanationType, S: KernelSignature> KernelCell<T, S> {
     pub const fn default() -> Self {
         Self(OnceLock::new())
     }
-    pub fn init(&self, kernel: Kernel<S>) {
+    pub fn init(&self, kernel: Kernel<T, S>) {
         self.0.set(kernel).ok().unwrap();
     }
 }

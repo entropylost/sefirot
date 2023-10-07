@@ -2,13 +2,15 @@ use luisa::runtime::{AsKernelArg, KernelArg, KernelParameter};
 
 use super::*;
 
-pub struct Kernel<D: Domain, S: KernelSignature> {
-    pub(crate) domain: D,
-    pub(crate) raw: luisa::runtime::Kernel<S::LuisaSignature>,
+pub type LuisaKernel<S> = luisa::runtime::Kernel<<S as KernelSignature>::LuisaSignature>;
+
+pub struct Kernel<T: EmanationType, S: KernelSignature> {
+    pub(crate) domain: Box<dyn Domain<T = T>>,
+    pub(crate) raw: LuisaKernel<S>,
     pub(crate) context: Arc<Context>,
     pub(crate) debug_name: Option<String>,
 }
-impl<D: Domain, S: KernelSignature> Kernel<D, S> {
+impl<T: EmanationType, S: KernelSignature> Kernel<T, S> {
     pub fn with_name(mut self, name: impl AsRef<str>) -> Self {
         self.debug_name = Some(name.as_ref().to_owned());
         self
@@ -16,22 +18,22 @@ impl<D: Domain, S: KernelSignature> Kernel<D, S> {
 }
 
 impl<T: EmanationType> Emanation<T> {
-    pub fn build_kernel<S, F: KernelFunction<T, S>, D: Domain<T = T>>(
+    pub fn build_kernel<S, F: KernelFunction<T, S>>(
         &self,
         device: &Device,
-        domain: D,
+        domain: Box<dyn Domain<T = T>>,
         f: F,
-    ) -> Kernel<D, F::Signature> {
+    ) -> Kernel<T, F::Signature> {
         self.build_kernel_with_options(device, Default::default(), domain, f)
     }
 
-    pub fn build_kernel_with_options<S, F: KernelFunction<T, S>, D: Domain<T = T>>(
+    pub fn build_kernel_with_options<S, F: KernelFunction<T, S>>(
         &self,
         device: &Device,
         options: KernelBuildOptions,
-        domain: D,
+        domain: Box<dyn Domain<T = T>>,
         f: F,
-    ) -> Kernel<D, F::Signature> {
+    ) -> Kernel<T, F::Signature> {
         let context = Context::new();
         let mut builder = KernelBuilder::new(Some(device.clone()), true);
         let kernel = builder.build_kernel(|builder| {
@@ -62,28 +64,66 @@ impl<T: EmanationType> Emanation<T> {
 
 macro_rules! impl_kernel {
     () => {
-        impl<D: Domain> Kernel<D, fn()> {
+        impl<T: EmanationType> Kernel<T, fn()> {
             pub fn dispatch_blocking(&self) {
-                Domain::dispatch(self, ())
+                let args = DispatchArgs {
+                    context: self.context.clone(),
+                    call_kernel: &|dispatch_size| self.raw.dispatch(dispatch_size, &*self.context),
+                    call_kernel_async: &|dispatch_size| {
+                        self.raw.dispatch_async(dispatch_size, &*self.context)
+                    },
+                    debug_name: self.debug_name.clone(),
+                };
+                self.domain.dispatch(args);
             }
-            pub fn dispatch<'a>(&'a self) -> impl AddToComputeGraph<'a> {
-                |graph: &mut ComputeGraph<'a>| Domain::dispatch_async(self, graph, ())
+            pub fn dispatch<'a: 'b, 'b>(&'b self) -> impl AddToComputeGraph<'a> + 'b {
+                let context = self.context.clone();
+
+                move |graph: &mut ComputeGraph<'a>| {
+                    let args = DispatchArgs {
+                        context: self.context.clone(),
+                        call_kernel: &move |dispatch_size| self.raw.dispatch(dispatch_size, &*context),
+                        call_kernel_async: &|dispatch_size| {
+                            self.raw.dispatch_async(dispatch_size, &*self.context)
+                        },
+                        debug_name: self.debug_name.clone(),
+                    };
+                    self.domain.dispatch_async(graph, args)
+                }
             }
         }
     };
     ($T0:ident: $S0:ident $(,$Tn:ident: $Sn:ident)*) => {
-        impl<D: Domain, $T0: KernelArg + 'static $(, $Tn: KernelArg + 'static)*> Kernel<D, fn($T0 $(, $Tn)*)> {
+        impl<T: EmanationType, $T0: KernelArg + 'static $(, $Tn: KernelArg + 'static)*> Kernel<T, fn($T0 $(, $Tn)*)> {
             #[allow(non_snake_case)]
             #[allow(unused_variables)]
-            pub fn dispatch_blocking<$S0: KernelArg $(, $Sn: KernelArg)*>(&self, $S0: $S0 $(, $Sn: $Sn)*)
-            where ($S0, $($Sn),*): KernelArgs<S = fn($T0 $(, $Tn)*)> {
-                Domain::dispatch(self, ($S0, $($Sn),*))
+            pub fn dispatch_blocking<$S0: AsKernelArg<Output = $T0> $(, $Sn: AsKernelArg<Output = $Tn>)*>(&self, $S0: &$S0 $(, $Sn: &$Sn)*) {
+                let args = DispatchArgs {
+                    context: self.context.clone(),
+                    call_kernel: &|dispatch_size| self.raw.dispatch(dispatch_size, $S0, $($Sn,)* &*self.context),
+                    call_kernel_async: &|dispatch_size| {
+                        self.raw.dispatch_async(dispatch_size, $S0, $($Sn,)* &*self.context)
+                    },
+                    debug_name: self.debug_name.clone(),
+                };
+                self.domain.dispatch(args);
             }
             #[allow(non_snake_case)]
             #[allow(unused_variables)]
-            pub fn dispatch<'a, $S0: KernelArg $(, $Sn: KernelArg)*>(&'a self, $S0: $S0 $(, $Sn: $Sn)*) -> impl AddToComputeGraph<'a>
-            where ($S0, $($Sn),*): KernelArgs<S = fn($T0 $(, $Tn)*)> {
-                |graph: &mut ComputeGraph<'a>| Domain::dispatch_async(self, graph, ($S0, $($Sn),*))
+            pub fn dispatch<'a: 'b, 'b, $S0: AsKernelArg<Output = $T0> $(, $Sn: AsKernelArg<Output = $Tn>)*>
+                (&'b self, $S0: &'b $S0 $(, $Sn: &'b $Sn)*) -> impl AddToComputeGraph<'a> + 'b {
+                let context = self.context.clone();
+                move |graph: &mut ComputeGraph<'a>| {
+                    let args = DispatchArgs {
+                        context: self.context.clone(),
+                        call_kernel: &move |dispatch_size| self.raw.dispatch(dispatch_size, $S0, $($Sn,)* &*context),
+                        call_kernel_async: &|dispatch_size| {
+                            self.raw.dispatch_async(dispatch_size, $S0, $($Sn,)* &*self.context)
+                        },
+                        debug_name: self.debug_name.clone(),
+                    };
+                    self.domain.dispatch_async(graph, args)
+                }
             }
         }
         impl_kernel!( $($Tn: $Sn),* );
@@ -91,83 +131,6 @@ macro_rules! impl_kernel {
 }
 
 impl_kernel!(T0:S0, T1:S1, T2:S2, T3:S3, T4:S4, T5:S5, T6:S6, T7:S7, T8:S8, T9:S9, T10:S10, T11:S11, T12:S12, T13:S13, T14:S14);
-
-pub trait KernelArgs {
-    type S: KernelSignature;
-    fn dispatch_with_size(
-        kernel: &luisa::runtime::Kernel<<Self::S as KernelSignature>::LuisaSignature>,
-        dispatch_size: [u32; 3],
-        context: &Context,
-        args: Self,
-    );
-    fn dispatch_with_size_async(
-        kernel: &luisa::runtime::Kernel<<Self::S as KernelSignature>::LuisaSignature>,
-        dispatch_size: [u32; 3],
-        context: &Context,
-        args: Self,
-    ) -> Command<'static, 'static>;
-}
-
-macro_rules! impl_kernel_args {
-    () => {
-        impl KernelArgs for () {
-            type S = fn();
-            fn dispatch_with_size(
-                kernel: &luisa::runtime::Kernel<<Self::S as KernelSignature>::LuisaSignature>,
-                dispatch_size: [u32; 3],
-                context: &Context,
-                _args: Self,
-            ) {
-                kernel.dispatch(dispatch_size, context);
-            }
-            fn dispatch_with_size_async(
-                kernel: &luisa::runtime::Kernel<<Self::S as KernelSignature>::LuisaSignature>,
-                dispatch_size: [u32; 3],
-                context: &Context,
-                _args: Self,
-            ) -> Command<'static, 'static> {
-                kernel.dispatch_async(dispatch_size, context)
-            }
-        }
-    };
-    ($($Tn:ident: $n:tt),*) => {
-        impl<$($Tn: KernelArg + AsKernelArg),*> KernelArgs for ($($Tn,)*) {
-            type S = fn($(<$Tn as AsKernelArg>::Output),*);
-            fn dispatch_with_size(
-                kernel: &luisa::runtime::Kernel<<Self::S as KernelSignature>::LuisaSignature>,
-                dispatch_size: [u32; 3],
-                context: &Context,
-                args: Self,
-            ) {
-                kernel.dispatch(dispatch_size, $(&args.$n,)* context);
-            }
-            fn dispatch_with_size_async(
-                kernel: &luisa::runtime::Kernel<<Self::S as KernelSignature>::LuisaSignature>,
-                dispatch_size: [u32; 3],
-                context: &Context,
-                args: Self,
-            ) -> Command<'static, 'static> {
-                kernel.dispatch_async(dispatch_size, $(&args.$n,)* context)
-            }
-        }
-    }
-}
-impl_kernel_args!();
-impl_kernel_args!(T0:0);
-impl_kernel_args!(T0:0, T1:1);
-impl_kernel_args!(T0:0, T1:1, T2:2);
-impl_kernel_args!(T0:0, T1:1, T2:2, T3:3);
-impl_kernel_args!(T0:0, T1:1, T2:2, T3:3, T4:4);
-impl_kernel_args!(T0:0, T1:1, T2:2, T3:3, T4:4, T5:5);
-impl_kernel_args!(T0:0, T1:1, T2:2, T3:3, T4:4, T5:5, T6:6);
-impl_kernel_args!(T0:0, T1:1, T2:2, T3:3, T4:4, T5:5, T6:6, T7:7);
-impl_kernel_args!(T0:0, T1:1, T2:2, T3:3, T4:4, T5:5, T6:6, T7:7, T8:8);
-impl_kernel_args!(T0:0, T1:1, T2:2, T3:3, T4:4, T5:5, T6:6, T7:7, T8:8, T9:9);
-impl_kernel_args!(T0:0, T1:1, T2:2, T3:3, T4:4, T5:5, T6:6, T7:7, T8:8, T9:9, T10:10);
-impl_kernel_args!(T0:0, T1:1, T2:2, T3:3, T4:4, T5:5, T6:6, T7:7, T8:8, T9:9, T10:10, T11:11);
-impl_kernel_args!(T0:0, T1:1, T2:2, T3:3, T4:4, T5:5, T6:6, T7:7, T8:8, T9:9, T10:10, T11:11, T12:12);
-impl_kernel_args!(T0:0, T1:1, T2:2, T3:3, T4:4, T5:5, T6:6, T7:7, T8:8, T9:9, T10:10, T11:11, T12:12, T13:13);
-impl_kernel_args!(T0:0, T1:1, T2:2, T3:3, T4:4, T5:5, T6:6, T7:7, T8:8, T9:9, T10:10, T11:11, T12:12, T13:13, T14:14);
 
 pub trait KernelSignature {
     // Adds `Context` to the end of the signature.

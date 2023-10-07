@@ -15,9 +15,10 @@ fn kernel_impl(init: bool, f: ItemFn) -> TokenStream {
     let Stmt::Expr(Expr::Closure(kernel), None) = block.stmts.pop().unwrap() else {
         panic!("Kernel must have closure as last statement in body.");
     };
-    let mut kernel_args = kernel
+    let kernel_args = kernel
         .inputs
         .iter()
+        .skip(1)
         .map(|pat| match pat {
             Pat::Type(PatType { ty, .. }) => {
                 parse_quote!(<#ty as #luisa_path::runtime::KernelParameter>::Arg)
@@ -26,7 +27,11 @@ fn kernel_impl(init: bool, f: ItemFn) -> TokenStream {
         })
         .collect::<Vec<Type>>();
     let emanation_ty = {
-        let Type::Reference(element) = kernel_args.remove(0) else {
+        let ty = match &kernel.inputs[0] {
+            Pat::Type(PatType { ty, .. }) => ty,
+            _ => panic!("Kernel must have an &Element as its first argument"),
+        };
+        let Type::Reference(element) = &**ty else {
             panic!("Kernel must have an &Element as its first argument");
         };
         let Type::Path(TypePath { path, .. }) = &*element.elem else {
@@ -133,7 +138,7 @@ fn kernel_impl(init: bool, f: ItemFn) -> TokenStream {
 
     quote_spanned! {span=>
         #[allow(non_upper_case_globals)]
-        #vis static #kernel_name: #bevy_sefirot_path::KernelCell<#kernel_sig> = #bevy_sefirot_path::KernelCell::default();
+        #vis static #kernel_name: #bevy_sefirot_path::KernelCell<#emanation_ty, #kernel_sig> = #bevy_sefirot_path::KernelCell::default();
         #(#attrs)*
         #sig #block
         #init
@@ -158,7 +163,7 @@ pub fn kernel(
 fn test_kernel() {
     let f = parse_quote! {
         fn clear_display_kernel() {
-            |display: Tex2dVar<Vec4<f32>>, clear_color: Expr<Vec4<f32>>| {
+            |el: &Element<Particles>, display: Tex2dVar<Vec4<f32>>, clear_color: Expr<Vec4<f32>>| {
                 display.write(dispatch_id().xy(), clear_color);
             }
         }

@@ -58,7 +58,7 @@ fn main() {
 
     let update_kernel = particles.build_kernel(
         &device,
-        index,
+        Box::new(index),
         track!(|el: &Element<Particles>, dt: Expr<f32>| {
             position[el] += velocity[el] * dt;
             if (position[el] >= 0.0).all() && (position[el] < SIZE as f32).all() {
@@ -88,7 +88,7 @@ fn main() {
                     .present(&swapchain, &display);
                 let mut graph = ComputeGraph::new();
                 let clear = graph.add(clear_kernel.dispatch_async([SIZE, SIZE, 1])).id();
-                graph.add(update_kernel.dispatch(1.0)).after(clear);
+                graph.add(update_kernel.dispatch(&1.0)).after(clear);
                 graph.execute(&device);
                 window.request_redraw();
             }

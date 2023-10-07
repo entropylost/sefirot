@@ -12,7 +12,6 @@ use crate::graph::{AddToComputeGraph, CommandNode, ComputeGraph, NodeData, NodeH
 use crate::prelude::*;
 
 pub mod kernel;
-use kernel::{Kernel, KernelArgs, KernelSignature};
 
 pub trait IndexEmanation<I> {
     type T: EmanationType;
@@ -52,38 +51,49 @@ where
         let index = self.get_index();
         self.bind_fields(index, element);
     }
-    fn dispatch<S: KernelSignature>(kernel: &Kernel<Self, S>, args: impl KernelArgs<S = S>) {
-        let dispatch_size = kernel.domain.dispatch_size();
-        KernelArgs::dispatch_with_size(&kernel.raw, dispatch_size, &*kernel.context, args);
+    fn dispatch(&self, args: DispatchArgs) {
+        let dispatch_size = self.dispatch_size();
+        (args.call_kernel)(dispatch_size);
     }
-    fn dispatch_async<S: KernelSignature>(
-        kernel: &Kernel<Self, S>,
-        graph: &mut ComputeGraph,
-        args: impl KernelArgs<S = S>,
-    ) -> NodeHandle {
-        let dispatch_size = kernel.domain.dispatch_size();
+    fn dispatch_async<'a>(&self, graph: &mut ComputeGraph<'a>, args: DispatchArgs) -> NodeHandle {
+        let dispatch_size = self.dispatch_size();
         graph
             .add(NodeData::Command(CommandNode {
-                context: kernel.context.clone(),
-                command: KernelArgs::dispatch_with_size_async(
-                    &kernel.raw,
-                    dispatch_size,
-                    &*kernel.context,
-                    args,
-                ),
-                debug_name: kernel.debug_name.clone(),
+                context: args.context.clone(),
+                command: (args.call_kernel_async)(dispatch_size),
+                debug_name: args.debug_name.clone(),
             }))
             .id()
     }
 }
 
-pub trait Domain: Sized {
+pub trait Domain {
     type T: EmanationType;
     fn before_record(&self, element: &mut Element<Self::T>);
-    fn dispatch<S: KernelSignature>(kernel: &Kernel<Self, S>, args: impl KernelArgs<S = S>);
-    fn dispatch_async<'a, S: KernelSignature>(
-        kernel: &Kernel<Self, S>,
-        graph: &mut ComputeGraph<'a>,
-        args: impl KernelArgs<S = S>,
-    ) -> NodeHandle;
+    fn dispatch(&self, args: DispatchArgs);
+    fn dispatch_async<'a>(&self, graph: &mut ComputeGraph<'a>, args: DispatchArgs) -> NodeHandle;
+}
+
+trait AsBoxedDomain {
+    type T: EmanationType;
+    fn as_boxed_domain(self) -> Box<dyn Domain<T = Self::T>>;
+}
+impl<T: EmanationType> AsBoxedDomain for Box<dyn Domain<T = T>> {
+    type T = T;
+    fn as_boxed_domain(self) -> Box<dyn Domain<T = T>> {
+        self
+    }
+}
+impl<T: EmanationType, D: Domain<T = T> + 'static> AsBoxedDomain for D {
+    type T = T;
+    fn as_boxed_domain(self) -> Box<dyn Domain<T = T>> {
+        Box::new(self)
+    }
+}
+
+pub struct DispatchArgs<'a> {
+    pub context: Arc<Context>,
+    pub call_kernel: &'a dyn Fn([u32; 3]),
+    pub call_kernel_async: &'a dyn Fn([u32; 3]) -> Command<'static, 'static>,
+    pub debug_name: Option<String>,
 }
