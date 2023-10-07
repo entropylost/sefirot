@@ -7,7 +7,7 @@ pub mod domain;
 pub mod element;
 pub mod emanation;
 pub mod graph;
-pub mod ops;
+mod ops;
 
 pub use {luisa_compute as luisa, sefirot_macro as macros};
 
