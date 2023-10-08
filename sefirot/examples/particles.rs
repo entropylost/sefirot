@@ -56,10 +56,10 @@ fn main() {
     let ParticleMapped { position, velocity } =
         particles.create_aos_fields(&device, &index, None, &particle_data);
 
-    let update_kernel = particles.build_kernel(
+    let update_kernel = particles.build_kernel::<_, fn(f32)>(
         &device,
-        Box::new(index),
-        track!(|el: &Element<Particles>, dt: Expr<f32>| {
+        index,
+        track!(&|el, dt| {
             position[el] += velocity[el] * dt;
             if (position[el] >= 0.0).all() && (position[el] < SIZE as f32).all() {
                 display.write(position[el].cast_u32(), Vec4::splat(1.0));

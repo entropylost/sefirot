@@ -18,22 +18,22 @@ impl<T: EmanationType, S: KernelSignature> Kernel<T, S> {
 }
 
 impl<T: EmanationType> Emanation<T> {
-    pub fn build_kernel<S, F: KernelFunction<T, S>>(
+    pub fn build_kernel<F: KernelSignature>(
         &self,
         device: &Device,
         domain: Box<dyn Domain<T = T>>,
-        f: F,
-    ) -> Kernel<T, F::Signature> {
+        f: F::Function<'_, T>,
+    ) -> Kernel<T, F> {
         self.build_kernel_with_options(device, Default::default(), domain, f)
     }
 
-    pub fn build_kernel_with_options<S, F: KernelFunction<T, S>>(
+    pub fn build_kernel_with_options<F: KernelSignature>(
         &self,
         device: &Device,
         options: KernelBuildOptions,
         domain: Box<dyn Domain<T = T>>,
-        f: F,
-    ) -> Kernel<T, F::Signature> {
+        f: F::Function<'_, T>,
+    ) -> Kernel<T, F> {
         let context = Context::new();
         let mut builder = KernelBuilder::new(Some(device.clone()), true);
         let kernel = builder.build_kernel(|builder| {
@@ -132,20 +132,23 @@ macro_rules! impl_kernel {
 
 impl_kernel!(T0:S0, T1:S1, T2:S2, T3:S3, T4:S4, T5:S5, T6:S6, T7:S7, T8:S8, T9:S9, T10:S10, T11:S11, T12:S12, T13:S13, T14:S14);
 
-pub trait KernelSignature {
+pub trait KernelSignature: Sized {
     // Adds `Context` to the end of the signature.
     type LuisaSignature: luisa::runtime::KernelSignature;
+    type Function<'a, T: EmanationType>: KernelFunction<T, Self>;
 }
 
 macro_rules! impl_kernel_signature {
     () => {
         impl KernelSignature for fn() {
             type LuisaSignature = fn(Context);
+            type Function<'a, T: EmanationType> = &'a dyn Fn(&Element<T>);
         }
     };
     ($T0:ident $(,$Tn:ident)*) => {
         impl<$T0: KernelArg + 'static $(,$Tn: KernelArg + 'static)*> KernelSignature for fn($T0 $(,$Tn)*) {
             type LuisaSignature = fn($T0, $($Tn,)* Context);
+            type Function<'a, T: EmanationType> = &'a dyn Fn(&Element<T>, <$T0 as KernelArg>::Parameter $(,<$Tn as KernelArg>::Parameter)*);
         }
         impl_kernel_signature!($($Tn),*);
     };
@@ -153,32 +156,28 @@ macro_rules! impl_kernel_signature {
 
 impl_kernel_signature!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14);
 
-pub trait KernelFunction<T: EmanationType, S> {
-    type Signature: KernelSignature;
-    fn execute(self, el: Element<T>);
+pub trait KernelFunction<T: EmanationType, S: KernelSignature> {
+    fn execute(&self, el: Element<T>);
 }
 
 macro_rules! impl_kernel_function {
     () => {
-        impl<T: EmanationType, F> KernelFunction<T, fn()> for F where F: Fn(&Element<T>) {
-            type Signature = fn();
-            fn execute(self, el: Element<T>) {
+        impl<T: EmanationType> KernelFunction<T, fn()> for &dyn Fn(&Element<T>) {
+            fn execute(&self, el: Element<T>) {
                 self(&el);
             }
         }
     };
     ($T0:ident $(,$Tn:ident)*) => {
-        impl<T: EmanationType, F, $T0: KernelParameter $(,$Tn: KernelParameter)*> KernelFunction<T, fn($T0 $(,$Tn)*)> for F
-        where
-            F: Fn(&Element<T>, $T0 $(,$Tn)*),
+        impl<T: EmanationType, $T0: KernelArg + 'static $(,$Tn: KernelArg + 'static)*> KernelFunction<T, fn($T0 $(,$Tn)*)> for
+            &dyn Fn(&Element<T>, $T0::Parameter $(,$Tn::Parameter)*)
         {
-            type Signature = fn($T0::Arg $(,$Tn::Arg)*);
             #[allow(non_snake_case)]
             #[allow(unused_variables)]
-            fn execute(self, el: Element<T>) {
+            fn execute(&self, el: Element<T>) {
                 let mut builder = el.context.builder.lock();
-                let $T0 = $T0::def_param(&mut builder);
-                $(let $Tn = $Tn::def_param(&mut builder);)*
+                let $T0 = <$T0::Parameter as KernelParameter>::def_param(&mut builder);
+                $(let $Tn = <$Tn::Parameter as KernelParameter>::def_param(&mut builder);)*
 
                 (self)(&el, $T0 $(,$Tn)*)
             }
