@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -96,6 +97,8 @@ impl<'a> NodeData<'a> {
 pub struct ComputeGraph<'a> {
     nodes: Arena<Node<'a>>,
     root: NodeHandle,
+    // Resources to be released after the graph is executed.
+    release: Vec<Box<dyn Any + Send>>,
 }
 impl<'a> ComputeGraph<'a> {
     pub fn new() -> Self {
@@ -108,7 +111,11 @@ impl<'a> ComputeGraph<'a> {
                 nodes: HashSet::new(),
             }),
         }));
-        Self { nodes, root }
+        Self {
+            nodes,
+            root,
+            release: Vec::new(),
+        }
     }
 
     fn depth_first(&self) -> Vec<NodeHandle> {
@@ -242,7 +249,9 @@ impl<'a> ComputeGraph<'a> {
             }
         }
         let scope = device.default_stream().scope();
-        scope.submit_with_callback(commands, || {});
+        scope.submit_with_callback(commands, || {
+            drop(self.release);
+        });
     }
     pub fn add<'b>(&'b mut self, f: impl AddToComputeGraph<'a>) -> NodeRef<'b, 'a> {
         let id = f.add(self);
@@ -374,5 +383,29 @@ where
 impl<'a> AddToComputeGraph<'a> for Command<'a, 'a> {
     fn add<'b>(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle {
         NodeData::command(self, None::<String>).add(graph)
+    }
+}
+
+#[cfg(feature = "copy-from")]
+pub struct CopyFromBuffer<'c, T: Value> {
+    src: BufferView<'c, T>,
+    guard: tokio::sync::OwnedMutexGuard<Vec<T>>,
+}
+#[cfg(feature = "copy-from")]
+impl<'c, T: Value> CopyFromBuffer<'c, T> {
+    pub fn new(src: BufferView<'c, T>) -> (Self, Arc<tokio::sync::Mutex<Vec<T>>>) {
+        let dst = Arc::new(tokio::sync::Mutex::new(Vec::with_capacity(src.len())));
+        let guard = dst.clone().blocking_lock_owned();
+        (Self { src, guard }, dst)
+    }
+}
+#[cfg(feature = "copy-from")]
+impl<'a, 'c, T: Value + Send> AddToComputeGraph<'a> for CopyFromBuffer<'c, T> {
+    fn add<'b>(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle {
+        let mut guard = self.guard;
+        let dst = &mut **guard;
+        let dst = unsafe { std::mem::transmute::<&mut [T], &'static mut [T]>(dst) };
+        graph.release.push(Box::new(guard));
+        NodeData::command(self.src.copy_to_async(dst), None::<String>).add(graph)
     }
 }
