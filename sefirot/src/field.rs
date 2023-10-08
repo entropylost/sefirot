@@ -80,11 +80,11 @@ impl<V: Any, T: EmanationType> Field<V, T> {
             _marker: PhantomData,
         }
     }
-    pub fn at<'a: 'b, 'b>(self, el: &'b Element<'a, T>) -> FieldAccess<'a, 'b, V, T> {
-        let v = el.get(self);
+    pub fn at<'a: 'b, 'b>(&self, el: &'b Element<'a, T>) -> FieldAccess<'a, 'b, V, T> {
+        let v = el.get(*self);
         FieldAccess {
             el,
-            field: self,
+            field: *self,
             value: v,
             changed: false,
         }

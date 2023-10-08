@@ -47,6 +47,12 @@ pub struct ArrayIndex<T: EmanationType> {
     pub field: Field<Expr<u32>, T>,
     pub size: u32,
 }
+impl<T: EmanationType> Deref for ArrayIndex<T> {
+    type Target = Field<Expr<u32>, T>;
+    fn deref(&self) -> &Self::Target {
+        &self.field
+    }
+}
 
 impl<T: EmanationType> IndexEmanation<Expr<u32>> for ArrayIndex<T> {
     type T = T;
@@ -68,6 +74,12 @@ impl<T: EmanationType> IndexDomain for ArrayIndex<T> {
 pub struct Array2dIndex<T: EmanationType> {
     pub field: Field<Expr<Vec2<u32>>, T>,
     pub size: [u32; 2],
+}
+impl<T: EmanationType> Deref for Array2dIndex<T> {
+    type Target = Field<Expr<Vec2<u32>>, T>;
+    fn deref(&self) -> &Self::Target {
+        &self.field
+    }
 }
 
 impl<T: EmanationType> IndexEmanation<Expr<Vec2<u32>>> for Array2dIndex<T> {
