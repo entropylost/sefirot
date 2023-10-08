@@ -1,98 +1,18 @@
 use std::any::{Any, TypeId};
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut};
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
 use generational_arena::{Arena, Index};
 
-use crate::accessor::DynAccessor;
+use crate::field::{Accessor, DynAccessor};
 use crate::prelude::*;
 
 static NEXT_EMANATION_ID: AtomicU64 = AtomicU64::new(0);
 
 // States what the original ID is; eg: Particles for example.
 pub trait EmanationType: Sync + Send + Debug + Copy + Eq + 'static {}
-
-pub struct FieldAccess<'a: 'b, 'b, V: Any, T: EmanationType> {
-    el: &'b Element<'a, T>,
-    field: Field<V, T>,
-    value: V,
-    changed: bool,
-}
-impl<V: Any, T: EmanationType> Deref for FieldAccess<'_, '_, V, T> {
-    type Target = V;
-    fn deref(&self) -> &Self::Target {
-        &self.value
-    }
-}
-impl<V: Any, T: EmanationType> DerefMut for FieldAccess<'_, '_, V, T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.changed = true;
-        &mut self.value
-    }
-}
-impl<V: Any, T: EmanationType> Drop for FieldAccess<'_, '_, V, T> {
-    fn drop(&mut self) {
-        if self.changed {
-            self.el.set(self.field, &self.value);
-        }
-    }
-}
-
-#[cfg_attr(
-    feature = "bevy",
-    derive(bevy_ecs::prelude::Resource, bevy_ecs::prelude::Component)
-)]
-pub struct Field<V: Any, T: EmanationType> {
-    pub(crate) raw: RawFieldHandle,
-    pub(crate) emanation_id: u64,
-    pub(crate) _marker: PhantomData<(V, T)>,
-}
-impl<V: Any, T: EmanationType> Debug for Field<V, T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Field")
-            .field("raw", &self.raw)
-            .field("emanation_id", &self.emanation_id)
-            .finish()
-    }
-}
-impl<V: Any, T: EmanationType> PartialEq for Field<V, T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.raw == other.raw && self.emanation_id == other.emanation_id
-    }
-}
-impl<V: Any, T: EmanationType> Eq for Field<V, T> {}
-impl<V: Any, T: EmanationType> Clone for Field<V, T> {
-    fn clone(&self) -> Self {
-        Self {
-            raw: self.raw,
-            emanation_id: self.emanation_id,
-            _marker: PhantomData,
-        }
-    }
-}
-impl<V: Any, T: EmanationType> Copy for Field<V, T> {}
-
-impl<V: Any, T: EmanationType> Field<V, T> {
-    pub fn from_raw(field: RawFieldHandle, id: u64) -> Self {
-        Self {
-            raw: field,
-            emanation_id: id,
-            _marker: PhantomData,
-        }
-    }
-    pub fn at<'a: 'b, 'b>(self, el: &'b Element<'a, T>) -> FieldAccess<'a, 'b, V, T> {
-        let v = el.get(self);
-        FieldAccess {
-            el,
-            field: self,
-            value: v,
-            changed: false,
-        }
-    }
-}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct RawFieldHandle(pub(crate) Index);
@@ -158,5 +78,18 @@ impl<T: EmanationType> Emanation<T> {
         let a = Arc::new(accessor);
         self.fields[field.raw.0].accessor = Some(a.clone());
         a
+    }
+
+    pub fn create_bound_field<V: Any>(
+        &mut self,
+        name: Option<impl AsRef<str>>,
+        accessor: impl Accessor<T, V = V>,
+    ) -> Field<V, T> {
+        let field = self.create_field(name);
+        self.bind(field, accessor);
+        field
+    }
+    pub fn name_of<V: Any>(&self, field: Field<V, T>) -> Option<&str> {
+        self.fields[field.raw.0].name.as_deref()
     }
 }

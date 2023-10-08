@@ -3,7 +3,7 @@ use sefirot::prelude::{EmanationType, Kernel};
 use std::ops::Deref;
 use std::sync::OnceLock;
 
-pub use bevy_sefirot_macro::kernel;
+pub use bevy_sefirot_macro::init_kernel;
 
 pub mod prelude {
     pub use bevy_luisa::{

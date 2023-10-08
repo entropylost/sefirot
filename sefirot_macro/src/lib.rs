@@ -12,7 +12,7 @@ fn derive_structure_impl(input: DeriveInput) -> TokenStream {
     let st_name = input.ident;
     let generics = input.generics;
     let vis = input.vis;
-    let sf_path = quote! { ::sefirot::accessor::array::structure };
+    let sf_path = quote! { ::sefirot::field::array::structure };
     let luisa_path = quote! { ::sefirot::luisa::lang::types };
     let mapped_st_name = Ident::new(&format!("{}Mapped", st_name), st_name.span());
     let where_clause = generics.where_clause;

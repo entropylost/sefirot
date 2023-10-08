@@ -12,7 +12,7 @@ impl<T: EmanationType> Emanation<T> {
         prefix: Option<String>,
         values: &[S],
     ) -> S::Map<Field<Expr<__>, T>> {
-        assert_eq!(values.len(), index.length as usize);
+        assert_eq!(values.len(), index.size as usize);
         S::apply(CreateArrayField {
             emanation: self,
             device,
@@ -38,10 +38,10 @@ impl<T: EmanationType> Emanation<T> {
         prefix: Option<String>,
         values: &[S],
     ) -> (Field<Expr<S>, T>, S::Map<Field<Expr<__>, T>>) {
-        assert_eq!(values.len(), index.length as usize);
+        assert_eq!(values.len(), index.size as usize);
         let struct_field = self.create_field(None::<String>);
         let buffer = device.create_buffer_from_slice(values);
-        let struct_accessor = ArrayAccessor {
+        let struct_accessor = BufferAccessor {
             index: index.clone(),
             buffer,
         };
@@ -183,19 +183,19 @@ impl<Z: Selector<S>, S: Structure, T: EmanationType> Accessor<T> for StructArray
         element.unsaved_fields.lock().insert(self.struct_field.raw);
         if let Some(structure) = element.cache.lock().get_mut(&self.struct_field.raw) {
             let structure = structure
-                .downcast_mut::<<ArrayAccessor<S, T> as Accessor<T>>::C>()
+                .downcast_mut::<<BufferAccessor<S, T> as Accessor<T>>::C>()
                 .unwrap();
-            Z::select_var(&structure.var).store(value);
+            Z::select_var(&structure).store(value);
         } else {
             let _ = DynAccessor::get(&*struct_accessor, element, self.struct_field.raw);
             let mut cache = element.cache.lock();
             let structure = cache
                 .get_mut(&self.struct_field.raw)
                 .unwrap()
-                .downcast_mut::<<ArrayAccessor<S, T> as Accessor<T>>::C>()
+                .downcast_mut::<<BufferAccessor<S, T> as Accessor<T>>::C>()
                 .unwrap();
 
-            Z::select_var(&structure.var).store(value);
+            Z::select_var(&structure).store(value);
         }
         Ok(())
     }

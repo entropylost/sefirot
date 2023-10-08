@@ -15,7 +15,7 @@ pub mod kernel;
 
 pub trait IndexEmanation<I> {
     type T: EmanationType;
-    fn bind_fields(&self, idx: I, element: &mut Element<Self::T>);
+    fn bind_fields(&self, idx: I, element: &Element<Self::T>);
 }
 impl<T: EmanationType> Emanation<T> {
     pub fn get<'a, S: EmanationType, I, Idx: IndexEmanation<I, T = T>>(
@@ -24,14 +24,14 @@ impl<T: EmanationType> Emanation<T> {
         indexer: &Idx,
         idx: I,
     ) -> Element<'a, T> {
-        let mut element = Element {
+        let element = Element {
             emanation: self,
             overridden_accessors: Mutex::new(HashMap::new()),
             context,
             cache: Mutex::new(HashMap::new()),
             unsaved_fields: Mutex::new(HashSet::new()),
         };
-        indexer.bind_fields(idx, &mut element);
+        indexer.bind_fields(idx, &element);
         element
     }
 }
@@ -47,7 +47,7 @@ where
     X: IndexDomain,
 {
     type T = X::T;
-    fn before_record(&self, element: &mut Element<X::T>) {
+    fn before_record(&self, element: &Element<X::T>) {
         let index = self.get_index();
         self.bind_fields(index, element);
     }
@@ -69,7 +69,7 @@ where
 
 pub trait Domain {
     type T: EmanationType;
-    fn before_record(&self, element: &mut Element<Self::T>);
+    fn before_record(&self, element: &Element<Self::T>);
     fn dispatch(&self, args: DispatchArgs);
     fn dispatch_async<'a>(&self, graph: &mut ComputeGraph<'a>, args: DispatchArgs) -> NodeHandle;
 }

@@ -6,8 +6,8 @@ use parking_lot::Mutex;
 
 use luisa_compute::runtime::{AsKernelArg, KernelArg, KernelArgEncoder, KernelBuilder};
 
-use crate::accessor::DynAccessor;
 use crate::emanation::RawFieldHandle;
+use crate::field::{Accessor, DynAccessor};
 use crate::prelude::*;
 
 pub struct KernelContext<'a> {
