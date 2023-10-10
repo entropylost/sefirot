@@ -17,9 +17,6 @@ impl Default for ClearColor {
     }
 }
 
-pub struct Render;
-impl LuisaCommandsType for Render {}
-
 pub fn setup_display(
     mut commands: Commands,
     device: LuisaDevice,
@@ -84,13 +81,15 @@ fn clear_display_kernel() {
     }
 }
 
-pub fn clear_display(
-    mut commands: LuisaCommands<Render>,
+pub fn present_swapchain_and_clear(
+    device: LuisaDevice,
     clear_color: Option<Res<ClearColor>>,
-    query: Query<(&Window, &DisplayTexture)>,
+    query: Query<(&LuisaSwapchain, &DisplayTexture), With<Window>>,
 ) {
-    for (window, display) in query.iter() {
-        commands.run(clear_display_kernel.dispatch_async(
+    for (swapchain, display) in query.iter() {
+        let scope = device.default_stream().scope();
+        scope.present(&swapchain, &display);
+        scope.run(clear_display_kernel.dispatch_async(
             [
                 window.resolution.physical_width(),
                 window.resolution.physical_height(),
@@ -99,16 +98,6 @@ pub fn clear_display(
             &display.0,
             &clear_color.as_deref().map(|x| *x).unwrap_or_default().0,
         ));
-    }
-}
-
-pub fn present_swapchain(
-    device: LuisaDevice,
-    query: Query<(&LuisaSwapchain, &DisplayTexture), With<Window>>,
-) {
-    for (swapchain, display) in query.iter() {
-        let scope = device.default_stream().scope();
-        scope.present(&swapchain, &display);
     }
 }
 
@@ -141,16 +130,7 @@ impl Plugin for LuisaDisplayPlugin {
             vsync: self.vsync,
             back_buffer_size: self.back_buffer_size,
         })
-        .init_resource::<LuisaCommandsResource<Render>>()
         .add_systems(Startup, setup_display)
-        .add_systems(
-            PreUpdate,
-            (
-                // update_display.run_if(on_event::<WindowResized>()),
-                clear_display,
-            )
-                .chain(),
-        )
-        .add_systems(PostUpdate, present_swapchain);
+        .add_systems(PostUpdate, present_swapchain_and_clear);
     }
 }
