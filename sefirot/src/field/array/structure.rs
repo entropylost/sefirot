@@ -6,7 +6,7 @@ use super::*;
 
 impl<T: EmanationType> Emanation<T> {
     pub fn create_soa_fields<S: Structure>(
-        &mut self,
+        &self,
         device: &Device,
         index: &ArrayIndex<T>,
         prefix: Option<String>,
@@ -22,7 +22,7 @@ impl<T: EmanationType> Emanation<T> {
         })
     }
     pub fn create_aos_fields<S: Structure>(
-        &mut self,
+        &self,
         device: &Device,
         index: &ArrayIndex<T>,
         prefix: Option<String>,
@@ -32,7 +32,7 @@ impl<T: EmanationType> Emanation<T> {
             .1
     }
     pub fn create_aos_fields_with_struct_field<S: Structure>(
-        &mut self,
+        &self,
         device: &Device,
         index: &ArrayIndex<T>,
         prefix: Option<String>,
@@ -58,7 +58,7 @@ impl<T: EmanationType> Emanation<T> {
 }
 
 struct CreateArrayField<'a, S: Structure, T: EmanationType> {
-    emanation: &'a mut Emanation<T>,
+    emanation: &'a Emanation<T>,
     device: &'a Device,
     index: &'a ArrayIndex<T>,
     prefix: Option<String>,
@@ -81,7 +81,7 @@ impl<S: Structure, T: EmanationType> ValueMapping<S> for CreateArrayField<'_, S,
 }
 
 struct CreateStructArrayField<'a, S: Structure, T: EmanationType> {
-    emanation: &'a mut Emanation<T>,
+    emanation: &'a Emanation<T>,
     prefix: Option<String>,
     struct_field: Field<Expr<S>, T>,
     struct_accessor: Weak<dyn DynAccessor<T>>,
@@ -169,7 +169,7 @@ impl<Z: Selector<S>, S: Structure, T: EmanationType> Accessor<T> for StructArray
     type C = ();
 
     fn get(&self, element: &Element<T>, _field: Field<Self::V, T>) -> Result<Self::V, ReadError> {
-        let structure = element.get(self.struct_field);
+        let structure = element.get(self.struct_field)?;
         Ok(Z::select_expr(&structure))
     }
 

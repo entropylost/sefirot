@@ -393,7 +393,11 @@ pub struct CopyFromBuffer<'c, T: Value> {
 }
 #[cfg(feature = "copy-from")]
 impl<'c, T: Value> CopyFromBuffer<'c, T> {
-    pub fn new(src: BufferView<'c, T>) -> (Self, Arc<tokio::sync::Mutex<Vec<T>>>) {
+    pub fn new(src: &'c Buffer<T>) -> (Self, Arc<tokio::sync::Mutex<Vec<T>>>) {
+        let src = src.view(..);
+        Self::new_view(src)
+    }
+    pub fn new_view(src: BufferView<'c, T>) -> (Self, Arc<tokio::sync::Mutex<Vec<T>>>) {
         let dst = Arc::new(tokio::sync::Mutex::new(Vec::with_capacity(src.len())));
         let guard = dst.clone().blocking_lock_owned();
         (Self { src, guard }, dst)

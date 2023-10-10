@@ -8,14 +8,14 @@ use super::*;
 pub mod structure;
 
 impl<T: EmanationType> Emanation<T> {
-    pub fn create_index(&mut self, length: u32) -> ArrayIndex<T> {
+    pub fn create_index(&self, length: u32) -> ArrayIndex<T> {
         ArrayIndex {
             field: self.create_field(Some("index")),
             size: length,
         }
     }
     pub fn create_array_field<V: Value>(
-        &mut self,
+        &self,
         device: &Device,
         index: &ArrayIndex<T>,
         name: Option<impl AsRef<str>>,
@@ -26,7 +26,7 @@ impl<T: EmanationType> Emanation<T> {
         self.create_array_field_from_buffer(index, name, buffer)
     }
     pub fn create_array_field_from_buffer<V: Value>(
-        &mut self,
+        &self,
         index: &ArrayIndex<T>,
         name: Option<impl AsRef<str>>,
         buffer: Buffer<V>,
@@ -120,7 +120,7 @@ impl<T: EmanationType> Array2dIndex<T> {
             Some(name),
             ExprFnAccessor::new(track!(move |el| {
                 // https://graphics.stanford.edu/%7Eseander/bithacks.html#InterleaveBMN
-                let index = el.get(field);
+                let index = el.get(field).unwrap();
                 let x = index.x.var();
 
                 *x = (x | (x << 8)) & 0x00ff00ff;
@@ -157,7 +157,7 @@ impl<V: Value, T: EmanationType> Accessor<T> for BufferAccessor<V, T> {
         if let Some(cache) = self.get_cache(element, field) {
             Ok(cache.load())
         } else {
-            let value = self.buffer.read(element.get(self.index.field));
+            let value = self.buffer.read(element.get(self.index.field)?);
             self.insert_cache(element, field, value.var());
             Ok(value)
         }
@@ -178,7 +178,7 @@ impl<V: Value, T: EmanationType> Accessor<T> for BufferAccessor<V, T> {
 
     fn save(&self, element: &Element<T>, field: Field<Self::V, T>) {
         self.buffer.write(
-            element.get(self.index.field),
+            element.get(self.index.field).unwrap(),
             self.get_cache(element, field).unwrap().load(),
         );
     }
@@ -200,7 +200,7 @@ impl<V: IoTexel, T: EmanationType> Accessor<T> for Tex2dAccessor<V, T> {
         if let Some(cache) = self.get_cache(element, field) {
             Ok(cache.load())
         } else {
-            let value = self.texture.read(element.get(self.index.field));
+            let value = self.texture.read(element.get(self.index.field)?);
             self.insert_cache(element, field, value.var());
             Ok(value)
         }
@@ -221,7 +221,7 @@ impl<V: IoTexel, T: EmanationType> Accessor<T> for Tex2dAccessor<V, T> {
 
     fn save(&self, element: &Element<T>, field: Field<Self::V, T>) {
         self.texture.write(
-            element.get(self.index.field),
+            element.get(self.index.field).unwrap(),
             self.get_cache(element, field).unwrap().load(),
         );
     }

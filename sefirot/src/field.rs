@@ -11,29 +11,30 @@ use crate::prelude::*;
 
 pub mod array;
 pub mod constant;
+pub mod map;
 
-pub struct FieldAccess<'a: 'b, 'b, V: Any, T: EmanationType> {
-    el: &'b Element<'a, T>,
+pub struct FieldAccess<'a, V: Any, T: EmanationType> {
+    el: &'a Element<T>,
     field: Field<V, T>,
     value: V,
     changed: bool,
 }
-impl<V: Any, T: EmanationType> Deref for FieldAccess<'_, '_, V, T> {
+impl<V: Any, T: EmanationType> Deref for FieldAccess<'_, V, T> {
     type Target = V;
     fn deref(&self) -> &Self::Target {
         &self.value
     }
 }
-impl<V: Any, T: EmanationType> DerefMut for FieldAccess<'_, '_, V, T> {
+impl<V: Any, T: EmanationType> DerefMut for FieldAccess<'_, V, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.changed = true;
         &mut self.value
     }
 }
-impl<V: Any, T: EmanationType> Drop for FieldAccess<'_, '_, V, T> {
+impl<V: Any, T: EmanationType> Drop for FieldAccess<'_, V, T> {
     fn drop(&mut self) {
         if self.changed {
-            self.el.set(self.field, &self.value);
+            self.el.set(self.field, &self.value).unwrap();
         }
     }
 }
@@ -80,8 +81,8 @@ impl<V: Any, T: EmanationType> Field<V, T> {
             _marker: PhantomData,
         }
     }
-    pub fn at<'a: 'b, 'b>(&self, el: &'b Element<'a, T>) -> FieldAccess<'a, 'b, V, T> {
-        let v = el.get(*self);
+    pub fn at<'a>(&self, el: &'a Element<T>) -> FieldAccess<'a, V, T> {
+        let v = el.get(*self).unwrap();
         FieldAccess {
             el,
             field: *self,

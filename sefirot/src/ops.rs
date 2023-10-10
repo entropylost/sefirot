@@ -5,7 +5,7 @@ use crate::prelude::*;
 
 macro_rules! impl_assignop {
     ($Trait:ident: $fn:tt; $op:tt) => {
-        impl<V: Value, X, T: EmanationType> $Trait<X> for FieldAccess<'_, '_, Expr<V>, T>
+        impl<V: Value, X, T: EmanationType> $Trait<X> for FieldAccess<'_, Expr<V>, T>
         where
             Var<V>: $Trait<X>,
         {

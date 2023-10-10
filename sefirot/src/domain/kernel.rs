@@ -34,29 +34,33 @@ impl<T: EmanationType> Emanation<T> {
         domain: Box<dyn Domain<T = T>>,
         f: F::Function<'_, T>,
     ) -> Kernel<T, F> {
-        let context = Context::new();
+        let context = Arc::new(Context::new());
         let mut builder = KernelBuilder::new(Some(device.clone()), true);
         let kernel = builder.build_kernel(|builder| {
-            let context = KernelContext {
-                context: &context,
-                builder: Mutex::new(builder),
-            };
+            take_mut::take(builder, |builder| {
+                let context = KernelContext {
+                    context: context.clone(),
+                    builder: Arc::new(Mutex::new(builder)),
+                };
+                let builder = context.builder.clone();
 
-            let mut element = Element {
-                emanation: self,
-                overridden_accessors: Mutex::new(HashMap::new()),
-                context: &context,
-                cache: Mutex::new(HashMap::new()),
-                unsaved_fields: Mutex::new(HashSet::new()),
-            };
-            domain.before_record(&mut element);
-            f.execute(element);
+                let mut element = Element {
+                    emanation: self.clone(),
+                    overridden_accessors: Mutex::new(HashMap::new()),
+                    context,
+                    cache: Mutex::new(HashMap::new()),
+                    unsaved_fields: Mutex::new(HashSet::new()),
+                };
+                domain.before_record(&mut element);
+                f.execute(element);
+                Arc::into_inner(builder).unwrap().into_inner()
+            });
         });
         let name = pretty_type_name::<F>();
         Kernel {
             domain,
             raw: device.compile_kernel_def_with_options(&kernel, options),
-            context: Arc::new(context),
+            context,
             debug_name: Some(name),
         }
     }

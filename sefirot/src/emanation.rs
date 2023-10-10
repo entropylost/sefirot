@@ -5,6 +5,7 @@ use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
 use generational_arena::{Arena, Index};
+use parking_lot::Mutex;
 
 use crate::field::{Accessor, DynAccessor};
 use crate::prelude::*;
@@ -36,29 +37,21 @@ impl<T: EmanationType> Debug for RawField<T> {
     feature = "bevy",
     derive(bevy_ecs::prelude::Resource, bevy_ecs::prelude::Component)
 )]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Emanation<T: EmanationType> {
     pub(crate) id: u64,
-    pub(crate) fields: Arena<RawField<T>>,
-}
-impl<T: EmanationType> Clone for Emanation<T> {
-    fn clone(&self) -> Self {
-        Self {
-            id: NEXT_EMANATION_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
-            fields: self.fields.clone(),
-        }
-    }
+    pub(crate) fields: Arc<Mutex<Arena<RawField<T>>>>,
 }
 impl<T: EmanationType> Emanation<T> {
     pub fn new() -> Self {
         Self {
             id: NEXT_EMANATION_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
-            fields: Arena::new(),
+            fields: Arc::new(Mutex::new(Arena::new())),
         }
     }
 
-    pub fn create_field<V: Any>(&mut self, name: Option<impl AsRef<str>>) -> Field<V, T> {
-        let raw = RawFieldHandle(self.fields.insert(RawField {
+    pub fn create_field<V: Any>(&self, name: Option<impl AsRef<str>>) -> Field<V, T> {
+        let raw = RawFieldHandle(self.fields.lock().insert(RawField {
             name: name.map(|x| x.as_ref().to_string()),
             ty: TypeId::of::<V>(),
             accessor: None,
@@ -71,17 +64,17 @@ impl<T: EmanationType> Emanation<T> {
     }
 
     pub fn bind<V: Any>(
-        &mut self,
+        &self,
         field: Field<V, T>,
         accessor: impl Accessor<T, V = V>,
     ) -> Arc<dyn DynAccessor<T>> {
         let a = Arc::new(accessor);
-        self.fields[field.raw.0].accessor = Some(a.clone());
+        self.fields.lock()[field.raw.0].accessor = Some(a.clone());
         a
     }
 
     pub fn create_bound_field<V: Any>(
-        &mut self,
+        &self,
         name: Option<impl AsRef<str>>,
         accessor: impl Accessor<T, V = V>,
     ) -> Field<V, T> {
@@ -89,7 +82,7 @@ impl<T: EmanationType> Emanation<T> {
         self.bind(field, accessor);
         field
     }
-    pub fn name_of<V: Any>(&self, field: Field<V, T>) -> Option<&str> {
-        self.fields[field.raw.0].name.as_deref()
+    pub fn name_of<V: Any>(&self, field: Field<V, T>) -> Option<String> {
+        self.fields.lock()[field.raw.0].name.clone()
     }
 }

@@ -18,16 +18,16 @@ pub trait IndexEmanation<I> {
     fn bind_fields(&self, idx: I, element: &Element<Self::T>);
 }
 impl<T: EmanationType> Emanation<T> {
-    pub fn get<'a, S: EmanationType, I, Idx: IndexEmanation<I, T = T>>(
-        &'a self,
-        context: &'a KernelContext<'a>,
+    pub fn get<I, Idx: IndexEmanation<I, T = T>>(
+        &self,
+        context: &KernelContext,
         indexer: &Idx,
         idx: I,
-    ) -> Element<'a, T> {
+    ) -> Element<T> {
         let element = Element {
-            emanation: self,
+            emanation: self.clone(),
             overridden_accessors: Mutex::new(HashMap::new()),
-            context,
+            context: context.clone(),
             cache: Mutex::new(HashMap::new()),
             unsaved_fields: Mutex::new(HashSet::new()),
         };
