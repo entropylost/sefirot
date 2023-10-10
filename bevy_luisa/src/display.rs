@@ -1,5 +1,4 @@
 use super::*;
-use bevy::window::WindowResized;
 use bevy::winit::WinitWindows;
 use luisa::lang::types::vector::Vec4;
 
@@ -84,12 +83,12 @@ fn clear_display_kernel() {
 pub fn present_swapchain_and_clear(
     device: LuisaDevice,
     clear_color: Option<Res<ClearColor>>,
-    query: Query<(&LuisaSwapchain, &DisplayTexture), With<Window>>,
+    query: Query<(&LuisaSwapchain, &DisplayTexture, &Window)>,
 ) {
-    for (swapchain, display) in query.iter() {
+    for (swapchain, display, window) in query.iter() {
         let scope = device.default_stream().scope();
         scope.present(&swapchain, &display);
-        scope.run(clear_display_kernel.dispatch_async(
+        scope.submit([clear_display_kernel.dispatch_async(
             [
                 window.resolution.physical_width(),
                 window.resolution.physical_height(),
@@ -97,7 +96,7 @@ pub fn present_swapchain_and_clear(
             ],
             &display.0,
             &clear_color.as_deref().map(|x| *x).unwrap_or_default().0,
-        ));
+        )]);
     }
 }
 
