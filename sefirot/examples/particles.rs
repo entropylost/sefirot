@@ -42,7 +42,7 @@ fn main() {
     );
     let display = device.create_tex2d::<Vec4<f32>>(swapchain.pixel_storage(), SIZE, SIZE, 1);
 
-    let mut particles = Emanation::<Particles>::new();
+    let particles = Emanation::<Particles>::new();
     let mut particle_data = Vec::<Particle>::new();
     for i in 0..100 {
         for j in 0..100 {
