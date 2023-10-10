@@ -14,10 +14,16 @@ impl<T: EmanationType> Emanation<T> {
             size: length,
         }
     }
+    pub fn create_index2d(&self, size: [u32; 2]) -> Array2dIndex<T> {
+        Array2dIndex {
+            field: self.create_field(Some("index")),
+            size,
+        }
+    }
     pub fn create_array_field<V: Value>(
         &self,
         device: &Device,
-        index: &ArrayIndex<T>,
+        index: ArrayIndex<T>,
         name: Option<impl AsRef<str>>,
         values: &[V],
     ) -> Field<Expr<V>, T> {
@@ -27,22 +33,27 @@ impl<T: EmanationType> Emanation<T> {
     }
     pub fn create_array_field_from_buffer<V: Value>(
         &self,
-        index: &ArrayIndex<T>,
+        index: ArrayIndex<T>,
         name: Option<impl AsRef<str>>,
         buffer: Buffer<V>,
     ) -> Field<Expr<V>, T> {
         assert_eq!(buffer.len(), index.size as usize);
-        let field = self.create_field(name);
-        let accessor = BufferAccessor {
-            index: index.clone(),
-            buffer,
-        };
-        self.bind(field, accessor);
-        field
+        self.create_bound_field(name, BufferAccessor { index, buffer })
+    }
+
+    pub fn create_tex2d_field<V: IoTexel>(
+        &self,
+        device: &Device,
+        storage: PixelStorage,
+        index: Array2dIndex<T>,
+        name: Option<impl AsRef<str>>,
+    ) -> Field<Expr<V>, T> {
+        let texture = device.create_tex2d(storage, index.size[0], index.size[1], 1);
+        self.create_bound_field(name, Tex2dAccessor { index, texture })
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ArrayIndex<T: EmanationType> {
     pub field: Field<Expr<u32>, T>,
     pub size: u32,
@@ -70,7 +81,7 @@ impl<T: EmanationType> IndexDomain for ArrayIndex<T> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Array2dIndex<T: EmanationType> {
     pub field: Field<Expr<Vec2<u32>>, T>,
     pub size: [u32; 2],

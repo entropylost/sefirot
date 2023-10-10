@@ -8,7 +8,7 @@ impl<T: EmanationType> Emanation<T> {
     pub fn create_soa_fields<S: Structure>(
         &self,
         device: &Device,
-        index: &ArrayIndex<T>,
+        index: ArrayIndex<T>,
         prefix: Option<String>,
         values: &[S],
     ) -> S::Map<Field<Expr<__>, T>> {
@@ -24,7 +24,7 @@ impl<T: EmanationType> Emanation<T> {
     pub fn create_aos_fields<S: Structure>(
         &self,
         device: &Device,
-        index: &ArrayIndex<T>,
+        index: ArrayIndex<T>,
         prefix: Option<String>,
         values: &[S],
     ) -> S::Map<Field<Expr<__>, T>> {
@@ -34,7 +34,7 @@ impl<T: EmanationType> Emanation<T> {
     pub fn create_aos_fields_with_struct_field<S: Structure>(
         &self,
         device: &Device,
-        index: &ArrayIndex<T>,
+        index: ArrayIndex<T>,
         prefix: Option<String>,
         values: &[S],
     ) -> (Field<Expr<S>, T>, S::Map<Field<Expr<__>, T>>) {
@@ -60,7 +60,7 @@ impl<T: EmanationType> Emanation<T> {
 struct CreateArrayField<'a, S: Structure, T: EmanationType> {
     emanation: &'a Emanation<T>,
     device: &'a Device,
-    index: &'a ArrayIndex<T>,
+    index: ArrayIndex<T>,
     prefix: Option<String>,
     values: &'a [S],
 }
