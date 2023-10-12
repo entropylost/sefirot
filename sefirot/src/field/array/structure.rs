@@ -21,6 +21,22 @@ impl<T: EmanationType> Emanation<T> {
             values,
         })
     }
+    pub fn create_soa_fields_from_fn<S: Structure>(
+        &self,
+        device: &Device,
+        index: ArrayIndex<T>,
+        prefix: Option<String>,
+        f: impl Fn(u32) -> S,
+    ) -> S::Map<Field<Expr<__>, T>> {
+        let values = (0..index.size).map(f).collect::<Vec<_>>();
+        S::apply(CreateArrayField {
+            emanation: self,
+            device,
+            index,
+            prefix,
+            values: &values,
+        })
+    }
     pub fn create_aos_fields<S: Structure>(
         &self,
         device: &Device,
@@ -28,19 +44,29 @@ impl<T: EmanationType> Emanation<T> {
         prefix: Option<String>,
         values: &[S],
     ) -> S::Map<Field<Expr<__>, T>> {
-        self.create_aos_fields_with_struct_field(device, index, prefix, values)
+        assert_eq!(values.len(), index.size as usize);
+        let buffer = device.create_buffer_from_slice(values);
+        self.create_aos_fields_with_struct_field(index, prefix, buffer)
             .1
     }
-    pub fn create_aos_fields_with_struct_field<S: Structure>(
+    pub fn create_aos_fields_from_fn<S: Structure>(
         &self,
         device: &Device,
         index: ArrayIndex<T>,
         prefix: Option<String>,
-        values: &[S],
+        f: impl Fn(u32) -> S,
+    ) -> S::Map<Field<Expr<__>, T>> {
+        let buffer = device.create_buffer_from_fn(index.size as usize, |i| f(i as u32));
+        self.create_aos_fields_with_struct_field(index, prefix, buffer)
+            .1
+    }
+    pub fn create_aos_fields_with_struct_field<S: Structure>(
+        &self,
+        index: ArrayIndex<T>,
+        prefix: Option<String>,
+        buffer: Buffer<S>,
     ) -> (Field<Expr<S>, T>, S::Map<Field<Expr<__>, T>>) {
-        assert_eq!(values.len(), index.size as usize);
         let struct_field = self.create_field(None::<String>);
-        let buffer = device.create_buffer_from_slice(values);
         let struct_accessor = BufferAccessor {
             index: index.clone(),
             buffer,
