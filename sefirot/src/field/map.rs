@@ -47,7 +47,7 @@ impl<T: EmanationType> Emanation<T> {
             emanation: other.clone(),
         };
         self.create_bound_field(
-            Some(format!(
+            Some(&format!(
                 "Mapping {} -> {}",
                 pretty_type_name::<T>(),
                 pretty_type_name::<S>()

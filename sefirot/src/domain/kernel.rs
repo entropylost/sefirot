@@ -12,7 +12,7 @@ pub struct Kernel<T: EmanationType, S: KernelSignature> {
 }
 impl<T: EmanationType, S: KernelSignature> Kernel<T, S> {
     pub fn with_name(mut self, name: impl AsRef<str>) -> Self {
-        self.debug_name = Some(name.as_ref().to_owned());
+        self.debug_name = Some(name.as_ref().to_string());
         self
     }
 }

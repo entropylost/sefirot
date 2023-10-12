@@ -50,9 +50,9 @@ impl<T: EmanationType> Emanation<T> {
         }
     }
 
-    pub fn create_field<V: Any>(&self, name: Option<impl AsRef<str>>) -> Field<V, T> {
+    pub fn create_field<V: Any>(&self, name: Option<&str>) -> Field<V, T> {
         let raw = RawFieldHandle(self.fields.lock().insert(RawField {
-            name: name.map(|x| x.as_ref().to_string()),
+            name: name.map(|x| x.to_string()),
             ty: TypeId::of::<V>(),
             accessor: None,
         }));
@@ -75,7 +75,7 @@ impl<T: EmanationType> Emanation<T> {
 
     pub fn create_bound_field<V: Any>(
         &self,
-        name: Option<impl AsRef<str>>,
+        name: Option<&str>,
         accessor: impl Accessor<T, V = V>,
     ) -> Field<V, T> {
         let field = self.create_field(name);

@@ -24,7 +24,7 @@ impl<T: EmanationType> Emanation<T> {
         &self,
         device: &Device,
         index: ArrayIndex<T>,
-        name: Option<impl AsRef<str>>,
+        name: Option<&str>,
         values: &[V],
     ) -> Field<Expr<V>, T> {
         assert_eq!(values.len(), index.size as usize);
@@ -34,7 +34,7 @@ impl<T: EmanationType> Emanation<T> {
     pub fn create_array_field_from_buffer<V: Value>(
         &self,
         index: ArrayIndex<T>,
-        name: Option<impl AsRef<str>>,
+        name: Option<&str>,
         buffer: Buffer<V>,
     ) -> Field<Expr<V>, T> {
         assert_eq!(buffer.len(), index.size as usize);
@@ -46,7 +46,7 @@ impl<T: EmanationType> Emanation<T> {
         device: &Device,
         storage: PixelStorage,
         index: Array2dIndex<T>,
-        name: Option<impl AsRef<str>>,
+        name: Option<&str>,
     ) -> Field<Expr<V>, T> {
         let texture = device.create_tex2d(storage, index.size[0], index.size[1], 1);
         self.create_bound_field(name, Tex2dAccessor { index, texture })
@@ -124,11 +124,11 @@ impl<T: EmanationType> Array2dIndex<T> {
         );
         let name = emanation
             .name_of(self.field)
-            .map(|x| format!("{}_morton", x))
-            .unwrap_or("morton".to_string());
+            .map(|x| format!("{}-morton", x))
+            .unwrap_or("index2d-morton".to_string());
         let field = self.field;
         let field = emanation.create_bound_field(
-            Some(name),
+            Some(&name),
             ExprFnAccessor::new(track!(move |el| {
                 // https://graphics.stanford.edu/%7Eseander/bithacks.html#InterleaveBMN
                 let index = el.get(field).unwrap();

@@ -38,11 +38,11 @@ impl<'a> NodeData<'a> {
     pub fn fence() -> Self {
         Self::Fence(FenceNode)
     }
-    pub fn command(command: Command<'a, 'a>, name: Option<impl AsRef<str>>) -> Self {
+    pub fn command(command: Command<'a, 'a>, name: Option<&str>) -> Self {
         Self::Command(CommandNode {
             context: Arc::new(Context::new()),
             command,
-            debug_name: name.map(|s| s.as_ref().to_string()),
+            debug_name: name.map(|s| s.to_string()),
         })
     }
     pub fn container<'b>(nodes: impl IntoIterator<Item = &'b NodeHandle>) -> Self {
@@ -382,7 +382,7 @@ where
 }
 impl<'a> AddToComputeGraph<'a> for Command<'a, 'a> {
     fn add<'b>(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle {
-        NodeData::command(self, None::<String>).add(graph)
+        NodeData::command(self, None).add(graph)
     }
 }
 
@@ -410,6 +410,6 @@ impl<'a, 'c, T: Value + Send> AddToComputeGraph<'a> for CopyFromBuffer<'c, T> {
         let dst = &mut **guard;
         let dst = unsafe { std::mem::transmute::<&mut [T], &'static mut [T]>(dst) };
         graph.release.push(Box::new(guard));
-        NodeData::command(self.src.copy_to_async(dst), None::<String>).add(graph)
+        NodeData::command(self.src.copy_to_async(dst), None).add(graph)
     }
 }

@@ -9,7 +9,7 @@ impl<T: EmanationType> Emanation<T> {
         &self,
         device: &Device,
         index: ArrayIndex<T>,
-        prefix: Option<impl AsRef<str>>,
+        prefix: Option<&str>,
         values: &[S],
     ) -> S::Map<Field<Expr<__>, T>> {
         assert_eq!(values.len(), index.size as usize);
@@ -17,7 +17,7 @@ impl<T: EmanationType> Emanation<T> {
             emanation: self,
             device,
             index,
-            prefix: prefix.map(|prefix| prefix.as_ref().to_string()),
+            prefix: prefix.map(|prefix| prefix.to_string()),
             values,
         })
     }
@@ -25,7 +25,7 @@ impl<T: EmanationType> Emanation<T> {
         &self,
         device: &Device,
         index: ArrayIndex<T>,
-        prefix: Option<impl AsRef<str>>,
+        prefix: Option<&str>,
         f: impl Fn(u32) -> S,
     ) -> S::Map<Field<Expr<__>, T>> {
         let values = (0..index.size).map(f).collect::<Vec<_>>();
@@ -33,7 +33,7 @@ impl<T: EmanationType> Emanation<T> {
             emanation: self,
             device,
             index,
-            prefix: prefix.map(|prefix| prefix.as_ref().to_string()),
+            prefix: prefix.map(|prefix| prefix.to_string()),
             values: &values,
         })
     }
@@ -41,7 +41,7 @@ impl<T: EmanationType> Emanation<T> {
         &self,
         device: &Device,
         index: ArrayIndex<T>,
-        prefix: Option<impl AsRef<str>>,
+        prefix: Option<&str>,
         values: &[S],
     ) -> S::Map<Field<Expr<__>, T>> {
         assert_eq!(values.len(), index.size as usize);
@@ -53,7 +53,7 @@ impl<T: EmanationType> Emanation<T> {
         &self,
         device: &Device,
         index: ArrayIndex<T>,
-        prefix: Option<impl AsRef<str>>,
+        prefix: Option<&str>,
         f: impl Fn(u32) -> S,
     ) -> S::Map<Field<Expr<__>, T>> {
         let buffer = device.create_buffer_from_fn(index.size as usize, |i| f(i as u32));
@@ -63,11 +63,12 @@ impl<T: EmanationType> Emanation<T> {
     pub fn create_aos_fields_with_struct_field<S: Structure>(
         &self,
         index: ArrayIndex<T>,
-        prefix: Option<impl AsRef<str>>,
+        prefix: Option<&str>,
         buffer: Buffer<S>,
     ) -> (Field<Expr<S>, T>, S::Map<Field<Expr<__>, T>>) {
-        let prefix = prefix.map(|prefix| prefix.as_ref().to_string());
-        let struct_field = self.create_field(prefix.clone().map(|prefix| prefix + "struct"));
+        let prefix = prefix.map(|prefix| prefix.to_string());
+        let struct_field =
+            self.create_field(prefix.clone().map(|prefix| prefix + "struct").as_deref());
         let struct_accessor = BufferAccessor {
             index: index.clone(),
             buffer,
@@ -103,7 +104,7 @@ impl<S: Structure, T: EmanationType> ValueMapping<S> for CreateArrayField<'_, S,
             Z::select_ref(&self.values[i]).clone()
         });
         self.emanation
-            .create_array_field_from_buffer(self.index, Some(field_name), buffer)
+            .create_array_field_from_buffer(self.index, Some(&field_name), buffer)
     }
 }
 
@@ -121,7 +122,7 @@ impl<S: Structure, T: EmanationType> ValueMapping<S> for CreateStructArrayField<
             .as_ref()
             .map(|prefix| prefix.clone() + name)
             .unwrap_or(name.to_string());
-        let field = self.emanation.create_field(Some(field_name));
+        let field = self.emanation.create_field(Some(&field_name));
         let accessor = StructArrayAccessor {
             struct_field: self.struct_field,
             struct_accessor: self.struct_accessor.clone(),
