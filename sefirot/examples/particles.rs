@@ -26,7 +26,7 @@ fn main() {
 
     let event_loop = winit::event_loop::EventLoop::new();
     let window = winit::window::WindowBuilder::new()
-        .with_title("Luisa Compute Rust - Fluid")
+        .with_title("Sefirot - Particles Example")
         .with_inner_size(winit::dpi::PhysicalSize::new(SIZE, SIZE))
         .with_resizable(false)
         .build(&event_loop)
@@ -54,7 +54,7 @@ fn main() {
     }
     let index = particles.create_index(particle_data.len() as u32);
     let ParticleMapped { position, velocity } =
-        particles.create_aos_fields(&device, index, None, &particle_data);
+        particles.create_aos_fields(&device, index, Some("particle-"), &particle_data);
 
     let update_kernel = particles.build_kernel::<fn(f32)>(
         &device,
