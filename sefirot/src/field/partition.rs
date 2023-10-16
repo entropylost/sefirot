@@ -1,4 +1,4 @@
-use crate::domain::IndexEmanation;
+use crate::domain::{IndexDomain, IndexEmanation};
 use crate::graph::{AddToComputeGraph, ComputeGraph, CopyFromBuffer};
 
 use super::array::ArrayIndex;
@@ -7,10 +7,6 @@ use luisa::lang::types::AtomicRef;
 use luisa::prelude::tracked;
 use tokio::sync::Mutex;
 
-#[cfg_attr(
-    feature = "bevy",
-    derive(bevy_ecs::prelude::Resource, bevy_ecs::prelude::Component)
-)]
 #[derive(Clone)]
 pub struct BufferSlice<V: Value> {
     pub buffer: Buffer<V>,
@@ -102,6 +98,7 @@ pub struct ArrayPartitionDomain<T: EmanationType> {
     partition: Field<Expr<u32>, T>,
     partition_ref: Field<Expr<u32>, T>,
     index: u32,
+    size: u32,
 }
 impl<T: EmanationType> IndexEmanation<Expr<u32>> for ArrayPartitionDomain<T> {
     type T = T;
@@ -116,6 +113,15 @@ impl<T: EmanationType> IndexEmanation<Expr<u32>> for ArrayPartitionDomain<T> {
         element.bind(self.partition_ref, ValueAccessor(index));
     }
 }
+impl<T: EmanationType> IndexDomain for ArrayPartitionDomain<T> {
+    type I = Expr<u32>;
+    fn get_index(&self) -> Self::I {
+        dispatch_size().x
+    }
+    fn dispatch_size(&self) -> [u32; 3] {
+        [self.size, 1, 1]
+    }
+}
 impl<T: EmanationType, P: EmanationType> ArrayPartition<T, P> {
     pub fn index(&self, index: u32) -> ArrayPartitionDomain<T> {
         ArrayPartitionDomain {
@@ -123,6 +129,7 @@ impl<T: EmanationType, P: EmanationType> ArrayPartition<T, P> {
             partition: self.partition,
             partition_ref: self.partition_ref,
             index,
+            size: self.partition_size_host.blocking_lock()[index as usize],
         }
     }
 }
