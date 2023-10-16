@@ -1,4 +1,5 @@
 use luisa::lang::types::vector::Vec2;
+use luisa::lang::types::AtomicRef;
 use luisa::prelude::track;
 
 use crate::domain::{IndexDomain, IndexEmanation};
@@ -10,49 +11,65 @@ pub mod structure;
 impl<T: EmanationType> Emanation<T> {
     pub fn create_index(&self, length: u32) -> ArrayIndex<T> {
         ArrayIndex {
-            field: self.create_field(Some("index")),
+            field: *self.create_field("index"),
             size: length,
         }
     }
     pub fn create_index2d(&self, size: [u32; 2]) -> Array2dIndex<T> {
         Array2dIndex {
-            field: self.create_field(Some("index")),
+            field: *self.create_field("index2d"),
             size,
         }
     }
-    pub fn create_array_field<V: Value>(
-        &self,
-        device: &Device,
-        index: ArrayIndex<T>,
-        name: Option<&str>,
-        values: &[V],
-    ) -> Field<Expr<V>, T> {
-        assert_eq!(values.len(), index.size as usize);
-        let buffer = device.create_buffer_from_slice(values);
-        self.create_array_field_from_buffer(index, name, buffer)
+}
+pub trait IntoBuffer<V: Value> {
+    fn into_buffer(self, device: &Device, count: u32) -> Buffer<V>;
+}
+impl<V: Value> IntoBuffer<V> for &[V] {
+    fn into_buffer(self, device: &Device, count: u32) -> Buffer<V> {
+        debug_assert_eq!(self.len() as u32, count);
+        device.create_buffer_from_slice(self)
     }
-    pub fn create_array_field_from_buffer<V: Value>(
-        &self,
-        index: ArrayIndex<T>,
-        name: Option<&str>,
-        buffer: Buffer<V>,
-    ) -> Field<Expr<V>, T> {
-        assert_eq!(buffer.len(), index.size as usize);
-        self.create_bound_field(name, BufferAccessor { index, buffer })
+}
+impl<V: Value, F> IntoBuffer<V> for F
+where
+    F: FnMut(u32) -> V,
+{
+    fn into_buffer(mut self, device: &Device, count: u32) -> Buffer<V> {
+        device.create_buffer_from_fn(count as usize, |x| self(x as u32))
     }
-
-    pub fn create_tex2d_field<V: IoTexel>(
-        &self,
-        device: &Device,
-        storage: PixelStorage,
-        index: Array2dIndex<T>,
-        name: Option<&str>,
-    ) -> Field<Expr<V>, T> {
-        let texture = device.create_tex2d(storage, index.size[0], index.size[1], 1);
-        self.create_bound_field(name, Tex2dAccessor { index, texture })
+}
+impl<V: Value> IntoBuffer<V> for () {
+    fn into_buffer(self, device: &Device, count: u32) -> Buffer<V> {
+        device.create_buffer(count as usize)
+    }
+}
+impl<V: Value> IntoBuffer<V> for Buffer<V> {
+    fn into_buffer(self, _device: &Device, count: u32) -> Buffer<V> {
+        debug_assert_eq!(self.len(), count as usize);
+        self
     }
 }
 
+impl<V: Value, T: EmanationType> Reference<'_, Field<Expr<V>, T>> {
+    pub fn bind_array(self, index: ArrayIndex<T>, values: impl IntoBuffer<V>) -> Self {
+        let buffer = values.into_buffer(self.device(), index.size);
+        let accessor = BufferAccessor { index, buffer };
+        self.bind(accessor)
+    }
+    pub fn buffer(self) -> Option<Buffer<V>> {
+        self.accessor().and_then(|a| {
+            a.clone()
+                .as_any()
+                .downcast_ref::<BufferAccessor<V, T>>()
+                .map(|a| a.buffer.clone())
+        })
+    }
+}
+
+/// A field marking that a given [`Emanation<T>`] can be mapped to a sized one-dimensional array.
+///
+/// Also implements [`Domain`] via [`IndexDomain`], which allows [`Kernel`] calls over the array.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ArrayIndex<T: EmanationType> {
     pub field: Field<Expr<u32>, T>,
@@ -68,7 +85,7 @@ impl<T: EmanationType> Deref for ArrayIndex<T> {
 impl<T: EmanationType> IndexEmanation<Expr<u32>> for ArrayIndex<T> {
     type T = T;
     fn bind_fields(&self, idx: Expr<u32>, element: &Element<T>) {
-        element.bind(self.field, ExprAccessor::new(idx));
+        element.bind(self.field, ValueAccessor(idx));
     }
 }
 impl<T: EmanationType> IndexDomain for ArrayIndex<T> {
@@ -96,7 +113,7 @@ impl<T: EmanationType> Deref for Array2dIndex<T> {
 impl<T: EmanationType> IndexEmanation<Expr<Vec2<u32>>> for Array2dIndex<T> {
     type T = T;
     fn bind_fields(&self, idx: Expr<Vec2<u32>>, element: &Element<T>) {
-        element.bind(self.field, ExprAccessor::new(idx));
+        element.bind(self.field, ValueAccessor(idx));
     }
 }
 impl<T: EmanationType> IndexDomain for Array2dIndex<T> {
@@ -109,7 +126,7 @@ impl<T: EmanationType> IndexDomain for Array2dIndex<T> {
     }
 }
 impl<T: EmanationType> Array2dIndex<T> {
-    pub fn morton(&self, emanation: &mut Emanation<T>) -> ArrayIndex<T> {
+    pub fn morton(&self, emanation: &Emanation<T>) -> ArrayIndex<T> {
         assert_eq!(
             self.size[0], self.size[1],
             "Morton indexing only supports square arrays."
@@ -122,33 +139,28 @@ impl<T: EmanationType> Array2dIndex<T> {
             self.size[0] < 1 << 16,
             "Morton indexing only supports arrays with size < 65536."
         );
-        let name = emanation
-            .name_of(self.field)
-            .map(|x| format!("{}-morton", x))
-            .unwrap_or("index2d-morton".to_string());
+        let name = emanation.on(self.field).name() + "-morton";
+
         let field = self.field;
-        let field = emanation.create_bound_field(
-            Some(&name),
-            ExprFnAccessor::new(track!(move |el| {
-                // https://graphics.stanford.edu/%7Eseander/bithacks.html#InterleaveBMN
-                let index = el.get(field).unwrap();
-                let x = index.x.var();
+        let field = *emanation.create_field(&name).bind_fn(track!(move |el| {
+            // https://graphics.stanford.edu/%7Eseander/bithacks.html#InterleaveBMN
+            let index = el.get(field).unwrap();
+            let x = index.x.var();
 
-                *x = (x | (x << 8)) & 0x00ff00ff;
-                *x = (x | (x << 4)) & 0x0f0f0f0f; // 0b00001111
-                *x = (x | (x << 2)) & 0x33333333; // 0b00110011
-                *x = (x | (x << 1)) & 0x55555555; // 0b01010101
+            *x = (x | (x << 8)) & 0x00ff00ff;
+            *x = (x | (x << 4)) & 0x0f0f0f0f; // 0b00001111
+            *x = (x | (x << 2)) & 0x33333333; // 0b00110011
+            *x = (x | (x << 1)) & 0x55555555; // 0b01010101
 
-                let y = index.y.var();
+            let y = index.y.var();
 
-                *y = (y | (y << 8)) & 0x00ff00ff;
-                *y = (y | (y << 4)) & 0x0f0f0f0f; // 0b00001111
-                *y = (y | (y << 2)) & 0x33333333; // 0b00110011
-                *y = (y | (y << 1)) & 0x55555555; // 0b01010101
+            *y = (y | (y << 8)) & 0x00ff00ff;
+            *y = (y | (y << 4)) & 0x0f0f0f0f; // 0b00001111
+            *y = (y | (y << 2)) & 0x33333333; // 0b00110011
+            *y = (y | (y << 1)) & 0x55555555; // 0b01010101
 
-                x | (y << 1)
-            })),
-        );
+            x | (y << 1)
+        }));
         ArrayIndex {
             field,
             size: self.size[0] * self.size[0],
@@ -180,7 +192,7 @@ impl<V: Value, T: EmanationType> Accessor<T> for BufferAccessor<V, T> {
         value: &Self::V,
     ) -> Result<(), WriteError> {
         if let Some(cache) = self.get_cache(element, field) {
-            cache.store(value.clone());
+            cache.store(value);
         } else {
             self.insert_cache(element, field, value.var());
         }
@@ -196,6 +208,57 @@ impl<V: Value, T: EmanationType> Accessor<T> for BufferAccessor<V, T> {
 
     fn can_write(&self) -> bool {
         true
+    }
+}
+
+pub struct AtomicBufferAccessor<V: Value, T: EmanationType> {
+    pub index: ArrayIndex<T>,
+    pub buffer: Buffer<V>,
+}
+impl<V: Value, T: EmanationType> Accessor<T> for AtomicBufferAccessor<V, T> {
+    type V = AtomicRef<V>;
+    type C = AtomicRef<V>;
+
+    fn get(&self, element: &Element<T>, field: Field<Self::V, T>) -> Result<Self::V, ReadError> {
+        Ok(*self.get_or_insert_cache(element, field, || {
+            let index = element.get(self.index.field).unwrap();
+            self.buffer.var().atomic_ref(index)
+        }))
+    }
+    fn set(
+        &self,
+        _element: &Element<T>,
+        _field: Field<Self::V, T>,
+        _value: &Self::V,
+    ) -> Result<(), WriteError> {
+        Err(WriteError {
+            message: "Cannot write to `AtomicRef` field. Use atomic operations instead."
+                .to_string(),
+        })
+    }
+
+    fn save(&self, _element: &Element<T>, _field: Field<Self::V, T>) {
+        unreachable!();
+    }
+
+    fn can_write(&self) -> bool {
+        false
+    }
+}
+impl<'a, V: Value, T: EmanationType> Reference<'a, Field<Expr<V>, T>> {
+    /// Creates a [`Field`] that can be used to perform atomic operations on the values of this [`Field`].
+    /// Panics if this [`Field`] is not bound to a [`BufferAccessor`].
+    pub fn atomic(self) -> Reference<'a, Field<AtomicRef<V>, T>> {
+        let accessor = self.accessor().unwrap();
+
+        let accessor = accessor
+            .as_any()
+            .downcast_ref::<BufferAccessor<V, T>>()
+            .expect("Cannot create atomic reference to non-buffer field.");
+        self.emanation.create_field("").bind(AtomicBufferAccessor {
+            index: accessor.index,
+            buffer: accessor.buffer.clone(),
+        })
     }
 }
 
@@ -223,7 +286,7 @@ impl<V: IoTexel, T: EmanationType> Accessor<T> for Tex2dAccessor<V, T> {
         value: &Self::V,
     ) -> Result<(), WriteError> {
         if let Some(cache) = self.get_cache(element, field) {
-            cache.store(value.clone());
+            cache.store(value);
         } else {
             self.insert_cache(element, field, value.var());
         }

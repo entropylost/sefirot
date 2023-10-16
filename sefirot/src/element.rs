@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use parking_lot::Mutex;
+use static_assertions::assert_impl_all;
 
 use luisa_compute::runtime::{AsKernelArg, KernelArg, KernelArgEncoder, KernelBuilder};
 
@@ -16,7 +17,7 @@ pub struct KernelContext {
     pub(crate) builder: Arc<Mutex<KernelBuilder>>,
 }
 impl KernelContext {
-    pub fn bind<V: Value>(&self, access: impl Fn() -> V + 'static) -> Expr<V> {
+    pub fn bind<V: Value>(&self, access: impl Fn() -> V + Send + 'static) -> Expr<V> {
         let mut builder = self.builder.lock();
         self.context.bindings.lock().push(Box::new(move |encoder| {
             encoder.uniform(access());
@@ -29,8 +30,9 @@ pub struct Context {
     // TODO: Make this use domains.
     accessed_fields: Mutex<HashSet<RawFieldHandle>>,
     mutated_fields: Mutex<HashSet<RawFieldHandle>>,
-    bindings: Mutex<Vec<Box<dyn Fn(&mut KernelArgEncoder)>>>,
+    bindings: Mutex<Vec<Box<dyn Fn(&mut KernelArgEncoder) + Send>>>,
 }
+assert_impl_all!(Context: Send, Sync);
 impl KernelArg for Context {
     type Parameter = ();
     fn encode(&self, encoder: &mut KernelArgEncoder) {
@@ -41,6 +43,11 @@ impl KernelArg for Context {
 }
 impl AsKernelArg for Context {
     type Output = Self;
+}
+impl Default for Context {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 impl Context {
     pub fn new() -> Self {
@@ -102,6 +109,17 @@ impl<T: EmanationType> Element<T> {
         for field in unsaved_fields {
             self.get_accessor(field).save(self, field);
         }
+    }
+
+    pub fn has(&self, field: RawFieldHandle) -> bool {
+        self.overridden_accessors.lock().contains_key(&field)
+            || self
+                .emanation
+                .fields
+                .lock()
+                .get(field.0)
+                .and_then(|x| x.accessor.as_ref())
+                .is_some()
     }
 }
 impl<T: EmanationType> Drop for Element<T> {

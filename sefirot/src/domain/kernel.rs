@@ -20,22 +20,21 @@ impl<T: EmanationType, S: KernelSignature> Kernel<T, S> {
 impl<T: EmanationType> Emanation<T> {
     pub fn build_kernel<F: KernelSignature>(
         &self,
-        device: &Device,
-        domain: Box<dyn Domain<T = T>>,
+        domain: impl IntoBoxedDomain<T = T>,
         f: F::Function<'_, T>,
     ) -> Kernel<T, F> {
-        self.build_kernel_with_options(device, Default::default(), domain, f)
+        self.build_kernel_with_options(Default::default(), domain, f)
     }
 
     pub fn build_kernel_with_options<F: KernelSignature>(
         &self,
-        device: &Device,
         options: KernelBuildOptions,
-        domain: Box<dyn Domain<T = T>>,
+        domain: impl IntoBoxedDomain<T = T>,
         f: F::Function<'_, T>,
     ) -> Kernel<T, F> {
+        let domain = domain.into_boxed_domain();
         let context = Arc::new(Context::new());
-        let mut builder = KernelBuilder::new(Some(device.clone()), true);
+        let mut builder = KernelBuilder::new(Some(self.device.clone()), true);
         let kernel = builder.build_kernel(|builder| {
             take_mut::take(builder, |builder| {
                 let context = KernelContext {
@@ -44,14 +43,14 @@ impl<T: EmanationType> Emanation<T> {
                 };
                 let builder = context.builder.clone();
 
-                let mut element = Element {
+                let element = Element {
                     emanation: self.clone(),
                     overridden_accessors: Mutex::new(HashMap::new()),
                     context,
                     cache: Mutex::new(HashMap::new()),
                     unsaved_fields: Mutex::new(HashSet::new()),
                 };
-                domain.before_record(&mut element);
+                domain.before_record(&element);
                 f.execute(element);
                 Arc::into_inner(builder).unwrap().into_inner()
             });
@@ -59,7 +58,9 @@ impl<T: EmanationType> Emanation<T> {
         let name = pretty_type_name::<F>();
         Kernel {
             domain,
-            raw: device.compile_kernel_def_with_options(&kernel, options),
+            raw: self
+                .device
+                .compile_kernel_def_with_options(&kernel, options),
             context,
             debug_name: Some(name),
         }
@@ -101,6 +102,7 @@ macro_rules! impl_kernel {
         impl<T: EmanationType, $T0: KernelArg + 'static $(, $Tn: KernelArg + 'static)*> Kernel<T, fn($T0 $(, $Tn)*)> {
             #[allow(non_snake_case)]
             #[allow(unused_variables)]
+            #[allow(clippy::too_many_arguments)]
             pub fn dispatch_blocking<$S0: AsKernelArg<Output = $T0> $(, $Sn: AsKernelArg<Output = $Tn>)*>(&self, $S0: &$S0 $(, $Sn: &$Sn)*) {
                 let args = DispatchArgs {
                     context: self.context.clone(),
@@ -114,6 +116,7 @@ macro_rules! impl_kernel {
             }
             #[allow(non_snake_case)]
             #[allow(unused_variables)]
+            #[allow(clippy::too_many_arguments)]
             pub fn dispatch<'a: 'b, 'b, $S0: AsKernelArg<Output = $T0> $(, $Sn: AsKernelArg<Output = $Tn>)*>
                 (&'b self, $S0: &'b $S0 $(, $Sn: &'b $Sn)*) -> impl AddToComputeGraph<'a> + 'b {
                 let context = self.context.clone();

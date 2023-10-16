@@ -2,22 +2,30 @@ use std::any::{Any, TypeId};
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
+use std::sync::Arc;
 
 use parking_lot::{MappedMutexGuard, MutexGuard};
 use pretty_type_name::pretty_type_name;
 
-use crate::emanation::RawFieldHandle;
+use crate::emanation::{CanReference, RawFieldHandle, Reference};
 use crate::prelude::*;
 
 pub mod array;
 pub mod constant;
 pub mod map;
+#[cfg(feature = "partition")]
+pub mod partition;
 
 pub struct FieldAccess<'a, V: Any, T: EmanationType> {
     el: &'a Element<T>,
     field: Field<V, T>,
     value: V,
     changed: bool,
+}
+impl<V: Any, T: EmanationType> FieldAccess<'_, V, T> {
+    pub fn exists(&self) -> bool {
+        self.el.has(self.field.raw)
+    }
 }
 impl<V: Any, T: EmanationType> Deref for FieldAccess<'_, V, T> {
     type Target = V;
@@ -39,6 +47,7 @@ impl<V: Any, T: EmanationType> Drop for FieldAccess<'_, V, T> {
     }
 }
 
+/// A single property of an [`Emanation`]. Note that by default, a `Field`
 #[cfg_attr(
     feature = "bevy",
     derive(bevy_ecs::prelude::Resource, bevy_ecs::prelude::Component)
@@ -64,11 +73,7 @@ impl<V: Any, T: EmanationType> PartialEq for Field<V, T> {
 impl<V: Any, T: EmanationType> Eq for Field<V, T> {}
 impl<V: Any, T: EmanationType> Clone for Field<V, T> {
     fn clone(&self) -> Self {
-        Self {
-            raw: self.raw,
-            emanation_id: self.emanation_id,
-            _marker: PhantomData,
-        }
+        *self
     }
 }
 impl<V: Any, T: EmanationType> Copy for Field<V, T> {}
@@ -91,6 +96,86 @@ impl<V: Any, T: EmanationType> Field<V, T> {
         }
     }
 }
+impl<V: Any, T: EmanationType> CanReference for Field<V, T> {
+    type T = T;
+}
+impl<'a, V: Any, T: EmanationType> Reference<'a, Field<V, T>> {
+    /// Binds an accessor to a [`Field`], potentially allowing read and write access to it.
+    pub fn bind(self, accessor: impl Accessor<T, V = V>) -> Self {
+        let a = &mut self.emanation.fields.lock()[self.value.raw.0].accessor;
+        if a.is_some() {
+            panic!("Cannot bind accessor to already-bound field. If this is intentional, use `bind_override` instead.");
+        }
+        *a = Some(Arc::new(accessor));
+        self
+    }
+    pub fn try_bind(self, accessor: impl Accessor<T, V = V>) -> Result<Self, Self> {
+        if self.emanation.fields.lock()[self.value.raw.0]
+            .accessor
+            .is_some()
+        {
+            Err(self)
+        } else {
+            self.bind(accessor);
+            Ok(self)
+        }
+    }
+    pub fn bind_override(self, accessor: impl Accessor<T, V = V>) -> Self {
+        self.emanation.fields.lock()[self.value.raw.0].accessor = Some(Arc::new(accessor));
+        self
+    }
+    /// Binds an accessor to this field, returning the accessor. Equivalent to `.bind(accessor).accessor().unwrap()`.
+    pub fn bind_accessor(self, accessor: impl Accessor<T, V = V>) -> Arc<dyn DynAccessor<T>> {
+        let accessor = Arc::new(accessor);
+        self.emanation.fields.lock()[self.value.raw.0].accessor = Some(accessor.clone());
+        accessor
+    }
+    pub fn accessor(self) -> Option<Arc<dyn DynAccessor<T>>> {
+        self.emanation.fields.lock()[self.value.raw.0]
+            .accessor
+            .clone()
+    }
+    pub fn exists(self) -> bool {
+        self.emanation.fields.lock()[self.value.raw.0]
+            .accessor
+            .is_some()
+    }
+    pub fn can_write(self) -> bool {
+        self.accessor().map(|x| x.can_write()).unwrap_or(false)
+    }
+    pub fn name(self) -> String {
+        self.emanation.fields.lock()[self.value.raw.0].name.clone()
+    }
+
+    pub fn bind_fn(self, f: impl Fn(&Element<T>) -> V + 'static) -> Self
+    where
+        V: Clone,
+    {
+        self.bind(FnAccessor::new(f))
+    }
+    pub fn bind_value(self, v: V) -> Self
+    where
+        V: Clone,
+    {
+        self.bind(ValueAccessor(v))
+    }
+
+    pub fn map<W: Clone + Any>(
+        self,
+        f: impl Fn(V, &Element<T>) -> W + 'static,
+    ) -> Reference<'a, Field<W, T>> {
+        self.emanation
+            .create_field(&format!(
+                "{} mapped {} -> {}",
+                self.name(),
+                pretty_type_name::<V>(),
+                pretty_type_name::<W>()
+            ))
+            .bind(FnAccessor::new(move |el| {
+                f(el.get(self.value).unwrap(), el)
+            }))
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReadError {
@@ -102,7 +187,7 @@ pub struct WriteError {
     message: String,
 }
 
-pub trait DynAccessor<T: EmanationType> {
+pub trait DynAccessor<T: EmanationType>: Any {
     fn get(&self, element: &Element<T>, field: RawFieldHandle) -> Result<Box<dyn Any>, ReadError>;
     fn set(
         &self,
@@ -116,6 +201,7 @@ pub trait DynAccessor<T: EmanationType> {
     fn value_type_name(&self) -> String;
     fn self_type(&self) -> TypeId;
     fn self_type_name(&self) -> String;
+    fn as_any(&self) -> &dyn Any;
 }
 impl<X, T: EmanationType> DynAccessor<T> for X
 where
@@ -154,6 +240,9 @@ where
     }
     fn self_type_name(&self) -> String {
         pretty_type_name::<X>()
+    }
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -200,14 +289,9 @@ pub trait Accessor<T: EmanationType>: 'static {
     fn can_write(&self) -> bool;
 }
 
-pub struct ExprAccessor<V: Value>(Expr<V>);
-impl<V: Value> ExprAccessor<V> {
-    pub fn new(expr: Expr<V>) -> Self {
-        Self(expr)
-    }
-}
-impl<V: Value, T: EmanationType> Accessor<T> for ExprAccessor<V> {
-    type V = Expr<V>;
+pub struct ValueAccessor<V: Clone + Any>(pub V);
+impl<V: Clone + Any, T: EmanationType> Accessor<T> for ValueAccessor<V> {
+    type V = V;
     type C = ();
     fn get(&self, _element: &Element<T>, _field: Field<Self::V, T>) -> Result<Self::V, ReadError> {
         Ok(self.0.clone())
@@ -219,20 +303,22 @@ impl<V: Value, T: EmanationType> Accessor<T> for ExprAccessor<V> {
         _value: &Self::V,
     ) -> Result<(), WriteError> {
         Err(WriteError {
-            message: "Cannot write to `ExprAccessor`".to_string(),
+            message: "Cannot write to `ValueAccessor` field".to_string(),
         })
     }
-    fn save(&self, _element: &Element<T>, _field: Field<Self::V, T>) {}
+    fn save(&self, _element: &Element<T>, _field: Field<Self::V, T>) {
+        unreachable!();
+    }
     fn can_write(&self) -> bool {
         false
     }
 }
 
-pub struct ExprFnAccessor<V: Value, F: Fn(&Element<T>) -> Expr<V> + 'static, T: EmanationType> {
+pub struct FnAccessor<V: Clone + Any, F: Fn(&Element<T>) -> V + 'static, T: EmanationType> {
     f: F,
     _marker: PhantomData<(V, T)>,
 }
-impl<V: Value, F: Fn(&Element<T>) -> Expr<V> + 'static, T: EmanationType> ExprFnAccessor<V, F, T> {
+impl<V: Clone + Any, F: Fn(&Element<T>) -> V + 'static, T: EmanationType> FnAccessor<V, F, T> {
     pub fn new(f: F) -> Self {
         Self {
             f,
@@ -240,11 +326,11 @@ impl<V: Value, F: Fn(&Element<T>) -> Expr<V> + 'static, T: EmanationType> ExprFn
         }
     }
 }
-impl<V: Value, F: Fn(&Element<T>) -> Expr<V> + 'static, T: EmanationType> Accessor<T>
-    for ExprFnAccessor<V, F, T>
+impl<V: Clone + Any, F: Fn(&Element<T>) -> V + 'static, T: EmanationType> Accessor<T>
+    for FnAccessor<V, F, T>
 {
-    type V = Expr<V>;
-    type C = Expr<V>;
+    type V = V;
+    type C = V;
     fn get(&self, element: &Element<T>, field: Field<Self::V, T>) -> Result<Self::V, ReadError> {
         Ok(self
             .get_or_insert_cache(element, field, || (self.f)(element))
@@ -257,10 +343,12 @@ impl<V: Value, F: Fn(&Element<T>) -> Expr<V> + 'static, T: EmanationType> Access
         _value: &Self::V,
     ) -> Result<(), WriteError> {
         Err(WriteError {
-            message: "Cannot write to `ExprFnAccessor`".to_string(),
+            message: "Cannot write to `FnAccessor` field".to_string(),
         })
     }
-    fn save(&self, _element: &Element<T>, _field: Field<Self::V, T>) {}
+    fn save(&self, _element: &Element<T>, _field: Field<Self::V, T>) {
+        unreachable!();
+    }
     fn can_write(&self) -> bool {
         false
     }

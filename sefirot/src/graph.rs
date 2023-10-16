@@ -1,5 +1,6 @@
 use std::any::Any;
 use std::collections::{HashMap, HashSet};
+use std::ops::Deref;
 use std::sync::Arc;
 
 use generational_arena::{Arena, Index};
@@ -45,9 +46,9 @@ impl<'a> NodeData<'a> {
             debug_name: name.map(|s| s.to_string()),
         })
     }
-    pub fn container<'b>(nodes: impl IntoIterator<Item = &'b NodeHandle>) -> Self {
+    pub fn container() -> Self {
         Self::Container(ContainerNode {
-            nodes: nodes.into_iter().copied().collect(),
+            nodes: HashSet::new(),
         })
     }
     pub fn fence_ref(&self) -> Option<&FenceNode> {
@@ -97,11 +98,12 @@ impl<'a> NodeData<'a> {
 pub struct ComputeGraph<'a> {
     nodes: Arena<Node<'a>>,
     root: NodeHandle,
+    device: Device,
     // Resources to be released after the graph is executed.
     release: Vec<Box<dyn Any + Send>>,
 }
 impl<'a> ComputeGraph<'a> {
-    pub fn new() -> Self {
+    pub fn new(device: &Device) -> Self {
         let mut nodes = Arena::new();
         let root = NodeHandle(nodes.insert(Node {
             incoming: HashSet::new(),
@@ -114,6 +116,7 @@ impl<'a> ComputeGraph<'a> {
         Self {
             nodes,
             root,
+            device: device.clone(),
             release: Vec::new(),
         }
     }
@@ -143,8 +146,8 @@ impl<'a> ComputeGraph<'a> {
             let container = self.remove(handle).unwrap();
             let parent = container.parent.unwrap();
             let nodes = &container.data.container_ref().unwrap().nodes;
-            let start = self.add(NodeData::fence()).id();
-            let end = self.add(NodeData::fence()).id();
+            let start = *self.add(NodeData::fence());
+            let end = *self.add(NodeData::fence());
             self.on(start)
                 .before(end)
                 .before_all(nodes)
@@ -222,7 +225,8 @@ impl<'a> ComputeGraph<'a> {
         }
     }
 
-    pub fn execute(mut self, device: &Device) {
+    // TODO: This currently does not parallelize anything.
+    pub fn execute(mut self) {
         self.reduce_containers();
         assert_eq!(
             self.nodes.len() - 1,
@@ -248,7 +252,7 @@ impl<'a> ComputeGraph<'a> {
                 NodeData::Fence(_) => {}
             }
         }
-        let scope = device.default_stream().scope();
+        let scope = self.device.default_stream().scope();
         scope.submit_with_callback(commands, || {
             drop(self.release);
         });
@@ -260,8 +264,17 @@ impl<'a> ComputeGraph<'a> {
         node.parent(root);
         node
     }
+    pub fn fence<'b>(&'b mut self) -> NodeRef<'b, 'a> {
+        self.add(NodeData::fence())
+    }
+    pub fn container<'b>(&'b mut self) -> NodeRef<'b, 'a> {
+        self.add(NodeData::container())
+    }
     pub fn root(&self) -> NodeHandle {
         self.root
+    }
+    pub fn device(&self) -> &Device {
+        &self.device
     }
     pub fn remove(&mut self, handle: NodeHandle) -> Option<Node<'a>> {
         if let Some(node) = self.nodes.remove(handle.0) {
@@ -296,10 +309,13 @@ pub struct NodeRef<'b, 'a: 'b> {
     handle: NodeHandle,
     graph: &'b mut ComputeGraph<'a>,
 }
-impl NodeRef<'_, '_> {
-    pub fn id(&self) -> NodeHandle {
-        self.handle
+impl Deref for NodeRef<'_, '_> {
+    type Target = NodeHandle;
+    fn deref(&self) -> &Self::Target {
+        &self.handle
     }
+}
+impl NodeRef<'_, '_> {
     pub fn before(&mut self, node: NodeHandle) -> &mut Self {
         self.graph.nodes[self.handle.0].outgoing.insert(node);
         self.graph.nodes[node.0].incoming.insert(self.handle);
@@ -335,6 +351,20 @@ impl NodeRef<'_, '_> {
     pub fn children<'a>(&mut self, nodes: impl IntoIterator<Item = &'a NodeHandle>) -> &mut Self {
         for node in nodes {
             self.child(*node);
+        }
+        self
+    }
+    pub fn children_ordered<'a>(
+        &mut self,
+        nodes: impl IntoIterator<Item = &'a NodeHandle>,
+    ) -> &mut Self {
+        let mut last_node = None;
+        for node in nodes {
+            if let Some(last_node) = last_node {
+                self.graph.on(*node).after(last_node);
+            }
+            self.child(*node);
+            last_node = Some(*node);
         }
         self
     }
@@ -393,14 +423,13 @@ pub struct CopyFromBuffer<'c, T: Value> {
 }
 #[cfg(feature = "copy-from")]
 impl<'c, T: Value> CopyFromBuffer<'c, T> {
-    pub fn new(src: &'c Buffer<T>) -> (Self, Arc<tokio::sync::Mutex<Vec<T>>>) {
+    pub fn new(src: &'c Buffer<T>, dst: Arc<tokio::sync::Mutex<Vec<T>>>) -> Self {
         let src = src.view(..);
-        Self::new_view(src)
+        Self::new_view(src, dst)
     }
-    pub fn new_view(src: BufferView<'c, T>) -> (Self, Arc<tokio::sync::Mutex<Vec<T>>>) {
-        let dst = Arc::new(tokio::sync::Mutex::new(Vec::with_capacity(src.len())));
+    pub fn new_view(src: BufferView<'c, T>, dst: Arc<tokio::sync::Mutex<Vec<T>>>) -> Self {
         let guard = dst.clone().blocking_lock_owned();
-        (Self { src, guard }, dst)
+        Self { src, guard }
     }
 }
 #[cfg(feature = "copy-from")]

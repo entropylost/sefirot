@@ -27,7 +27,9 @@ impl<T: EmanationType, S: EmanationType> Accessor<T> for IndexMapAccessor<T, S> 
         })
     }
 
-    fn save(&self, _element: &Element<T>, _field: Field<Self::V, T>) {}
+    fn save(&self, _element: &Element<T>, _field: Field<Self::V, T>) {
+        unreachable!();
+    }
 
     fn can_write(&self) -> bool {
         false
@@ -46,13 +48,12 @@ impl<T: EmanationType> Emanation<T> {
             index,
             emanation: other.clone(),
         };
-        self.create_bound_field(
-            Some(&format!(
+        *self
+            .create_field(&format!(
                 "Mapping {} -> {}",
                 pretty_type_name::<T>(),
                 pretty_type_name::<S>()
-            )),
-            accessor,
-        )
+            ))
+            .bind(accessor)
     }
 }

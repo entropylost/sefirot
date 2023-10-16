@@ -7,73 +7,68 @@ use super::*;
 impl<T: EmanationType> Emanation<T> {
     pub fn create_soa_fields<S: Structure>(
         &self,
-        device: &Device,
         index: ArrayIndex<T>,
-        prefix: Option<&str>,
+        prefix: &str,
         values: &[S],
     ) -> S::Map<Field<Expr<__>, T>> {
         assert_eq!(values.len(), index.size as usize);
         S::apply(CreateArrayField {
             emanation: self,
-            device,
             index,
-            prefix: prefix.map(|prefix| prefix.to_string()),
+            prefix: prefix.to_string(),
             values,
         })
     }
     pub fn create_soa_fields_from_fn<S: Structure>(
         &self,
-        device: &Device,
         index: ArrayIndex<T>,
-        prefix: Option<&str>,
+        prefix: &str,
         f: impl Fn(u32) -> S,
     ) -> S::Map<Field<Expr<__>, T>> {
         let values = (0..index.size).map(f).collect::<Vec<_>>();
         S::apply(CreateArrayField {
             emanation: self,
-            device,
             index,
-            prefix: prefix.map(|prefix| prefix.to_string()),
+            prefix: prefix.to_string(),
             values: &values,
         })
     }
     pub fn create_aos_fields<S: Structure>(
         &self,
-        device: &Device,
         index: ArrayIndex<T>,
-        prefix: Option<&str>,
+        prefix: &str,
         values: &[S],
     ) -> S::Map<Field<Expr<__>, T>> {
         assert_eq!(values.len(), index.size as usize);
-        let buffer = device.create_buffer_from_slice(values);
+        let buffer = self.device.create_buffer_from_slice(values);
         self.create_aos_fields_with_struct_field(index, prefix, buffer)
             .1
     }
     pub fn create_aos_fields_from_fn<S: Structure>(
         &self,
-        device: &Device,
         index: ArrayIndex<T>,
-        prefix: Option<&str>,
+        prefix: &str,
         f: impl Fn(u32) -> S,
     ) -> S::Map<Field<Expr<__>, T>> {
-        let buffer = device.create_buffer_from_fn(index.size as usize, |i| f(i as u32));
+        let buffer = self
+            .device
+            .create_buffer_from_fn(index.size as usize, |i| f(i as u32));
         self.create_aos_fields_with_struct_field(index, prefix, buffer)
             .1
     }
     pub fn create_aos_fields_with_struct_field<S: Structure>(
         &self,
         index: ArrayIndex<T>,
-        prefix: Option<&str>,
+        prefix: &str,
         buffer: Buffer<S>,
     ) -> (Field<Expr<S>, T>, S::Map<Field<Expr<__>, T>>) {
-        let prefix = prefix.map(|prefix| prefix.to_string());
-        let struct_field =
-            self.create_field(prefix.clone().map(|prefix| prefix + "struct").as_deref());
-        let struct_accessor = BufferAccessor {
-            index: index.clone(),
-            buffer,
-        };
-        let struct_accessor = Arc::downgrade(&self.bind(struct_field, struct_accessor));
+        let prefix = prefix.to_string();
+        let struct_field = *self.create_field(&(prefix.clone() + "struct"));
+        let struct_accessor = Arc::downgrade(
+            &self
+                .on(struct_field)
+                .bind_accessor(BufferAccessor { index, buffer }),
+        );
 
         let fields = S::apply(CreateStructArrayField {
             emanation: self,
@@ -87,49 +82,43 @@ impl<T: EmanationType> Emanation<T> {
 
 struct CreateArrayField<'a, S: Structure, T: EmanationType> {
     emanation: &'a Emanation<T>,
-    device: &'a Device,
     index: ArrayIndex<T>,
-    prefix: Option<String>,
+    prefix: String,
     values: &'a [S],
 }
 impl<S: Structure, T: EmanationType> ValueMapping<S> for CreateArrayField<'_, S, T> {
     type M = Field<Expr<__>, T>;
     fn map<Z: Selector<S>>(&mut self, name: &'static str) -> Field<Expr<Z::Result>, T> {
-        let field_name = self
-            .prefix
-            .as_ref()
-            .map(|prefix| prefix.clone() + name)
-            .unwrap_or(name.to_string());
-        let buffer = self.device.create_buffer_from_fn(self.values.len(), |i| {
-            Z::select_ref(&self.values[i]).clone()
-        });
-        self.emanation
-            .create_array_field_from_buffer(self.index, Some(&field_name), buffer)
+        let field_name = self.prefix.clone() + name;
+        let buffer = self
+            .emanation
+            .device
+            .create_buffer_from_fn(self.values.len(), |i| *Z::select_ref(&self.values[i]));
+        *self
+            .emanation
+            .create_field(&field_name)
+            .bind_array(self.index, buffer)
     }
 }
 
 struct CreateStructArrayField<'a, S: Structure, T: EmanationType> {
     emanation: &'a Emanation<T>,
-    prefix: Option<String>,
+    prefix: String,
     struct_field: Field<Expr<S>, T>,
     struct_accessor: Weak<dyn DynAccessor<T>>,
 }
 impl<S: Structure, T: EmanationType> ValueMapping<S> for CreateStructArrayField<'_, S, T> {
     type M = Field<Expr<__>, T>;
     fn map<Z: Selector<S>>(&mut self, name: &'static str) -> Field<Expr<Z::Result>, T> {
-        let field_name = self
-            .prefix
-            .as_ref()
-            .map(|prefix| prefix.clone() + name)
-            .unwrap_or(name.to_string());
-        let field = self.emanation.create_field(Some(&field_name));
-        let accessor = StructArrayAccessor {
-            struct_field: self.struct_field,
-            struct_accessor: self.struct_accessor.clone(),
-            _marker: PhantomData::<Z>,
-        };
-        self.emanation.bind(field, accessor);
-        field
+        let field_name = self.prefix.clone() + name;
+        *self
+            .emanation
+            .create_field(&field_name)
+            .bind(StructArrayAccessor {
+                struct_field: self.struct_field,
+                struct_accessor: self.struct_accessor.clone(),
+                _marker: PhantomData::<Z>,
+            })
     }
 }
 
@@ -213,7 +202,7 @@ impl<Z: Selector<S>, S: Structure, T: EmanationType> Accessor<T> for StructArray
             let structure = structure
                 .downcast_mut::<<BufferAccessor<S, T> as Accessor<T>>::C>()
                 .unwrap();
-            Z::select_var(&structure).store(value);
+            Z::select_var(structure).store(value);
         } else {
             let _ = DynAccessor::get(&*struct_accessor, element, self.struct_field.raw);
             let mut cache = element.cache.lock();
@@ -223,7 +212,7 @@ impl<Z: Selector<S>, S: Structure, T: EmanationType> Accessor<T> for StructArray
                 .downcast_mut::<<BufferAccessor<S, T> as Accessor<T>>::C>()
                 .unwrap();
 
-            Z::select_var(&structure).store(value);
+            Z::select_var(structure).store(value);
         }
         Ok(())
     }

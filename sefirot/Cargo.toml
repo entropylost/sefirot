@@ -9,6 +9,7 @@ parking_lot = "0.12.1"
 petgraph = "0.6.4"
 pretty-type-name = "1.0.1"
 sefirot_macro = { path = "../sefirot_macro" }
+static_assertions = "1.1.0"
 take_mut = "0.2.2"
 
 [dependencies.luisa_compute]
@@ -32,3 +33,4 @@ optional = true
 [features]
 bevy = ["dep:bevy_ecs", "sefirot_macro/bevy"]
 copy-from = ["dep:tokio"]
+partition = ["copy-from"]

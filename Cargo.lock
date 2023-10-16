@@ -1059,9 +1059,9 @@ checksum = "0ce7134b9999ecaf8bcd65542e436736ef32ddca1b3e06094cb6ec5755203b80"
 
 [[package]]
 name = "flate2"
-version = "1.0.27"
+version = "1.0.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6c98ee8095e9d1dcbf2fcc6d95acccb90d1c81db1e44725c6a984b1dbdfb010"
+checksum = "46303f565772937ffe1d394a4fac6f411c6013172fadde9dcdb1e147a086940e"
 dependencies = [
  "crc32fast",
  "miniz_oxide",
@@ -1352,7 +1352,7 @@ checksum = "b5e6163cb8c49088c2c36f57875e58ccd8c87c7427f7fbd50ea6710b2f3f2e8f"
 [[package]]
 name = "luisa_compute"
 version = "0.1.1-alpha.1"
-source = "git+https://github.com/iMplode-nZ/luisa-compute-rs?branch=main#31158ce1c237ca4b0dd119fbc930a6c651e414b2"
+source = "git+https://github.com/iMplode-nZ/luisa-compute-rs?branch=main#44ada040f5c45e567be1baa88b740b77232ca3e5"
 dependencies = [
  "base64ct",
  "bumpalo",
@@ -1382,7 +1382,7 @@ dependencies = [
 [[package]]
 name = "luisa_compute_api_types"
 version = "0.1.1-alpha.1"
-source = "git+https://github.com/iMplode-nZ/luisa-compute-rs?branch=main#31158ce1c237ca4b0dd119fbc930a6c651e414b2"
+source = "git+https://github.com/iMplode-nZ/luisa-compute-rs?branch=main#44ada040f5c45e567be1baa88b740b77232ca3e5"
 dependencies = [
  "bitflags 2.4.0",
  "cbindgen",
@@ -1392,7 +1392,7 @@ dependencies = [
 [[package]]
 name = "luisa_compute_backend"
 version = "0.1.1-alpha.1"
-source = "git+https://github.com/iMplode-nZ/luisa-compute-rs?branch=main#31158ce1c237ca4b0dd119fbc930a6c651e414b2"
+source = "git+https://github.com/iMplode-nZ/luisa-compute-rs?branch=main#44ada040f5c45e567be1baa88b740b77232ca3e5"
 dependencies = [
  "lazy_static",
  "libc",
@@ -1408,7 +1408,7 @@ dependencies = [
 [[package]]
 name = "luisa_compute_derive"
 version = "0.1.1-alpha.1"
-source = "git+https://github.com/iMplode-nZ/luisa-compute-rs?branch=main#31158ce1c237ca4b0dd119fbc930a6c651e414b2"
+source = "git+https://github.com/iMplode-nZ/luisa-compute-rs?branch=main#44ada040f5c45e567be1baa88b740b77232ca3e5"
 dependencies = [
  "luisa_compute_derive_impl",
  "syn 2.0.38",
@@ -1417,7 +1417,7 @@ dependencies = [
 [[package]]
 name = "luisa_compute_derive_impl"
 version = "0.1.1-alpha.1"
-source = "git+https://github.com/iMplode-nZ/luisa-compute-rs?branch=main#31158ce1c237ca4b0dd119fbc930a6c651e414b2"
+source = "git+https://github.com/iMplode-nZ/luisa-compute-rs?branch=main#44ada040f5c45e567be1baa88b740b77232ca3e5"
 dependencies = [
  "prettyplease",
  "proc-macro2",
@@ -1428,7 +1428,7 @@ dependencies = [
 [[package]]
 name = "luisa_compute_ir"
 version = "0.1.1-alpha.1"
-source = "git+https://github.com/iMplode-nZ/luisa-compute-rs?branch=main#31158ce1c237ca4b0dd119fbc930a6c651e414b2"
+source = "git+https://github.com/iMplode-nZ/luisa-compute-rs?branch=main#44ada040f5c45e567be1baa88b740b77232ca3e5"
 dependencies = [
  "base64ct",
  "bincode",
@@ -1450,7 +1450,7 @@ dependencies = [
 [[package]]
 name = "luisa_compute_sys"
 version = "0.1.1-alpha.1"
-source = "git+https://github.com/iMplode-nZ/luisa-compute-rs?branch=main#31158ce1c237ca4b0dd119fbc930a6c651e414b2"
+source = "git+https://github.com/iMplode-nZ/luisa-compute-rs?branch=main#44ada040f5c45e567be1baa88b740b77232ca3e5"
 dependencies = [
  "cmake",
  "lazy_static",
@@ -1464,7 +1464,7 @@ dependencies = [
 [[package]]
 name = "luisa_compute_track"
 version = "0.1.1-alpha.1"
-source = "git+https://github.com/iMplode-nZ/luisa-compute-rs?branch=main#31158ce1c237ca4b0dd119fbc930a6c651e414b2"
+source = "git+https://github.com/iMplode-nZ/luisa-compute-rs?branch=main#44ada040f5c45e567be1baa88b740b77232ca3e5"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",
@@ -1972,7 +1972,7 @@ dependencies = [
  "aho-corasick",
  "memchr",
  "regex-automata 0.4.1",
- "regex-syntax 0.8.0",
+ "regex-syntax 0.8.1",
 ]
 
 [[package]]
@@ -1992,7 +1992,7 @@ checksum = "465c6fc0621e4abc4187a2bda0937bfd4f722c2730b29562e19689ea796c9a4b"
 dependencies = [
  "aho-corasick",
  "memchr",
- "regex-syntax 0.8.0",
+ "regex-syntax 0.8.1",
 ]
 
 [[package]]
@@ -2003,9 +2003,9 @@ checksum = "f162c6dd7b008981e4d40210aca20b4bd0f9b60ca9271061b07f78537722f2e1"
 
 [[package]]
 name = "regex-syntax"
-version = "0.8.0"
+version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3cbb081b9784b07cceb8824c8583f86db4814d172ab043f3c23f7dc600bf83d"
+checksum = "56d84fdd47036b038fc80dd333d10b6aab10d5d31f4a366e20014def75328d33"
 
 [[package]]
 name = "rustc-demangle"
@@ -2021,9 +2021,9 @@ checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
 
 [[package]]
 name = "rustix"
-version = "0.38.18"
+version = "0.38.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a74ee2d7c2581cd139b42447d7d9389b889bdaad3a73f1ebb16f2a3237bb19c"
+checksum = "745ecfa778e66b2b63c88a61cb36e0eea109e803b0b86bf9879fbc77c70e86ed"
 dependencies = [
  "bitflags 2.4.0",
  "errno",
@@ -2075,6 +2075,7 @@ dependencies = [
  "pretty-type-name",
  "rand",
  "sefirot_macro",
+ "static_assertions",
  "take_mut",
  "tokio",
  "winit",
@@ -2092,18 +2093,18 @@ dependencies = [
 
 [[package]]
 name = "serde"
-version = "1.0.188"
+version = "1.0.189"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf9e0fcba69a370eed61bcf2b728575f726b50b55cba78064753d708ddc7549e"
+checksum = "8e422a44e74ad4001bdc8eede9a4570ab52f71190e9c076d14369f38b9200537"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.188"
+version = "1.0.189"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4eca7ac642d82aa35b60049a6eccb4be6be75e599bd2e9adb5f875a737654af2"
+checksum = "1e48d1f918009ce3145511378cf68d613e3b3d9137d67272562080d68a2b32d5"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2201,6 +2202,12 @@ checksum = "74212e6bbe9a4352329b2f68ba3130c15a3f26fe88ff22dbdc6cdd58fa85e99c"
 dependencies = [
  "serde",
 ]
+
+[[package]]
+name = "static_assertions"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "strict-num"

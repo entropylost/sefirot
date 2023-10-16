@@ -42,7 +42,7 @@ fn main() {
     );
     let display = device.create_tex2d::<Vec4<f32>>(swapchain.pixel_storage(), SIZE, SIZE, 1);
 
-    let particles = Emanation::<Particles>::new();
+    let particles = Emanation::<Particles>::new(&device);
     let mut particle_data = Vec::<Particle>::new();
     for i in 0..100 {
         for j in 0..100 {
@@ -54,11 +54,11 @@ fn main() {
     }
     let index = particles.create_index(particle_data.len() as u32);
     let ParticleMapped { position, velocity } =
-        particles.create_aos_fields(&device, index, Some("particle-"), &particle_data);
+        particles.create_aos_fields(&device, index, "particle-", &particle_data);
 
     let update_kernel = particles.build_kernel::<fn(f32)>(
         &device,
-        Box::new(index),
+        index,
         track!(&|el, dt| {
             position[el] += velocity[el] * dt;
             if (position[el] >= 0.0).all() && (position[el] < SIZE as f32).all() {
@@ -87,7 +87,7 @@ fn main() {
                     .scope()
                     .present(&swapchain, &display);
                 let mut graph = ComputeGraph::new();
-                let clear = graph.add(clear_kernel.dispatch_async([SIZE, SIZE, 1])).id();
+                let clear = *graph.add(clear_kernel.dispatch_async([SIZE, SIZE, 1]));
                 graph.add(update_kernel.dispatch(&1.0)).after(clear);
                 graph.execute(&device);
                 window.request_redraw();

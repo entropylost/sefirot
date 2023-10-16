@@ -1,3 +1,5 @@
+#![allow(clippy::type_complexity)]
+
 pub mod domain;
 pub mod element;
 pub mod emanation;
