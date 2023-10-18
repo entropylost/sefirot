@@ -2,77 +2,10 @@ use crate::domain::{IndexDomain, IndexEmanation};
 use crate::graph::{AddToComputeGraph, ComputeGraph, CopyFromBuffer};
 
 use super::array::ArrayIndex;
+use super::slice::Slice;
 use super::*;
 use luisa::lang::types::AtomicRef;
-use luisa::prelude::tracked;
 use tokio::sync::Mutex;
-
-#[derive(Clone)]
-pub struct BufferSlice<V: Value> {
-    pub buffer: Buffer<V>,
-    pub offset: Expr<u32>,
-    pub size: Expr<u32>,
-    pub check_bounds: bool,
-}
-impl<V: Value> BufferSlice<V> {
-    #[tracked]
-    pub fn read(&self, index: Expr<u32>) -> Expr<V> {
-        if self.check_bounds {
-            let i = index < self.size;
-            lc_assert!(i);
-        }
-        self.buffer.read(index + self.offset)
-    }
-    #[tracked]
-    pub fn write(&self, index: Expr<u32>, value: Expr<V>) {
-        if self.check_bounds {
-            let i = index < self.size;
-            lc_assert!(i);
-        }
-        self.buffer.write(index + self.offset, value)
-    }
-}
-
-pub struct BufferSlicesAccessor<V: Value, T: EmanationType> {
-    pub index: ArrayIndex<T>,
-    pub buffer: Buffer<V>,
-    pub slice_size: u32,
-    pub check_bounds: bool,
-}
-impl<V: Value, T: EmanationType> Accessor<T> for BufferSlicesAccessor<V, T> {
-    type V = BufferSlice<V>;
-    type C = BufferSlice<V>;
-
-    #[tracked]
-    fn get(&self, element: &Element<T>, field: Field<Self::V, T>) -> Result<Self::V, ReadError> {
-        Ok(self
-            .get_or_insert_cache(element, field, || BufferSlice {
-                buffer: self.buffer.clone(),
-                offset: element.get(self.index.field).unwrap() * self.slice_size,
-                size: self.slice_size.expr(),
-                check_bounds: self.check_bounds,
-            })
-            .clone())
-    }
-    fn set(
-        &self,
-        _element: &Element<T>,
-        _field: Field<Self::V, T>,
-        _value: &Self::V,
-    ) -> Result<(), WriteError> {
-        Err(WriteError {
-            message: "Cannot write to `BufferSlice` field.".to_string(),
-        })
-    }
-
-    fn save(&self, _element: &Element<T>, _field: Field<Self::V, T>) {
-        unreachable!();
-    }
-
-    fn can_write(&self) -> bool {
-        false
-    }
-}
 
 #[cfg_attr(
     feature = "bevy",
@@ -85,7 +18,7 @@ pub struct ArrayPartition<T: EmanationType, P: EmanationType> {
     pub partition: Field<Expr<u32>, T>,
     pub partition_ref: Field<Expr<u32>, T>,
     #[allow(dead_code)]
-    partition_lists: Field<BufferSlice<u32>, T>,
+    partition_lists: Field<Slice<Expr<u32>>, T>,
     partition_size: Field<Expr<u32>, P>,
     #[allow(dead_code)]
     partition_size_atomic: Field<AtomicRef<u32>, P>,
@@ -165,14 +98,7 @@ impl<T: EmanationType> Emanation<T> {
             .bind_array(index, ());
         let partition_lists = *self
             .create_field(&(partition_name.clone() + "-lists"))
-            .bind(BufferSlicesAccessor {
-                index,
-                buffer: self
-                    .device
-                    .create_buffer((max_partition_size * partition_index.size) as usize),
-                slice_size: max_partition_size,
-                check_bounds: false,
-            });
+            .bind_array_slices(index, max_partition_size, false, ());
         let partition_size = *partitions
             .create_field(&(partition_name.clone() + "-list-size"))
             .bind_array(partition_index, ());

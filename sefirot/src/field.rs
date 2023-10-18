@@ -15,6 +15,7 @@ pub mod constant;
 pub mod map;
 #[cfg(feature = "partition")]
 pub mod partition;
+pub mod slice;
 
 pub struct FieldAccess<'a, V: Any, T: EmanationType> {
     el: &'a Element<T>,
@@ -171,9 +172,7 @@ impl<'a, V: Any, T: EmanationType> Reference<'a, Field<V, T>> {
                 pretty_type_name::<V>(),
                 pretty_type_name::<W>()
             ))
-            .bind(FnAccessor::new(move |el| {
-                f(el.get(self.value).unwrap(), el)
-            }))
+            .bind_fn(move |el| f(el.get(self.value).unwrap(), el))
     }
 }
 
@@ -243,6 +242,17 @@ where
     }
     fn as_any(&self) -> &dyn Any {
         self
+    }
+}
+impl<T: EmanationType> Debug for dyn DynAccessor<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple(&format!(
+            "DynAccessor<{}, V = {}>",
+            pretty_type_name::<T>(),
+            self.value_type_name()
+        ))
+        .field(&self.self_type_name())
+        .finish()
     }
 }
 

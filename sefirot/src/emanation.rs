@@ -119,8 +119,8 @@ impl<V: CanReference> Deref for Reference<'_, V> {
         &self.value
     }
 }
-impl<V: CanReference> Reference<'_, V> {
-    pub fn device(&self) -> &Device {
+impl<'a, V: CanReference> Reference<'a, V> {
+    pub fn device(self) -> &'a Device {
         &self.emanation.device
     }
 }

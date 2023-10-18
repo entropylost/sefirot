@@ -65,6 +65,16 @@ impl<V: Value, T: EmanationType> Reference<'_, Field<Expr<V>, T>> {
                 .map(|a| a.buffer.clone())
         })
     }
+    pub fn bind_tex2d(self, index: ArrayIndex2d<T>, storage: PixelStorage) -> Self
+    where
+        V: IoTexel,
+    {
+        let texture = self
+            .device()
+            .create_tex2d(storage, index.size[0], index.size[1], 1);
+        let accessor = Tex2dAccessor { index, texture };
+        self.bind(accessor)
+    }
 }
 
 /// A field marking that a given [`Emanation<T>`] can be mapped to a sized one-dimensional array.
