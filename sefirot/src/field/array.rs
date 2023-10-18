@@ -15,8 +15,8 @@ impl<T: EmanationType> Emanation<T> {
             size: length,
         }
     }
-    pub fn create_index2d(&self, size: [u32; 2]) -> Array2dIndex<T> {
-        Array2dIndex {
+    pub fn create_index2d(&self, size: [u32; 2]) -> ArrayIndex2d<T> {
+        ArrayIndex2d {
             field: *self.create_field("index2d"),
             size,
         }
@@ -99,24 +99,24 @@ impl<T: EmanationType> IndexDomain for ArrayIndex<T> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Array2dIndex<T: EmanationType> {
+pub struct ArrayIndex2d<T: EmanationType> {
     pub field: Field<Expr<Vec2<u32>>, T>,
     pub size: [u32; 2],
 }
-impl<T: EmanationType> Deref for Array2dIndex<T> {
+impl<T: EmanationType> Deref for ArrayIndex2d<T> {
     type Target = Field<Expr<Vec2<u32>>, T>;
     fn deref(&self) -> &Self::Target {
         &self.field
     }
 }
 
-impl<T: EmanationType> IndexEmanation<Expr<Vec2<u32>>> for Array2dIndex<T> {
+impl<T: EmanationType> IndexEmanation<Expr<Vec2<u32>>> for ArrayIndex2d<T> {
     type T = T;
     fn bind_fields(&self, idx: Expr<Vec2<u32>>, element: &Element<T>) {
         element.bind(self.field, ValueAccessor(idx));
     }
 }
-impl<T: EmanationType> IndexDomain for Array2dIndex<T> {
+impl<T: EmanationType> IndexDomain for ArrayIndex2d<T> {
     type I = Expr<Vec2<u32>>;
     fn get_index(&self) -> Self::I {
         dispatch_id().xy()
@@ -125,7 +125,7 @@ impl<T: EmanationType> IndexDomain for Array2dIndex<T> {
         [self.size[0], self.size[1], 1]
     }
 }
-impl<T: EmanationType> Array2dIndex<T> {
+impl<T: EmanationType> ArrayIndex2d<T> {
     pub fn morton(&self, emanation: &Emanation<T>) -> ArrayIndex<T> {
         assert_eq!(
             self.size[0], self.size[1],
@@ -263,7 +263,7 @@ impl<'a, V: Value, T: EmanationType> Reference<'a, Field<Expr<V>, T>> {
 }
 
 pub struct Tex2dAccessor<V: IoTexel, T: EmanationType> {
-    pub index: Array2dIndex<T>,
+    pub index: ArrayIndex2d<T>,
     pub texture: Tex2d<V>,
 }
 impl<V: IoTexel, T: EmanationType> Accessor<T> for Tex2dAccessor<V, T> {
