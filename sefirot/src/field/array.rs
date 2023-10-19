@@ -23,41 +23,54 @@ impl<T: EmanationType> Emanation<T> {
     }
 }
 pub trait IntoBuffer<V: Value> {
-    fn into_buffer(self, device: &Device, count: u32) -> Buffer<V>;
+    fn into_buffer(self, device: &Device, count: u32) -> (BufferView<V>, Option<Buffer<V>>);
 }
 impl<V: Value> IntoBuffer<V> for &[V] {
-    fn into_buffer(self, device: &Device, count: u32) -> Buffer<V> {
+    fn into_buffer(self, device: &Device, count: u32) -> (BufferView<V>, Option<Buffer<V>>) {
         debug_assert_eq!(self.len() as u32, count);
-        device.create_buffer_from_slice(self)
+        let buffer = device.create_buffer_from_slice(self);
+        (buffer.clone(), Some(buffer))
     }
 }
 impl<V: Value, F> IntoBuffer<V> for F
 where
     F: FnMut(u32) -> V,
 {
-    fn into_buffer(mut self, device: &Device, count: u32) -> Buffer<V> {
-        device.create_buffer_from_fn(count as usize, |x| self(x as u32))
+    fn into_buffer(mut self, device: &Device, count: u32) -> (BufferView<V>, Option<Buffer<V>>) {
+        let buffer = device.create_buffer_from_fn(count as usize, |x| self(x as u32));
+        (buffer.clone(), Some(buffer))
     }
 }
 impl<V: Value> IntoBuffer<V> for () {
-    fn into_buffer(self, device: &Device, count: u32) -> Buffer<V> {
-        device.create_buffer(count as usize)
+    fn into_buffer(self, device: &Device, count: u32) -> (BufferView<V>, Option<Buffer<V>>) {
+        let buffer = device.create_buffer(count as usize);
+        (buffer.clone(), Some(buffer))
     }
 }
 impl<V: Value> IntoBuffer<V> for Buffer<V> {
-    fn into_buffer(self, _device: &Device, count: u32) -> Buffer<V> {
+    fn into_buffer(self, _device: &Device, count: u32) -> (BufferView<V>, Option<Buffer<V>>) {
         debug_assert_eq!(self.len(), count as usize);
-        self
+        (self.clone(), Some(self))
+    }
+}
+impl<V: Value> IntoBuffer<V> for BufferView<V> {
+    fn into_buffer(self, _device: &Device, count: u32) -> (BufferView<V>, Option<Buffer<V>>) {
+        debug_assert_eq!(self.len(), count as usize);
+        (self, None)
     }
 }
 
 impl<V: Value, T: EmanationType> Reference<'_, Field<Expr<V>, T>> {
     pub fn bind_array(self, index: ArrayIndex<T>, values: impl IntoBuffer<V>) -> Self {
-        let buffer = values.into_buffer(self.device(), index.size);
-        let accessor = BufferAccessor { index, buffer };
+        let (buffer, handle) = values.into_buffer(self.device(), index.size);
+        let accessor = BufferAccessor {
+            index,
+            buffer,
+            handle,
+        };
         self.bind(accessor)
     }
-    pub fn buffer(self) -> Option<Buffer<V>> {
+    pub fn buffer(self) -> Option<BufferView<V>> {
         self.accessor().and_then(|a| {
             a.clone()
                 .as_any()
@@ -180,7 +193,9 @@ impl<T: EmanationType> ArrayIndex2d<T> {
 
 pub struct BufferAccessor<V: Value, T: EmanationType> {
     pub index: ArrayIndex<T>,
-    pub buffer: Buffer<V>,
+    pub buffer: BufferView<V>,
+    /// Used to prevent the buffer from being dropped.
+    pub handle: Option<Buffer<V>>,
 }
 impl<V: Value, T: EmanationType> Accessor<T> for BufferAccessor<V, T> {
     type V = Expr<V>;
@@ -190,7 +205,7 @@ impl<V: Value, T: EmanationType> Accessor<T> for BufferAccessor<V, T> {
         if let Some(cache) = self.get_cache(element, field) {
             Ok(cache.load())
         } else {
-            let value = self.buffer.read(element.get(self.index.field)?);
+            let value = self.buffer.var().read(element.get(self.index.field)?);
             self.insert_cache(element, field, value.var());
             Ok(value)
         }
@@ -210,7 +225,7 @@ impl<V: Value, T: EmanationType> Accessor<T> for BufferAccessor<V, T> {
     }
 
     fn save(&self, element: &Element<T>, field: Field<Self::V, T>) {
-        self.buffer.write(
+        self.buffer.var().write(
             element.get(self.index.field).unwrap(),
             self.get_cache(element, field).unwrap().load(),
         );
@@ -223,7 +238,7 @@ impl<V: Value, T: EmanationType> Accessor<T> for BufferAccessor<V, T> {
 
 pub struct AtomicBufferAccessor<V: Value, T: EmanationType> {
     pub index: ArrayIndex<T>,
-    pub buffer: Buffer<V>,
+    pub buffer: BufferView<V>,
 }
 impl<V: Value, T: EmanationType> Accessor<T> for AtomicBufferAccessor<V, T> {
     type V = AtomicRef<V>;

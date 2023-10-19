@@ -56,18 +56,18 @@ impl<V: Any> Debug for dyn SliceAccessor<V> {
 }
 
 pub struct BufferSliceAccessor<V: Value> {
-    buffer: Buffer<V>,
+    buffer: BufferView<V>,
     offset: Expr<u32>,
 }
 
 impl<V: Value> SliceAccessor<Expr<V>> for BufferSliceAccessor<V> {
     #[tracked]
     fn read(&self, index: Expr<u32>) -> Expr<V> {
-        self.buffer.read(self.offset + index)
+        self.buffer.var().read(self.offset + index)
     }
     #[tracked]
     fn write(&self, index: Expr<u32>, value: Expr<V>) {
-        self.buffer.write(self.offset + index, value);
+        self.buffer.var().write(self.offset + index, value);
     }
     fn can_write(&self) -> bool {
         true
@@ -75,18 +75,20 @@ impl<V: Value> SliceAccessor<Expr<V>> for BufferSliceAccessor<V> {
 }
 
 pub struct Tex2dSliceAccessor<V: IoTexel> {
-    texture: Tex2d<V>,
+    texture: Tex2dView<V>,
     index: Expr<u32>,
 }
 
 impl<V: IoTexel> SliceAccessor<Expr<V>> for Tex2dSliceAccessor<V> {
     #[tracked]
     fn read(&self, index: Expr<u32>) -> Expr<V> {
-        self.texture.read(Vec2::expr(self.index, index))
+        self.texture.var().read(Vec2::expr(self.index, index))
     }
     #[tracked]
     fn write(&self, index: Expr<u32>, value: Expr<V>) {
-        self.texture.write(Vec2::expr(self.index, index), value);
+        self.texture
+            .var()
+            .write(Vec2::expr(self.index, index), value);
     }
     fn can_write(&self) -> bool {
         true
@@ -94,7 +96,7 @@ impl<V: IoTexel> SliceAccessor<Expr<V>> for Tex2dSliceAccessor<V> {
 }
 
 pub struct Tex3dSliceAccessor<V: IoTexel> {
-    texture: Tex3d<V>,
+    texture: Tex3dView<V>,
     index: Expr<Vec2<u32>>,
 }
 
@@ -102,11 +104,13 @@ impl<V: IoTexel> SliceAccessor<Expr<V>> for Tex3dSliceAccessor<V> {
     #[tracked]
     fn read(&self, index: Expr<u32>) -> Expr<V> {
         self.texture
+            .var()
             .read(Vec3::expr(self.index.x, self.index.y, index))
     }
     #[tracked]
     fn write(&self, index: Expr<u32>, value: Expr<V>) {
         self.texture
+            .var()
             .write(Vec3::expr(self.index.x, self.index.y, index), value);
     }
     fn can_write(&self) -> bool {
@@ -123,8 +127,9 @@ impl<V: Value, T: EmanationType> Reference<'_, Field<Slice<Expr<V>>, T>> {
         check_bounds: bool,
         values: impl IntoBuffer<V>,
     ) -> Self {
-        let buffer = values.into_buffer(self.device(), index.size);
+        let (buffer, handle) = values.into_buffer(self.device(), index.size);
         self.bind_fn(move |el| {
+            let _handle = &handle;
             let buffer = buffer.clone();
             let offset = el.get(index.field).unwrap() * slice_size;
             Slice {
@@ -148,7 +153,7 @@ impl<V: Value, T: EmanationType> Reference<'_, Field<Slice<Expr<V>>, T>> {
             .device()
             .create_tex2d(storage, index.size, slice_size, 1);
         self.bind_fn(move |el| {
-            let texture = texture.clone();
+            let texture = texture.view(0);
             let index = el.get(index.field).unwrap();
             Slice {
                 size: slice_size,
@@ -171,7 +176,7 @@ impl<V: Value, T: EmanationType> Reference<'_, Field<Slice<Expr<V>>, T>> {
             self.device()
                 .create_tex3d(storage, index.size[0], index.size[1], slice_size, 1);
         self.bind_fn(move |el| {
-            let texture = texture.clone();
+            let texture = texture.view(0);
             let index = el.get(index.field).unwrap();
             Slice {
                 size: slice_size,

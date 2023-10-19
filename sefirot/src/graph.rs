@@ -417,23 +417,23 @@ impl<'a> AddToComputeGraph<'a> for Command<'a, 'a> {
 }
 
 #[cfg(feature = "copy-from")]
-pub struct CopyFromBuffer<'c, T: Value> {
-    src: BufferView<'c, T>,
+pub struct CopyFromBuffer<T: Value> {
+    src: BufferView<T>,
     guard: tokio::sync::OwnedMutexGuard<Vec<T>>,
 }
 #[cfg(feature = "copy-from")]
-impl<'c, T: Value> CopyFromBuffer<'c, T> {
-    pub fn new(src: &'c Buffer<T>, dst: Arc<tokio::sync::Mutex<Vec<T>>>) -> Self {
-        let src = src.view(..);
-        Self::new_view(src, dst)
-    }
-    pub fn new_view(src: BufferView<'c, T>, dst: Arc<tokio::sync::Mutex<Vec<T>>>) -> Self {
+impl<T: Value> CopyFromBuffer<T> {
+    pub fn new(
+        src: impl Deref<Target = BufferView<T>>,
+        dst: Arc<tokio::sync::Mutex<Vec<T>>>,
+    ) -> Self {
+        let src = src.clone();
         let guard = dst.clone().blocking_lock_owned();
         Self { src, guard }
     }
 }
 #[cfg(feature = "copy-from")]
-impl<'a, 'c, T: Value + Send> AddToComputeGraph<'a> for CopyFromBuffer<'c, T> {
+impl<'a, T: Value + Send> AddToComputeGraph<'a> for CopyFromBuffer<T> {
     fn add<'b>(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle {
         let mut guard = self.guard;
         let dst = &mut **guard;

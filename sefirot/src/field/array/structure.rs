@@ -41,7 +41,7 @@ impl<T: EmanationType> Emanation<T> {
     ) -> S::Map<Field<Expr<__>, T>> {
         assert_eq!(values.len(), index.size as usize);
         let buffer = self.device.create_buffer_from_slice(values);
-        self.create_aos_fields_with_struct_field(index, prefix, buffer)
+        self.create_aos_fields_with_struct_field(index, prefix, buffer.clone(), Some(buffer))
             .1
     }
     pub fn create_aos_fields_from_fn<S: Structure>(
@@ -53,22 +53,24 @@ impl<T: EmanationType> Emanation<T> {
         let buffer = self
             .device
             .create_buffer_from_fn(index.size as usize, |i| f(i as u32));
-        self.create_aos_fields_with_struct_field(index, prefix, buffer)
+        self.create_aos_fields_with_struct_field(index, prefix, buffer.clone(), Some(buffer))
             .1
     }
     pub fn create_aos_fields_with_struct_field<S: Structure>(
         &self,
         index: ArrayIndex<T>,
         prefix: &str,
-        buffer: Buffer<S>,
+        buffer: BufferView<S>,
+        handle: Option<Buffer<S>>,
     ) -> (Field<Expr<S>, T>, S::Map<Field<Expr<__>, T>>) {
         let prefix = prefix.to_string();
         let struct_field = *self.create_field(&(prefix.clone() + "struct"));
-        let struct_accessor = Arc::downgrade(
-            &self
-                .on(struct_field)
-                .bind_accessor(BufferAccessor { index, buffer }),
-        );
+        let struct_accessor =
+            Arc::downgrade(&self.on(struct_field).bind_accessor(BufferAccessor {
+                index,
+                buffer,
+                handle,
+            }));
 
         let fields = S::apply(CreateStructArrayField {
             emanation: self,

@@ -1352,7 +1352,7 @@ checksum = "b5e6163cb8c49088c2c36f57875e58ccd8c87c7427f7fbd50ea6710b2f3f2e8f"
 [[package]]
 name = "luisa_compute"
 version = "0.1.1-alpha.1"
-source = "git+https://github.com/iMplode-nZ/luisa-compute-rs?branch=main#e0e9161390270144aa9e5bf5b45e9a99e62f6bf0"
+source = "git+https://github.com/iMplode-nZ/luisa-compute-rs?branch=main#299eefb3264dc0331edbea16393ff9736b127c43"
 dependencies = [
  "base64ct",
  "bumpalo",
@@ -1382,7 +1382,7 @@ dependencies = [
 [[package]]
 name = "luisa_compute_api_types"
 version = "0.1.1-alpha.1"
-source = "git+https://github.com/iMplode-nZ/luisa-compute-rs?branch=main#e0e9161390270144aa9e5bf5b45e9a99e62f6bf0"
+source = "git+https://github.com/iMplode-nZ/luisa-compute-rs?branch=main#299eefb3264dc0331edbea16393ff9736b127c43"
 dependencies = [
  "bitflags 2.4.1",
  "cbindgen",
@@ -1392,7 +1392,7 @@ dependencies = [
 [[package]]
 name = "luisa_compute_backend"
 version = "0.1.1-alpha.1"
-source = "git+https://github.com/iMplode-nZ/luisa-compute-rs?branch=main#e0e9161390270144aa9e5bf5b45e9a99e62f6bf0"
+source = "git+https://github.com/iMplode-nZ/luisa-compute-rs?branch=main#299eefb3264dc0331edbea16393ff9736b127c43"
 dependencies = [
  "lazy_static",
  "libc",
@@ -1408,7 +1408,7 @@ dependencies = [
 [[package]]
 name = "luisa_compute_derive"
 version = "0.1.1-alpha.1"
-source = "git+https://github.com/iMplode-nZ/luisa-compute-rs?branch=main#e0e9161390270144aa9e5bf5b45e9a99e62f6bf0"
+source = "git+https://github.com/iMplode-nZ/luisa-compute-rs?branch=main#299eefb3264dc0331edbea16393ff9736b127c43"
 dependencies = [
  "luisa_compute_derive_impl",
  "syn 2.0.38",
@@ -1417,7 +1417,7 @@ dependencies = [
 [[package]]
 name = "luisa_compute_derive_impl"
 version = "0.1.1-alpha.1"
-source = "git+https://github.com/iMplode-nZ/luisa-compute-rs?branch=main#e0e9161390270144aa9e5bf5b45e9a99e62f6bf0"
+source = "git+https://github.com/iMplode-nZ/luisa-compute-rs?branch=main#299eefb3264dc0331edbea16393ff9736b127c43"
 dependencies = [
  "prettyplease",
  "proc-macro2",
@@ -1428,7 +1428,7 @@ dependencies = [
 [[package]]
 name = "luisa_compute_ir"
 version = "0.1.1-alpha.1"
-source = "git+https://github.com/iMplode-nZ/luisa-compute-rs?branch=main#e0e9161390270144aa9e5bf5b45e9a99e62f6bf0"
+source = "git+https://github.com/iMplode-nZ/luisa-compute-rs?branch=main#299eefb3264dc0331edbea16393ff9736b127c43"
 dependencies = [
  "base64ct",
  "bincode",
@@ -1450,7 +1450,7 @@ dependencies = [
 [[package]]
 name = "luisa_compute_sys"
 version = "0.1.1-alpha.1"
-source = "git+https://github.com/iMplode-nZ/luisa-compute-rs?branch=main#e0e9161390270144aa9e5bf5b45e9a99e62f6bf0"
+source = "git+https://github.com/iMplode-nZ/luisa-compute-rs?branch=main#299eefb3264dc0331edbea16393ff9736b127c43"
 dependencies = [
  "cmake",
  "lazy_static",
@@ -1464,7 +1464,7 @@ dependencies = [
 [[package]]
 name = "luisa_compute_track"
 version = "0.1.1-alpha.1"
-source = "git+https://github.com/iMplode-nZ/luisa-compute-rs?branch=main#e0e9161390270144aa9e5bf5b45e9a99e62f6bf0"
+source = "git+https://github.com/iMplode-nZ/luisa-compute-rs?branch=main#299eefb3264dc0331edbea16393ff9736b127c43"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",
@@ -2030,9 +2030,9 @@ checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
 
 [[package]]
 name = "rustix"
-version = "0.38.19"
+version = "0.38.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "745ecfa778e66b2b63c88a61cb36e0eea109e803b0b86bf9879fbc77c70e86ed"
+checksum = "67ce50cb2e16c2903e30d1cbccfd8387a74b9d4c938b6a4c5ec6cc7556f7a8a0"
 dependencies = [
  "bitflags 2.4.1",
  "errno",
@@ -2302,18 +2302,18 @@ checksum = "222a222a5bfe1bba4a77b45ec488a741b3cb8872e5e499451fd7d0129c9c7c3d"
 
 [[package]]
 name = "thiserror"
-version = "1.0.49"
+version = "1.0.50"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1177e8c6d7ede7afde3585fd2513e611227efd6481bd78d2e82ba1ce16557ed4"
+checksum = "f9a7210f5c9a7156bb50aa36aed4c95afb51df0df00713949448cf9e97d382d2"
 dependencies = [
  "thiserror-impl",
 ]
 
 [[package]]
 name = "thiserror-impl"
-version = "1.0.49"
+version = "1.0.50"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "10712f02019e9288794769fba95cd6847df9874d49d871d062172f9dd41bc4cc"
+checksum = "266b2e40bc00e5a6c09c3584011e08b06f123c00362c92b975ba9843aaaa14b8"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2393,9 +2393,9 @@ dependencies = [
 
 [[package]]
 name = "tracing"
-version = "0.1.39"
+version = "0.1.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee2ef2af84856a50c1d430afce2fdded0a4ec7eda868db86409b4543df0797f9"
+checksum = "c3523ab5a71916ccf420eebdf5521fcef02141234bbc0b8a49f2fdc4544364ef"
 dependencies = [
  "pin-project-lite",
  "tracing-attributes",
@@ -2938,9 +2938,9 @@ checksum = "0fcb9cbac069e033553e8bb871be2fbdffcab578eb25bd0f7c508cedc6dcd75a"
 
 [[package]]
 name = "zerocopy"
-version = "0.6.4"
+version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20707b61725734c595e840fb3704378a0cd2b9c74cc9e6e20724838fc6a1e2f9"
+checksum = "96f8f25c15a0edc9b07eb66e7e6e97d124c0505435c382fde1ab7ceb188aa956"
 dependencies = [
  "byteorder",
  "zerocopy-derive",
@@ -2948,9 +2948,9 @@ dependencies = [
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.6.4"
+version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56097d5b91d711293a42be9289403896b68654625021732067eac7a4ca388a1f"
+checksum = "855e0f6af9cd72b87d8a6c586f3cb583f5cdcc62c2c80869d8cd7e96fdf7ee20"
 dependencies = [
  "proc-macro2",
  "quote",
