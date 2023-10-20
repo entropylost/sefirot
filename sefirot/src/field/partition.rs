@@ -5,7 +5,10 @@ use super::array::ArrayIndex;
 use super::slice::Slice;
 use super::*;
 use luisa::lang::types::AtomicRef;
+use luisa::prelude::track;
 use tokio::sync::Mutex;
+
+pub const NULL_PARTITION: u32 = u32::MAX;
 
 #[cfg_attr(
     feature = "bevy",
@@ -113,12 +116,18 @@ impl<T: EmanationType> Emanation<T> {
             partition_size,
             partition_size_atomic,
             partition_size_host: Arc::new(Mutex::new(vec![0; partition_index.size as usize])),
-            update_lists_kernel: self.build_kernel::<fn()>(index, &|el| {
-                let p = &partitions.get(&el.context, &partition_index, *partition.at(el));
-                let this_ref = (*partition_size_atomic.at(p)).fetch_add(1);
-                *partition_ref.at(el) = this_ref;
-                partition_lists.at(el).write(this_ref, *index.field.at(el));
-            }),
+            update_lists_kernel: self.build_kernel::<fn()>(
+                index,
+                track!(&|el| {
+                    if *partition.at(el) == NULL_PARTITION {
+                        return;
+                    }
+                    let p = &partitions.get(&el.context, &partition_index, *partition.at(el));
+                    let this_ref = (*partition_size_atomic.at(p)).fetch_add(1);
+                    *partition_ref.at(el) = this_ref;
+                    partition_lists.at(el).write(this_ref, *index.field.at(el));
+                }),
+            ),
             zero_lists_kernel: partitions.build_kernel::<fn()>(partition_index, &|el| {
                 *partition_size.at(el) = 0.expr();
             }),

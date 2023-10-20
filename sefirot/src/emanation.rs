@@ -14,7 +14,7 @@ use crate::prelude::*;
 static NEXT_EMANATION_ID: AtomicU64 = AtomicU64::new(0);
 
 // States what the original ID is; eg: Particles for example.
-pub trait EmanationType: Sync + Send + Debug + Copy + Eq + 'static {}
+pub trait EmanationType: Sync + Send + Debug + Copy + 'static {}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct RawFieldHandle(pub(crate) Index);
