@@ -54,15 +54,14 @@ fn main() {
     }
     let index = particles.create_index(particle_data.len() as u32);
     let ParticleMapped { position, velocity } =
-        particles.create_aos_fields(&device, index, "particle-", &particle_data);
+        particles.create_aos_fields(index, "particle-", &particle_data);
 
     let update_kernel = particles.build_kernel::<fn(f32)>(
-        &device,
         index,
         track!(&|el, dt| {
-            position[el] += velocity[el] * dt;
-            if (position[el] >= 0.0).all() && (position[el] < SIZE as f32).all() {
-                display.write(position[el].cast_u32(), Vec4::splat(1.0));
+            position[[el]] += velocity[[el]] * dt;
+            if (position[[el]] >= 0.0).all() && (position[[el]] < SIZE as f32).all() {
+                display.write(position[[el]].cast_u32(), Vec4::splat(1.0));
             }
         }),
     );
@@ -86,10 +85,10 @@ fn main() {
                     .default_stream()
                     .scope()
                     .present(&swapchain, &display);
-                let mut graph = ComputeGraph::new();
+                let mut graph = ComputeGraph::new(&device);
                 let clear = *graph.add(clear_kernel.dispatch_async([SIZE, SIZE, 1]));
                 graph.add(update_kernel.dispatch(&1.0)).after(clear);
-                graph.execute(&device);
+                graph.execute();
                 window.request_redraw();
             }
             _ => {}

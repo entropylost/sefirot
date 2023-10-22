@@ -72,17 +72,17 @@ pub trait Domain {
     fn dispatch_async(&self, graph: &mut ComputeGraph<'_>, args: DispatchArgs) -> NodeHandle;
 }
 
-pub trait IntoBoxedDomain {
+pub trait AsBoxedDomain {
     type T: EmanationType;
     fn into_boxed_domain(self) -> Box<dyn Domain<T = Self::T>>;
 }
-impl<T: EmanationType> IntoBoxedDomain for Box<dyn Domain<T = T>> {
+impl<T: EmanationType> AsBoxedDomain for Box<dyn Domain<T = T>> {
     type T = T;
     fn into_boxed_domain(self) -> Box<dyn Domain<T = T>> {
         self
     }
 }
-impl<T: EmanationType, D: Domain<T = T> + 'static> IntoBoxedDomain for D {
+impl<T: EmanationType, D: Domain<T = T> + 'static> AsBoxedDomain for D {
     type T = T;
     fn into_boxed_domain(self) -> Box<dyn Domain<T = T>> {
         Box::new(self)

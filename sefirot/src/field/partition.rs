@@ -5,7 +5,6 @@ use super::array::ArrayIndex;
 use super::slice::Slice;
 use super::*;
 use luisa::lang::types::AtomicRef;
-use luisa::prelude::track;
 use tokio::sync::Mutex;
 
 pub const NULL_PARTITION: u32 = u32::MAX;
@@ -119,18 +118,21 @@ impl<T: EmanationType> Emanation<T> {
             update_lists_kernel: self.build_kernel::<fn()>(
                 index,
                 track!(&|el| {
-                    if *partition.at(el) == NULL_PARTITION {
+                    if partition[[el]] == NULL_PARTITION {
                         return;
                     }
-                    let p = &partitions.get(&el.context, &partition_index, *partition.at(el));
-                    let this_ref = (*partition_size_atomic.at(p)).fetch_add(1);
-                    *partition_ref.at(el) = this_ref;
-                    partition_lists.at(el).write(this_ref, *index.field.at(el));
+                    let pt = &partitions.get(&el.context, &partition_index, partition[[el]]);
+                    let this_ref = partition_size_atomic[[pt]].fetch_add(1);
+                    partition_ref[[el]] = this_ref;
+                    partition_lists[[el]].write(this_ref, index.field[[el]]);
                 }),
             ),
-            zero_lists_kernel: partitions.build_kernel::<fn()>(partition_index, &|el| {
-                *partition_size.at(el) = 0.expr();
-            }),
+            zero_lists_kernel: partitions.build_kernel::<fn()>(
+                partition_index,
+                track!(&|el| {
+                    partition_size[[el]] = 0.expr();
+                }),
+            ),
         }
     }
 }

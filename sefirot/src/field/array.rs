@@ -1,6 +1,5 @@
 use luisa::lang::types::vector::Vec2;
 use luisa::lang::types::AtomicRef;
-use luisa::prelude::track;
 
 use crate::domain::{IndexDomain, IndexEmanation};
 
@@ -98,10 +97,9 @@ pub struct ArrayIndex<T: EmanationType> {
     pub field: Field<Expr<u32>, T>,
     pub size: u32,
 }
-impl<T: EmanationType> Deref for ArrayIndex<T> {
-    type Target = Field<Expr<u32>, T>;
-    fn deref(&self) -> &Self::Target {
-        &self.field
+impl<T: EmanationType> From<ArrayIndex<T>> for Field<Expr<u32>, T> {
+    fn from(index: ArrayIndex<T>) -> Self {
+        index.field
     }
 }
 
@@ -126,10 +124,9 @@ pub struct ArrayIndex2d<T: EmanationType> {
     pub field: Field<Expr<Vec2<u32>>, T>,
     pub size: [u32; 2],
 }
-impl<T: EmanationType> Deref for ArrayIndex2d<T> {
-    type Target = Field<Expr<Vec2<u32>>, T>;
-    fn deref(&self) -> &Self::Target {
-        &self.field
+impl<T: EmanationType> From<ArrayIndex2d<T>> for Field<Expr<Vec2<u32>>, T> {
+    fn from(index: ArrayIndex2d<T>) -> Self {
+        index.field
     }
 }
 
@@ -167,7 +164,7 @@ impl<T: EmanationType> ArrayIndex2d<T> {
         let field = self.field;
         let field = *emanation.create_field(&name).bind_fn(track!(move |el| {
             // https://graphics.stanford.edu/%7Eseander/bithacks.html#InterleaveBMN
-            let index = el.get(field).unwrap();
+            let index = field[[el]];
             let x = index.x.var();
 
             *x = (x | (x << 8)) & 0x00ff00ff;

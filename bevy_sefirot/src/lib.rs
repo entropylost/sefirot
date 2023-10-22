@@ -6,11 +6,7 @@ use std::sync::OnceLock;
 pub use bevy_sefirot_macro::init_kernel;
 
 pub mod prelude {
-    pub use bevy_luisa::{
-        execute_luisa_commands_blocking, execute_luisa_commands_delayed,
-        synchronize_luisa_commands, Compute, LuisaCommandExt, LuisaCommands, LuisaCommandsType,
-        LuisaDevice, LuisaPlugin,
-    };
+    pub use bevy_luisa::{LuisaDevice, LuisaPlugin};
     pub use sefirot::prelude::*;
     pub use {bevy_luisa, sefirot};
 }

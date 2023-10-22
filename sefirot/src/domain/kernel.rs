@@ -20,7 +20,7 @@ impl<T: EmanationType, S: KernelSignature> Kernel<T, S> {
 impl<T: EmanationType> Emanation<T> {
     pub fn build_kernel<F: KernelSignature>(
         &self,
-        domain: impl IntoBoxedDomain<T = T>,
+        domain: impl AsBoxedDomain<T = T>,
         f: F::Function<'_, T>,
     ) -> Kernel<T, F> {
         self.build_kernel_with_options(Default::default(), domain, f)
@@ -29,7 +29,7 @@ impl<T: EmanationType> Emanation<T> {
     pub fn build_kernel_with_options<F: KernelSignature>(
         &self,
         options: KernelBuildOptions,
-        domain: impl IntoBoxedDomain<T = T>,
+        domain: impl AsBoxedDomain<T = T>,
         f: F::Function<'_, T>,
     ) -> Kernel<T, F> {
         let domain = domain.into_boxed_domain();
@@ -149,13 +149,13 @@ macro_rules! impl_kernel_signature {
     () => {
         impl KernelSignature for fn() {
             type LuisaSignature = fn(Context);
-            type Function<'a, T: EmanationType> = &'a dyn Fn(&Element<T>);
+            type Function<'a, T: EmanationType> = &'a dyn Fn(Element<T>);
         }
     };
     ($T0:ident $(,$Tn:ident)*) => {
         impl<$T0: KernelArg + 'static $(,$Tn: KernelArg + 'static)*> KernelSignature for fn($T0 $(,$Tn)*) {
             type LuisaSignature = fn($T0, $($Tn,)* Context);
-            type Function<'a, T: EmanationType> = &'a dyn Fn(&Element<T>, <$T0 as KernelArg>::Parameter $(,<$Tn as KernelArg>::Parameter)*);
+            type Function<'a, T: EmanationType> = &'a dyn Fn(Element<T>, <$T0 as KernelArg>::Parameter $(,<$Tn as KernelArg>::Parameter)*);
         }
         impl_kernel_signature!($($Tn),*);
     };
@@ -169,15 +169,15 @@ pub trait KernelFunction<T: EmanationType, S: KernelSignature> {
 
 macro_rules! impl_kernel_function {
     () => {
-        impl<T: EmanationType> KernelFunction<T, fn()> for &dyn Fn(&Element<T>) {
+        impl<T: EmanationType> KernelFunction<T, fn()> for &dyn Fn(Element<T>) {
             fn execute(&self, el: Element<T>) {
-                self(&el);
+                self(el);
             }
         }
     };
     ($T0:ident $(,$Tn:ident)*) => {
         impl<T: EmanationType, $T0: KernelArg + 'static $(,$Tn: KernelArg + 'static)*> KernelFunction<T, fn($T0 $(,$Tn)*)> for
-            &dyn Fn(&Element<T>, $T0::Parameter $(,$Tn::Parameter)*)
+            &dyn Fn(Element<T>, $T0::Parameter $(,$Tn::Parameter)*)
         {
             #[allow(non_snake_case)]
             #[allow(unused_variables)]
@@ -185,8 +185,9 @@ macro_rules! impl_kernel_function {
                 let mut builder = el.context.builder.lock();
                 let $T0 = <$T0::Parameter as KernelParameter>::def_param(&mut builder);
                 $(let $Tn = <$Tn::Parameter as KernelParameter>::def_param(&mut builder);)*
+                drop(builder);
 
-                (self)(&el, $T0 $(,$Tn)*)
+                (self)(el, $T0 $(,$Tn)*)
             }
         }
         impl_kernel_function!($($Tn),*);

@@ -1,4 +1,4 @@
-use proc_macro2::TokenStream;
+use proc_macro2::{Span, TokenStream};
 use quote::{quote, quote_spanned, ToTokens};
 use syn::spanned::Spanned;
 use syn::visit_mut::VisitMut;
@@ -142,6 +142,7 @@ struct RewriteIndexVisitor {
 }
 impl VisitMut for RewriteIndexVisitor {
     fn visit_expr_mut(&mut self, expr: &mut Expr) {
+        let span = expr.span();
         let np = self.needs_parens;
         self.needs_parens = true;
         match expr {
@@ -155,16 +156,22 @@ impl VisitMut for RewriteIndexVisitor {
             Expr::Index(node) => {
                 let n_expr = &node.expr;
                 let index = &node.index;
-                let attrs = &node.attrs;
-                if np {
-                    *expr = parse_quote! {
-                        #(#attrs)*
-                        (*#n_expr.at(#index))
-                    };
-                } else {
-                    *expr = parse_quote! {
-                        #(#attrs)*
-                        *#n_expr.at(#index)
+                if let Expr::Array(ExprArray { elems, .. }) = &**index {
+                    if elems.len() == 1 {
+                        let index = &elems[0];
+                        let attrs = &node.attrs;
+                        let span = span.resolved_at(Span::mixed_site());
+                        if np {
+                            *expr = parse_quote_spanned! {span=>
+                                #(#attrs)*
+                                (*(#index).__at(#n_expr))
+                            };
+                        } else {
+                            *expr = parse_quote_spanned! {span=>
+                                #(#attrs)*
+                                *(#index).__at(#n_expr)
+                            }
+                        }
                     }
                 }
             }

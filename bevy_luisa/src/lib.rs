@@ -19,9 +19,8 @@ pub use bevy_luisa_macro::kernel;
 
 pub mod prelude {
     pub use super::{
-        execute_luisa_commands_blocking, execute_luisa_commands_delayed,
-        synchronize_luisa_commands, Compute, LuisaCommandExt, LuisaCommands, LuisaCommandsType,
-        LuisaDevice, LuisaPlugin,
+        execute_luisa_commands, execute_luisa_commands_delayed, synchronize_luisa_commands,
+        Compute, LuisaCommandExt, LuisaCommands, LuisaCommandsType, LuisaDevice, LuisaPlugin,
     };
     pub use bevy_luisa_macro::kernel;
     pub use luisa::prelude::*;
@@ -164,6 +163,7 @@ impl Deref for LuisaDevice<'_> {
 pub struct DefaultKernelBuildOptions(pub KernelBuildOptions);
 
 #[derive(Copy, Clone)]
+#[allow(clippy::type_complexity)]
 pub struct KernelRegistrationSystem(
     pub &'static Lazy<Mutex<Option<Box<dyn System<In = (), Out = ()>>>>>,
 );
@@ -176,7 +176,8 @@ pub enum KernelRegistrationSystemSet {
     ApplyCommands,
 }
 
-pub fn execute_luisa_commands_blocking<T: LuisaCommandsType>(
+/// Synchronously executes all commands in the [`LuisaCommands<T>`] resource.
+pub fn execute_luisa_commands<T: LuisaCommandsType>(
     device: LuisaDevice,
     mut commands: ResMut<LuisaCommandsResource<T>>,
 ) {

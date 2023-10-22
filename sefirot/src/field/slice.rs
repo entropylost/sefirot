@@ -1,5 +1,4 @@
 use luisa::lang::types::vector::{Vec2, Vec3};
-use luisa::prelude::tracked;
 
 use super::array::{ArrayIndex, ArrayIndex2d, IntoBuffer};
 use super::*;
@@ -131,7 +130,7 @@ impl<V: Value, T: EmanationType> Reference<'_, Field<Slice<Expr<V>>, T>> {
         self.bind_fn(move |el| {
             let _handle = &handle;
             let buffer = buffer.clone();
-            let offset = el.get(index.field).unwrap() * slice_size;
+            let offset = index[[el]] * slice_size;
             Slice {
                 size: slice_size,
                 check_bounds,
@@ -139,6 +138,7 @@ impl<V: Value, T: EmanationType> Reference<'_, Field<Slice<Expr<V>>, T>> {
             }
         })
     }
+    #[tracked]
     pub fn bind_tex2d_slices(
         self,
         index: ArrayIndex<T>,
@@ -154,7 +154,7 @@ impl<V: Value, T: EmanationType> Reference<'_, Field<Slice<Expr<V>>, T>> {
             .create_tex2d(storage, index.size, slice_size, 1);
         self.bind_fn(move |el| {
             let texture = texture.view(0);
-            let index = el.get(index.field).unwrap();
+            let index = index[[el]];
             Slice {
                 size: slice_size,
                 check_bounds,
@@ -162,6 +162,7 @@ impl<V: Value, T: EmanationType> Reference<'_, Field<Slice<Expr<V>>, T>> {
             }
         })
     }
+    #[tracked]
     pub fn bind_tex3d_slices(
         self,
         index: ArrayIndex2d<T>,
@@ -177,7 +178,7 @@ impl<V: Value, T: EmanationType> Reference<'_, Field<Slice<Expr<V>>, T>> {
                 .create_tex3d(storage, index.size[0], index.size[1], slice_size, 1);
         self.bind_fn(move |el| {
             let texture = texture.view(0);
-            let index = el.get(index.field).unwrap();
+            let index = index[[el]];
             Slice {
                 size: slice_size,
                 check_bounds,

@@ -1,5 +1,7 @@
 #![allow(clippy::type_complexity)]
 
+extern crate self as sefirot;
+
 pub mod domain;
 pub mod element;
 pub mod emanation;

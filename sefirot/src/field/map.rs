@@ -37,23 +37,42 @@ impl<T: EmanationType, S: EmanationType> Accessor<T> for IndexMapAccessor<T, S> 
 }
 
 impl<T: EmanationType> Emanation<T> {
+    /// Creates a [`Field`] containing an [`Element`] of another [`Emanation`],
+    /// using a pre-existing `Field` containing an integer that is used to
+    /// index into the other `Emanation` with the provided [`ArrayIndex`].
     pub fn map_index<S: EmanationType>(
         &self,
         other: &Emanation<S>,
         map: Field<Expr<u32>, T>,
         index: ArrayIndex<S>,
-    ) -> Field<Element<S>, T> {
+    ) -> Reference<'_, Field<Element<S>, T>> {
         let accessor = IndexMapAccessor {
             map,
             index,
             emanation: other.clone(),
         };
-        *self
+        self.create_field(&format!(
+            "map({} => {})",
+            pretty_type_name::<T>(),
+            pretty_type_name::<S>()
+        ))
+        .bind(accessor)
+    }
+}
+
+impl<V: Any + Clone, T: EmanationType> Reference<'_, Field<V, T>> {
+    /// Creates a field with the same values by changing the [`Emanation`] using the provided mapping.
+    /// Note that the new field is not mutable.
+    pub fn over<S: EmanationType>(
+        self,
+        map: Reference<'_, Field<Element<T>, S>>,
+    ) -> Reference<'_, Field<V, S>> {
+        map.emanation
             .create_field(&format!(
-                "Mapping {} -> {}",
-                pretty_type_name::<T>(),
+                "{}-over({})",
+                self.name(),
                 pretty_type_name::<S>()
             ))
-            .bind(accessor)
+            .bind_fn(move |element| self.value.at(&*map.value.at(element)).clone())
     }
 }

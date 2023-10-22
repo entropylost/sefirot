@@ -56,7 +56,7 @@ impl<V: Any, T: EmanationType> Drop for FieldAccess<'_, V, T> {
 pub struct Field<V: Any, T: EmanationType> {
     pub(crate) raw: RawFieldHandle,
     pub(crate) emanation_id: u64,
-    pub(crate) _marker: PhantomData<(V, T)>,
+    pub(crate) _marker: PhantomData<fn() -> (V, T)>,
 }
 impl<V: Any, T: EmanationType> Debug for Field<V, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -95,6 +95,12 @@ impl<V: Any, T: EmanationType> Field<V, T> {
             value: v,
             changed: false,
         }
+    }
+}
+impl<T: EmanationType> Element<T> {
+    #[doc(hidden)]
+    pub fn __at<V: Any>(&self, field: impl Into<Field<V, T>>) -> FieldAccess<V, T> {
+        field.into().at(self)
     }
 }
 impl<V: Any, T: EmanationType> CanReference for Field<V, T> {
@@ -147,6 +153,10 @@ impl<'a, V: Any, T: EmanationType> Reference<'a, Field<V, T>> {
     pub fn name(self) -> String {
         self.emanation.fields.lock()[self.value.raw.0].name.clone()
     }
+    pub fn named(self, name: &str) -> Self {
+        self.emanation.fields.lock()[self.value.raw.0].name = name.to_string();
+        self
+    }
 
     pub fn bind_fn(self, f: impl Fn(&Element<T>) -> V + 'static) -> Self
     where
@@ -167,7 +177,7 @@ impl<'a, V: Any, T: EmanationType> Reference<'a, Field<V, T>> {
     ) -> Reference<'a, Field<W, T>> {
         self.emanation
             .create_field(&format!(
-                "{} mapped {} -> {}",
+                "{}-mapped({} -> {})",
                 self.name(),
                 pretty_type_name::<V>(),
                 pretty_type_name::<W>()

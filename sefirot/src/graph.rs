@@ -95,6 +95,10 @@ impl<'a> NodeData<'a> {
     }
 }
 
+#[cfg_attr(
+    feature = "bevy",
+    derive(bevy_ecs::prelude::Resource, bevy_ecs::prelude::Component)
+)]
 pub struct ComputeGraph<'a> {
     nodes: Arena<Node<'a>>,
     root: NodeHandle,

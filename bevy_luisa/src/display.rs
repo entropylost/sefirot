@@ -85,9 +85,9 @@ pub fn present_swapchain_and_clear(
     clear_color: Option<Res<ClearColor>>,
     query: Query<(&LuisaSwapchain, &DisplayTexture, &Window)>,
 ) {
+    let scope = device.default_stream().scope();
     for (swapchain, display, window) in query.iter() {
-        let scope = device.default_stream().scope();
-        scope.present(&swapchain, &display);
+        scope.present(swapchain, display);
         scope.submit([clear_display_kernel.dispatch_async(
             [
                 window.resolution.physical_width(),
@@ -95,7 +95,7 @@ pub fn present_swapchain_and_clear(
                 1,
             ],
             &display.0,
-            &clear_color.as_deref().map(|x| *x).unwrap_or_default().0,
+            &clear_color.as_deref().copied().unwrap_or_default().0,
         )]);
     }
 }
