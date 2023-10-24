@@ -148,7 +148,7 @@ impl<'a, V: Any, T: EmanationType> Reference<'a, Field<V, T>> {
             .is_some()
     }
     pub fn can_write(self) -> bool {
-        self.accessor().map(|x| x.can_write()).unwrap_or(false)
+        self.accessor().map_or(false, |x| x.can_write())
     }
     pub fn name(self) -> String {
         self.emanation.fields.lock()[self.value.raw.0].name.clone()

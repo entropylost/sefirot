@@ -2076,6 +2076,7 @@ dependencies = [
 name = "sefirot"
 version = "0.1.0"
 dependencies = [
+ "ahash",
  "bevy_ecs",
  "generational-arena",
  "luisa_compute",
@@ -2084,6 +2085,7 @@ dependencies = [
  "pretty-type-name",
  "rand",
  "sefirot_macro",
+ "smallvec",
  "static_assertions",
  "take_mut",
  "tokio",

@@ -80,7 +80,7 @@ impl<'a: 'b, 'b, T: EmanationType, P: EmanationType> Reference<'a, &'b ArrayPart
                 &self.emanation.on(self.partition_size).buffer().unwrap(),
                 self.partition_size_host.clone(),
             ));
-            **graph.container().children_ordered(&[zero, update, copy])
+            *graph.container().children_ordered(&[zero, update, copy])
         }
     }
 }

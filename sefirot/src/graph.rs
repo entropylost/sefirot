@@ -1,12 +1,35 @@
 use std::any::Any;
 use std::collections::{HashMap, HashSet};
-use std::ops::Deref;
+use std::mem::transmute;
+use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
 use generational_arena::{Arena, Index};
 
 use crate::element::Context;
 use crate::prelude::*;
+
+pub use self::tag::Tag;
+use self::tag::TagMap;
+
+pub mod tag;
+
+pub trait AsNodeHandle: Copy + 'static {
+    fn into_node_handle(self, graph: &ComputeGraph<'_>) -> NodeHandle;
+}
+impl AsNodeHandle for NodeHandle {
+    fn into_node_handle(self, _graph: &ComputeGraph<'_>) -> NodeHandle {
+        self
+    }
+}
+impl<T> AsNodeHandle for T
+where
+    T: Tag,
+{
+    fn into_node_handle(self, graph: &ComputeGraph<'_>) -> NodeHandle {
+        *graph.tags.get(self).unwrap()
+    }
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct NodeHandle(Index);
@@ -100,11 +123,30 @@ impl<'a> NodeData<'a> {
     derive(bevy_ecs::prelude::Resource, bevy_ecs::prelude::Component)
 )]
 pub struct ComputeGraph<'a> {
+    tags: TagMap<NodeHandle>,
     nodes: Arena<Node<'a>>,
     root: NodeHandle,
     device: Device,
     // Resources to be released after the graph is executed.
     release: Vec<Box<dyn Any + Send>>,
+    // Variable for storing the context.
+    // SAFETY: This is only ever accessed using a mutable borrow with a lifetime less than the graph's lifetime.
+    context: Option<GraphContext<'a>>,
+}
+impl<'a> Deref for ComputeGraph<'a> {
+    type Target = GraphContext<'a>;
+    fn deref(&self) -> &Self::Target {
+        unreachable!("GraphContext is only usable using `&mut`, so this should never be called.")
+    }
+}
+impl<'a> DerefMut for ComputeGraph<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.context = Some(GraphContext {
+            root: self.root,
+            graph: unsafe { transmute::<&mut Self, &'a mut Self>(self) },
+        });
+        self.context.as_mut().unwrap()
+    }
 }
 impl<'a> ComputeGraph<'a> {
     pub fn new(device: &Device) -> Self {
@@ -118,10 +160,12 @@ impl<'a> ComputeGraph<'a> {
             }),
         }));
         Self {
+            tags: TagMap::new(),
             nodes,
             root,
             device: device.clone(),
             release: Vec::new(),
+            context: None,
         }
     }
 
@@ -261,12 +305,21 @@ impl<'a> ComputeGraph<'a> {
             drop(self.release);
         });
     }
+}
+
+pub struct GraphContext<'a> {
+    root: NodeHandle,
+    graph: &'a mut ComputeGraph<'a>,
+}
+impl<'a> GraphContext<'a> {
+    pub fn graph(&mut self) -> &mut ComputeGraph<'a> {
+        self.graph
+    }
     pub fn add<'b>(&'b mut self, f: impl AddToComputeGraph<'a>) -> NodeRef<'b, 'a> {
-        let id = f.add(self);
+        let id = f.add(self.graph);
         let root = self.root;
-        let mut node = self.on(id);
-        node.parent(root);
-        node
+        let node = self.on(id);
+        node.parent(root)
     }
     pub fn fence<'b>(&'b mut self) -> NodeRef<'b, 'a> {
         self.add(NodeData::fence())
@@ -278,18 +331,19 @@ impl<'a> ComputeGraph<'a> {
         self.root
     }
     pub fn device(&self) -> &Device {
-        &self.device
+        &self.graph.device
     }
-    pub fn remove(&mut self, handle: NodeHandle) -> Option<Node<'a>> {
-        if let Some(node) = self.nodes.remove(handle.0) {
+    pub fn remove(&mut self, handle: impl AsNodeHandle) -> Option<Node<'a>> {
+        let handle = handle.into_node_handle(self.graph);
+        if let Some(node) = self.graph.nodes.remove(handle.0) {
             for incoming in &node.incoming {
-                self.nodes[incoming.0].outgoing.remove(&handle);
+                self.graph.nodes[incoming.0].outgoing.remove(&handle);
             }
             for outgoing in &node.outgoing {
-                self.nodes[outgoing.0].incoming.remove(&handle);
+                self.graph.nodes[outgoing.0].incoming.remove(&handle);
             }
             if let Some(parent) = node.parent {
-                self.nodes[parent.0]
+                self.graph.nodes[parent.0]
                     .data
                     .container_mut()
                     .unwrap()
@@ -301,17 +355,20 @@ impl<'a> ComputeGraph<'a> {
             None
         }
     }
-    pub fn on<'b>(&'b mut self, handle: NodeHandle) -> NodeRef<'b, 'a> {
+    pub fn on<'b>(&'b mut self, handle: impl AsNodeHandle) -> NodeRef<'b, 'a> {
         NodeRef {
-            handle,
-            graph: self,
+            handle: handle.into_node_handle(self.graph),
+            context: self,
         }
+    }
+    pub fn handle(&self, tag: impl Tag) -> NodeHandle {
+        *self.graph.tags.get(tag).unwrap()
     }
 }
 
-pub struct NodeRef<'b, 'a: 'b> {
+pub struct NodeRef<'b, 'a> {
     handle: NodeHandle,
-    graph: &'b mut ComputeGraph<'a>,
+    context: &'b mut GraphContext<'a>,
 }
 impl Deref for NodeRef<'_, '_> {
     type Target = NodeHandle;
@@ -319,80 +376,116 @@ impl Deref for NodeRef<'_, '_> {
         &self.handle
     }
 }
-impl NodeRef<'_, '_> {
-    pub fn before(&mut self, node: NodeHandle) -> &mut Self {
-        self.graph.nodes[self.handle.0].outgoing.insert(node);
-        self.graph.nodes[node.0].incoming.insert(self.handle);
+impl<'a> NodeRef<'_, 'a> {
+    pub fn tag(self, tag: impl Tag + Copy) -> Self {
+        self.context.graph.tags.insert(tag, self.handle);
         self
     }
-    pub fn after(&mut self, node: NodeHandle) -> &mut Self {
-        self.graph.nodes[self.handle.0].incoming.insert(node);
-        self.graph.nodes[node.0].outgoing.insert(self.handle);
+    pub fn before(self, node: impl AsNodeHandle) -> Self {
+        let node = node.into_node_handle(self.context.graph);
+        self.context.graph.nodes[self.handle.0]
+            .outgoing
+            .insert(node);
+        self.context.graph.nodes[node.0]
+            .incoming
+            .insert(self.handle);
         self
     }
-    pub fn before_all<'a>(&mut self, nodes: impl IntoIterator<Item = &'a NodeHandle>) -> &mut Self {
+    pub fn after(self, node: impl AsNodeHandle) -> Self {
+        let node = node.into_node_handle(self.context.graph);
+        self.context.graph.nodes[self.handle.0]
+            .incoming
+            .insert(node);
+        self.context.graph.nodes[node.0]
+            .outgoing
+            .insert(self.handle);
+        self
+    }
+    pub fn before_all<'b>(
+        mut self,
+        nodes: impl IntoIterator<Item = &'b impl AsNodeHandle>,
+    ) -> Self {
         for node in nodes {
-            self.before(*node);
+            self = self.before(*node);
         }
         self
     }
-    pub fn after_all<'a>(&mut self, nodes: impl IntoIterator<Item = &'a NodeHandle>) -> &mut Self {
+    pub fn after_all<'b>(mut self, nodes: impl IntoIterator<Item = &'b impl AsNodeHandle>) -> Self {
         for node in nodes {
-            self.after(*node);
+            self = self.after(*node);
         }
         self
     }
-    pub fn child(&mut self, node: NodeHandle) -> &mut Self {
-        self.graph.on(node).detach();
-        let ContainerNode { nodes } = self.graph.nodes[self.handle.0]
+    pub fn child(self, node: impl AsNodeHandle) -> Self {
+        let node = node.into_node_handle(self.context.graph);
+        self.context.on(node).detach();
+        let ContainerNode { nodes } = self.context.graph.nodes[self.handle.0]
             .data
             .container_mut()
             .unwrap();
         nodes.insert(node);
-        self.graph.nodes[node.0].parent = Some(self.handle);
+        self.context.graph.nodes[node.0].parent = Some(self.handle);
         self
     }
-    pub fn children<'a>(&mut self, nodes: impl IntoIterator<Item = &'a NodeHandle>) -> &mut Self {
+    pub fn children<'b>(mut self, nodes: impl IntoIterator<Item = &'b impl AsNodeHandle>) -> Self {
         for node in nodes {
-            self.child(*node);
+            self = self.child(*node);
         }
         self
     }
-    pub fn children_ordered<'a>(
-        &mut self,
-        nodes: impl IntoIterator<Item = &'a NodeHandle>,
-    ) -> &mut Self {
+    pub fn children_ordered<'b>(
+        mut self,
+        nodes: impl IntoIterator<Item = &'b impl AsNodeHandle>,
+    ) -> Self {
         let mut last_node = None;
         for node in nodes {
             if let Some(last_node) = last_node {
-                self.graph.on(*node).after(last_node);
+                self.context.on(*node).after(last_node);
             }
-            self.child(*node);
+            self = self.child(*node);
             last_node = Some(*node);
         }
         self
     }
-    pub fn detach(&mut self) -> &mut Self {
-        if let Some(parent) = self.graph.nodes[self.handle.0].parent {
-            self.graph.nodes[parent.0]
+    pub fn detach(self) -> Self {
+        if let Some(parent) = self.context.graph.nodes[self.handle.0].parent {
+            self.context.graph.nodes[parent.0]
                 .data
                 .container_mut()
                 .unwrap()
                 .nodes
                 .remove(&self.handle);
-            self.graph.nodes[self.handle.0].parent = None;
+            self.context.graph.nodes[self.handle.0].parent = None;
         }
         self
     }
-    pub fn parent(&mut self, node: NodeHandle) -> &mut Self {
-        self.detach();
-        let ContainerNode { nodes } = self.graph.nodes[node.0].data.container_mut().unwrap();
+    pub fn parent(mut self, node: impl AsNodeHandle) -> Self {
+        let node = node.into_node_handle(self.context.graph);
+        self = self.detach();
+        let ContainerNode { nodes } = self.context.graph.nodes[node.0]
+            .data
+            .container_mut()
+            .unwrap();
         nodes.insert(self.handle);
-        self.graph.nodes[self.handle.0].parent = Some(node);
+        self.context.graph.nodes[self.handle.0].parent = Some(node);
+        self
+    }
+    pub fn scope(self, f: impl FnOnce(&mut GraphContext<'a>)) -> Self {
+        assert!(self.context.graph.nodes[self.handle.0]
+            .data
+            .container_ref()
+            .is_some());
+        let prev_root = self.context.root;
+        self.context.root = self.handle;
+        f(self.context);
+        self.context.root = prev_root;
         self
     }
 }
 
+/// A trait representing something that can be added to a [`ComputeGraph`], returning a [`NodeHandle`]
+/// for the node that was added. Note that [`add`] might add multiple nodes, as long as they're
+/// all children of the return node.
 pub trait AddToComputeGraph<'a> {
     fn add<'b>(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle;
 }
