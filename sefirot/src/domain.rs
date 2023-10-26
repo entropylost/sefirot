@@ -38,8 +38,9 @@ impl<T: EmanationType> Emanation<T> {
 
 pub trait IndexDomain: IndexEmanation<Self::I> {
     type I;
+    type A;
     fn get_index(&self) -> Self::I;
-    fn dispatch_size(&self) -> [u32; 3];
+    fn dispatch_size(&self, args: Self::A) -> [u32; 3];
 }
 
 impl<X> Domain for X
@@ -47,16 +48,22 @@ where
     X: IndexDomain,
 {
     type T = X::T;
+    type A = X::A;
     fn before_record(&self, element: &Element<X::T>) {
         let index = self.get_index();
         self.bind_fields(index, element);
     }
-    fn dispatch(&self, args: DispatchArgs) {
-        let dispatch_size = self.dispatch_size();
+    fn dispatch(&self, domain_args: X::A, args: DispatchArgs) {
+        let dispatch_size = self.dispatch_size(domain_args);
         (args.call_kernel)(dispatch_size);
     }
-    fn dispatch_async(&self, graph: &mut ComputeGraph<'_>, args: DispatchArgs) -> NodeHandle {
-        let dispatch_size = self.dispatch_size();
+    fn dispatch_async(
+        &self,
+        graph: &mut ComputeGraph<'_>,
+        domain_args: X::A,
+        args: DispatchArgs,
+    ) -> NodeHandle {
+        let dispatch_size = self.dispatch_size(domain_args);
         *graph.add(NodeData::Command(CommandNode {
             context: args.context.clone(),
             command: (args.call_kernel_async)(dispatch_size),
@@ -67,24 +74,33 @@ where
 
 pub trait Domain {
     type T: EmanationType;
+    type A;
     fn before_record(&self, element: &Element<Self::T>);
-    fn dispatch(&self, args: DispatchArgs);
-    fn dispatch_async(&self, graph: &mut ComputeGraph<'_>, args: DispatchArgs) -> NodeHandle;
+    fn dispatch(&self, domain_args: Self::A, args: DispatchArgs);
+    fn dispatch_async(
+        &self,
+        graph: &mut ComputeGraph<'_>,
+        domain_args: Self::A,
+        args: DispatchArgs,
+    ) -> NodeHandle;
 }
 
 pub trait AsBoxedDomain {
     type T: EmanationType;
-    fn into_boxed_domain(self) -> Box<dyn Domain<T = Self::T>>;
+    type A;
+    fn into_boxed_domain(self) -> Box<dyn Domain<T = Self::T, A = Self::A>>;
 }
-impl<T: EmanationType> AsBoxedDomain for Box<dyn Domain<T = T>> {
+impl<T: EmanationType, A> AsBoxedDomain for Box<dyn Domain<T = T, A = A>> {
     type T = T;
-    fn into_boxed_domain(self) -> Box<dyn Domain<T = T>> {
+    type A = A;
+    fn into_boxed_domain(self) -> Box<dyn Domain<T = T, A = A>> {
         self
     }
 }
-impl<T: EmanationType, D: Domain<T = T> + 'static> AsBoxedDomain for D {
+impl<T: EmanationType, A, D: Domain<T = T, A = A> + 'static> AsBoxedDomain for D {
     type T = T;
-    fn into_boxed_domain(self) -> Box<dyn Domain<T = T>> {
+    type A = A;
+    fn into_boxed_domain(self) -> Box<dyn Domain<T = T, A = A>> {
         Box::new(self)
     }
 }

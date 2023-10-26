@@ -4,13 +4,13 @@ use super::*;
 
 pub type LuisaKernel<S> = luisa::runtime::Kernel<<S as KernelSignature>::LuisaSignature>;
 
-pub struct Kernel<T: EmanationType, S: KernelSignature> {
-    pub(crate) domain: Box<dyn Domain<T = T>>,
+pub struct Kernel<T: EmanationType, S: KernelSignature, A = ()> {
+    pub(crate) domain: Box<dyn Domain<T = T, A = A>>,
     pub(crate) raw: LuisaKernel<S>,
     pub(crate) context: Arc<Context>,
     pub(crate) debug_name: Option<String>,
 }
-impl<T: EmanationType, S: KernelSignature> Kernel<T, S> {
+impl<T: EmanationType, S: KernelSignature, A> Kernel<T, S, A> {
     pub fn with_name(mut self, name: impl AsRef<str>) -> Self {
         self.debug_name = Some(name.as_ref().to_string());
         self
@@ -20,18 +20,41 @@ impl<T: EmanationType, S: KernelSignature> Kernel<T, S> {
 impl<T: EmanationType> Emanation<T> {
     pub fn build_kernel<F: KernelSignature>(
         &self,
-        domain: impl AsBoxedDomain<T = T>,
+        domain: impl AsBoxedDomain<T = T, A = ()>,
         f: F::Function<'_, T>,
-    ) -> Kernel<T, F> {
-        self.build_kernel_with_options(Default::default(), domain, f)
+    ) -> Kernel<T, F, ()> {
+        self.build_kernel_with_domain_args(domain, f)
     }
-
     pub fn build_kernel_with_options<F: KernelSignature>(
         &self,
         options: KernelBuildOptions,
-        domain: impl AsBoxedDomain<T = T>,
+        domain: impl AsBoxedDomain<T = T, A = ()>,
         f: F::Function<'_, T>,
-    ) -> Kernel<T, F> {
+    ) -> Kernel<T, F, ()> {
+        self.build_kernel_with_options_and_domain_args(options, domain, f)
+    }
+
+    pub fn build_kernel_with_domain_args<F: KernelSignature, A>(
+        &self,
+        domain: impl AsBoxedDomain<T = T, A = A>,
+        f: F::Function<'_, T>,
+    ) -> Kernel<T, F, A> {
+        self.build_kernel_with_options_and_domain_args(
+            KernelBuildOptions {
+                async_compile: true,
+                ..Default::default()
+            },
+            domain,
+            f,
+        )
+    }
+
+    pub fn build_kernel_with_options_and_domain_args<F: KernelSignature, A>(
+        &self,
+        options: KernelBuildOptions,
+        domain: impl AsBoxedDomain<T = T, A = A>,
+        f: F::Function<'_, T>,
+    ) -> Kernel<T, F, A> {
         let domain = domain.into_boxed_domain();
         let context = Arc::new(Context::new());
         let mut builder = KernelBuilder::new(Some(self.device.clone()), true);
@@ -71,6 +94,14 @@ macro_rules! impl_kernel {
     () => {
         impl<T: EmanationType> Kernel<T, fn()> {
             pub fn dispatch_blocking(&self) {
+                self.dispatch_blocking_with_domain_args(())
+            }
+            pub fn dispatch<'a: 'b, 'b>(&'b self) -> impl AddToComputeGraph<'a> + 'b {
+                self.dispatch_with_domain_args(())
+            }
+        }
+        impl<T: EmanationType, A> Kernel<T, fn(), A> {
+            pub fn dispatch_blocking_with_domain_args(&self, domain_args: A) {
                 let args = DispatchArgs {
                     context: self.context.clone(),
                     call_kernel: &|dispatch_size| self.raw.dispatch(dispatch_size, &*self.context),
@@ -79,9 +110,9 @@ macro_rules! impl_kernel {
                     },
                     debug_name: self.debug_name.clone(),
                 };
-                self.domain.dispatch(args);
+                self.domain.dispatch(domain_args, args);
             }
-            pub fn dispatch<'a: 'b, 'b>(&'b self) -> impl AddToComputeGraph<'a> + 'b {
+            pub fn dispatch_with_domain_args<'a: 'b, 'b>(&'b self, domain_args: A) -> impl AddToComputeGraph<'a> + 'b {
                 let context = self.context.clone();
 
                 move |graph: &mut ComputeGraph<'a>| {
@@ -93,7 +124,7 @@ macro_rules! impl_kernel {
                         },
                         debug_name: self.debug_name.clone(),
                     };
-                    self.domain.dispatch_async(graph, args)
+                    self.domain.dispatch_async(graph, domain_args, args)
                 }
             }
         }
@@ -101,9 +132,24 @@ macro_rules! impl_kernel {
     ($T0:ident: $S0:ident $(,$Tn:ident: $Sn:ident)*) => {
         impl<T: EmanationType, $T0: KernelArg + 'static $(, $Tn: KernelArg + 'static)*> Kernel<T, fn($T0 $(, $Tn)*)> {
             #[allow(non_snake_case)]
+            #[allow(clippy::too_many_arguments)]
+            pub fn dispatch_blocking<$S0: AsKernelArg<Output = $T0> $(, $Sn: AsKernelArg<Output = $Tn>)*>
+                (&self, $S0: &$S0 $(, $Sn: &$Sn)*) {
+                self.dispatch_blocking_with_domain_args((), $S0 $(, $Sn)*)
+            }
+            #[allow(non_snake_case)]
+            #[allow(clippy::too_many_arguments)]
+            pub fn dispatch<'a: 'b, 'b, $S0: AsKernelArg<Output = $T0> $(, $Sn: AsKernelArg<Output = $Tn>)*>
+                (&'b self, $S0: &'b $S0 $(, $Sn: &'b $Sn)*) -> impl AddToComputeGraph<'a> + 'b {
+                self.dispatch_with_domain_args((), $S0 $(, $Sn)*)
+            }
+        }
+        impl<T: EmanationType, A, $T0: KernelArg + 'static $(, $Tn: KernelArg + 'static)*> Kernel<T, fn($T0 $(, $Tn)*), A> {
+            #[allow(non_snake_case)]
             #[allow(unused_variables)]
             #[allow(clippy::too_many_arguments)]
-            pub fn dispatch_blocking<$S0: AsKernelArg<Output = $T0> $(, $Sn: AsKernelArg<Output = $Tn>)*>(&self, $S0: &$S0 $(, $Sn: &$Sn)*) {
+            pub fn dispatch_blocking_with_domain_args<$S0: AsKernelArg<Output = $T0> $(, $Sn: AsKernelArg<Output = $Tn>)*>
+                (&self, domain_args: A, $S0: &$S0 $(, $Sn: &$Sn)*) {
                 let args = DispatchArgs {
                     context: self.context.clone(),
                     call_kernel: &|dispatch_size| self.raw.dispatch(dispatch_size, $S0, $($Sn,)* &*self.context),
@@ -112,13 +158,13 @@ macro_rules! impl_kernel {
                     },
                     debug_name: self.debug_name.clone(),
                 };
-                self.domain.dispatch(args);
+                self.domain.dispatch(domain_args, args);
             }
             #[allow(non_snake_case)]
             #[allow(unused_variables)]
             #[allow(clippy::too_many_arguments)]
-            pub fn dispatch<'a: 'b, 'b, $S0: AsKernelArg<Output = $T0> $(, $Sn: AsKernelArg<Output = $Tn>)*>
-                (&'b self, $S0: &'b $S0 $(, $Sn: &'b $Sn)*) -> impl AddToComputeGraph<'a> + 'b {
+            pub fn dispatch_with_domain_args<'a: 'b, 'b, $S0: AsKernelArg<Output = $T0> $(, $Sn: AsKernelArg<Output = $Tn>)*>
+                (&'b self, domain_args: A, $S0: &'b $S0 $(, $Sn: &'b $Sn)*) -> impl AddToComputeGraph<'a> + 'b {
                 let context = self.context.clone();
                 move |graph: &mut ComputeGraph<'a>| {
                     let args = DispatchArgs {
@@ -129,7 +175,7 @@ macro_rules! impl_kernel {
                         },
                         debug_name: self.debug_name.clone(),
                     };
-                    self.domain.dispatch_async(graph, args)
+                    self.domain.dispatch_async(graph, domain_args, args)
                 }
             }
         }

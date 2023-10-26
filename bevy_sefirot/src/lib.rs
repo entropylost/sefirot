@@ -7,6 +7,7 @@ pub use bevy_sefirot_macro::init_kernel;
 
 pub mod prelude {
     pub use bevy_luisa::{LuisaDevice, LuisaPlugin};
+    pub use bevy_sefirot_macro::init_kernel;
     pub use sefirot::prelude::*;
     pub use {bevy_luisa, sefirot};
 }

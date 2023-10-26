@@ -2,6 +2,7 @@ use crate::domain::{IndexDomain, IndexEmanation};
 use crate::graph::{AddToComputeGraph, ComputeGraph, CopyFromBuffer};
 
 use super::array::ArrayIndex;
+use super::constant::ConstantAccessor;
 use super::slice::Slice;
 use super::*;
 use luisa::lang::types::AtomicRef;
@@ -28,12 +29,40 @@ pub struct ArrayPartition<T: EmanationType, P: EmanationType> {
     update_lists_kernel: Kernel<T, fn()>,
     zero_lists_kernel: Kernel<P, fn()>,
 }
+
+#[derive(Debug, Clone)]
+pub struct DynArrayPartitionDomain<T: EmanationType> {
+    partition: Field<Expr<u32>, T>,
+    partition_ref: Field<Expr<u32>, T>,
+    sizes: Arc<Mutex<Vec<u32>>>,
+    index: ConstantAccessor<u32, T>,
+}
+impl<T: EmanationType> IndexEmanation<Expr<u32>> for DynArrayPartitionDomain<T> {
+    type T = T;
+    fn bind_fields(&self, index: Expr<u32>, element: &Element<Self::T>) {
+        element.bind(self.partition, self.index.clone());
+
+        element.bind(self.partition_ref, ValueAccessor(index));
+    }
+}
+impl<T: EmanationType> IndexDomain for DynArrayPartitionDomain<T> {
+    type I = Expr<u32>;
+    type A = u32;
+    fn get_index(&self) -> Self::I {
+        dispatch_size().x
+    }
+    fn dispatch_size(&self, index: u32) -> [u32; 3] {
+        [self.sizes.blocking_lock()[index as usize], 1, 1]
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct ArrayPartitionDomain<T: EmanationType> {
     const_partition: Field<u32, T>,
     partition: Field<Expr<u32>, T>,
     partition_ref: Field<Expr<u32>, T>,
+    sizes: Arc<Mutex<Vec<u32>>>,
     index: u32,
-    size: u32,
 }
 impl<T: EmanationType> IndexEmanation<Expr<u32>> for ArrayPartitionDomain<T> {
     type T = T;
@@ -50,21 +79,32 @@ impl<T: EmanationType> IndexEmanation<Expr<u32>> for ArrayPartitionDomain<T> {
 }
 impl<T: EmanationType> IndexDomain for ArrayPartitionDomain<T> {
     type I = Expr<u32>;
+    type A = ();
     fn get_index(&self) -> Self::I {
         dispatch_size().x
     }
-    fn dispatch_size(&self) -> [u32; 3] {
-        [self.size, 1, 1]
+    fn dispatch_size(&self, _: ()) -> [u32; 3] {
+        [self.sizes.blocking_lock()[self.index as usize], 1, 1]
     }
 }
 impl<T: EmanationType, P: EmanationType> ArrayPartition<T, P> {
-    pub fn index(&self, index: u32) -> ArrayPartitionDomain<T> {
+    /// Creates a domain for a partition with a kernel-constant index.
+    pub fn select(&self, index: u32) -> ArrayPartitionDomain<T> {
         ArrayPartitionDomain {
             const_partition: self.const_partition,
             partition: self.partition,
             partition_ref: self.partition_ref,
+            sizes: self.partition_size_host.clone(),
             index,
-            size: self.partition_size_host.blocking_lock()[index as usize],
+        }
+    }
+    /// Creates a domain for a partition with an index that might vary between invocations.
+    pub fn select_dyn(&self) -> DynArrayPartitionDomain<T> {
+        DynArrayPartitionDomain {
+            partition: self.partition,
+            partition_ref: self.partition_ref,
+            sizes: self.partition_size_host.clone(),
+            index: ConstantAccessor::new(0),
         }
     }
 }

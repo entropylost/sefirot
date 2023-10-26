@@ -84,7 +84,11 @@ impl<V: Value, T: EmanationType> Reference<'_, Field<Expr<V>, T>> {
         let texture = self
             .device()
             .create_tex2d(storage, index.size[0], index.size[1], 1);
-        let accessor = Tex2dAccessor { index, texture };
+        let accessor = Tex2dAccessor {
+            index,
+            texture: texture.view(0),
+            handle: Some(texture),
+        };
         self.bind(accessor)
     }
 }
@@ -111,10 +115,11 @@ impl<T: EmanationType> IndexEmanation<Expr<u32>> for ArrayIndex<T> {
 }
 impl<T: EmanationType> IndexDomain for ArrayIndex<T> {
     type I = Expr<u32>;
+    type A = ();
     fn get_index(&self) -> Self::I {
         dispatch_id().x
     }
-    fn dispatch_size(&self) -> [u32; 3] {
+    fn dispatch_size(&self, _: ()) -> [u32; 3] {
         [self.size, 1, 1]
     }
 }
@@ -138,10 +143,11 @@ impl<T: EmanationType> IndexEmanation<Expr<Vec2<u32>>> for ArrayIndex2d<T> {
 }
 impl<T: EmanationType> IndexDomain for ArrayIndex2d<T> {
     type I = Expr<Vec2<u32>>;
+    type A = ();
     fn get_index(&self) -> Self::I {
         dispatch_id().xy()
     }
-    fn dispatch_size(&self) -> [u32; 3] {
+    fn dispatch_size(&self, _: ()) -> [u32; 3] {
         [self.size[0], self.size[1], 1]
     }
 }
@@ -286,7 +292,9 @@ impl<'a, V: Value, T: EmanationType> Reference<'a, Field<Expr<V>, T>> {
 
 pub struct Tex2dAccessor<V: IoTexel, T: EmanationType> {
     pub index: ArrayIndex2d<T>,
-    pub texture: Tex2d<V>,
+    pub texture: Tex2dView<V>,
+    /// Used to prevent the buffer from being dropped.
+    pub handle: Option<Tex2d<V>>,
 }
 impl<V: IoTexel, T: EmanationType> Accessor<T> for Tex2dAccessor<V, T> {
     type V = Expr<V>;
@@ -296,7 +304,7 @@ impl<V: IoTexel, T: EmanationType> Accessor<T> for Tex2dAccessor<V, T> {
         if let Some(cache) = self.get_cache(element, field) {
             Ok(cache.load())
         } else {
-            let value = self.texture.read(element.get(self.index.field)?);
+            let value = self.texture.var().read(element.get(self.index.field)?);
             self.insert_cache(element, field, value.var());
             Ok(value)
         }
@@ -316,7 +324,7 @@ impl<V: IoTexel, T: EmanationType> Accessor<T> for Tex2dAccessor<V, T> {
     }
 
     fn save(&self, element: &Element<T>, field: Field<Self::V, T>) {
-        self.texture.write(
+        self.texture.var().write(
             element.get(self.index.field).unwrap(),
             self.get_cache(element, field).unwrap().load(),
         );

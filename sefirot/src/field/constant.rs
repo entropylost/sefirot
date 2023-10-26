@@ -4,9 +4,11 @@ use parking_lot::Mutex;
 
 use super::*;
 
+#[derive(Debug, Clone)]
 pub struct ConstantAccessor<V: Value + Send, T: EmanationType> {
     pub value: Arc<Mutex<V>>,
-    _marker: PhantomData<T>,
+    #[doc(hidden)]
+    pub _marker: PhantomData<T>,
 }
 
 impl<V: Value + Send, T: EmanationType> ConstantAccessor<V, T> {
