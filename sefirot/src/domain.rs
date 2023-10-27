@@ -45,7 +45,7 @@ pub trait IndexDomain: IndexEmanation<Self::I> {
 
 impl<X> Domain for X
 where
-    X: IndexDomain,
+    X: IndexDomain + Send + Sync,
 {
     type T = X::T;
     type A = X::A;
@@ -72,7 +72,7 @@ where
     }
 }
 
-pub trait Domain {
+pub trait Domain: Send + Sync {
     type T: EmanationType;
     type A;
     fn before_record(&self, element: &Element<Self::T>);

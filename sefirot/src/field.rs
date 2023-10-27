@@ -108,7 +108,7 @@ impl<V: Any, T: EmanationType> CanReference for Field<V, T> {
 }
 impl<'a, V: Any, T: EmanationType> Reference<'a, Field<V, T>> {
     /// Binds an accessor to a [`Field`], potentially allowing read and write access to it.
-    pub fn bind(self, accessor: impl Accessor<T, V = V>) -> Self {
+    pub fn bind(self, accessor: impl Accessor<T, V = V> + Send + Sync) -> Self {
         let a = &mut self.emanation.fields.lock()[self.value.raw.0].accessor;
         if a.is_some() {
             panic!("Cannot bind accessor to already-bound field. If this is intentional, use `bind_override` instead.");
@@ -116,7 +116,7 @@ impl<'a, V: Any, T: EmanationType> Reference<'a, Field<V, T>> {
         *a = Some(Arc::new(accessor));
         self
     }
-    pub fn try_bind(self, accessor: impl Accessor<T, V = V>) -> Result<Self, Self> {
+    pub fn try_bind(self, accessor: impl Accessor<T, V = V> + Send + Sync) -> Result<Self, Self> {
         if self.emanation.fields.lock()[self.value.raw.0]
             .accessor
             .is_some()
@@ -127,17 +127,20 @@ impl<'a, V: Any, T: EmanationType> Reference<'a, Field<V, T>> {
             Ok(self)
         }
     }
-    pub fn bind_override(self, accessor: impl Accessor<T, V = V>) -> Self {
+    pub fn bind_override(self, accessor: impl Accessor<T, V = V> + Send + Sync) -> Self {
         self.emanation.fields.lock()[self.value.raw.0].accessor = Some(Arc::new(accessor));
         self
     }
     /// Binds an accessor to this field, returning the accessor. Equivalent to `.bind(accessor).accessor().unwrap()`.
-    pub fn bind_accessor(self, accessor: impl Accessor<T, V = V>) -> Arc<dyn DynAccessor<T>> {
+    pub fn bind_accessor(
+        self,
+        accessor: impl Accessor<T, V = V> + Send + Sync,
+    ) -> Arc<dyn DynAccessor<T> + Send + Sync> {
         let accessor = Arc::new(accessor);
         self.emanation.fields.lock()[self.value.raw.0].accessor = Some(accessor.clone());
         accessor
     }
-    pub fn accessor(self) -> Option<Arc<dyn DynAccessor<T>>> {
+    pub fn accessor(self) -> Option<Arc<dyn DynAccessor<T> + Send + Sync>> {
         self.emanation.fields.lock()[self.value.raw.0]
             .accessor
             .clone()
@@ -158,7 +161,7 @@ impl<'a, V: Any, T: EmanationType> Reference<'a, Field<V, T>> {
         self
     }
 
-    pub fn bind_fn(self, f: impl Fn(&Element<T>) -> V + 'static) -> Self
+    pub fn bind_fn(self, f: impl Fn(&Element<T>) -> V + Send + Sync + 'static) -> Self
     where
         V: Clone,
     {
@@ -166,14 +169,14 @@ impl<'a, V: Any, T: EmanationType> Reference<'a, Field<V, T>> {
     }
     pub fn bind_value(self, v: V) -> Self
     where
-        V: Clone,
+        V: Clone + Send + Sync,
     {
         self.bind(ValueAccessor(v))
     }
 
     pub fn map<W: Clone + Any>(
         self,
-        f: impl Fn(V, &Element<T>) -> W + 'static,
+        f: impl Fn(V, &Element<T>) -> W + Send + Sync + 'static,
     ) -> Reference<'a, Field<W, T>> {
         self.emanation
             .create_field(&format!(
@@ -336,7 +339,7 @@ impl<V: Clone + Any, T: EmanationType> Accessor<T> for ValueAccessor<V> {
 
 pub struct FnAccessor<V: Clone + Any, F: Fn(&Element<T>) -> V + 'static, T: EmanationType> {
     f: F,
-    _marker: PhantomData<(V, T)>,
+    _marker: PhantomData<(fn() -> V, T)>,
 }
 impl<V: Clone + Any, F: Fn(&Element<T>) -> V + 'static, T: EmanationType> FnAccessor<V, F, T> {
     pub fn new(f: F) -> Self {

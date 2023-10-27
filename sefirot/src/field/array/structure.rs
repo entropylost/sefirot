@@ -107,7 +107,7 @@ struct CreateStructArrayField<'a, S: Structure, T: EmanationType> {
     emanation: &'a Emanation<T>,
     prefix: String,
     struct_field: Field<Expr<S>, T>,
-    struct_accessor: Weak<dyn DynAccessor<T>>,
+    struct_accessor: Weak<dyn DynAccessor<T> + Send + Sync>,
 }
 impl<S: Structure, T: EmanationType> ValueMapping<S> for CreateStructArrayField<'_, S, T> {
     type M = Field<Expr<__>, T>;
@@ -119,7 +119,7 @@ impl<S: Structure, T: EmanationType> ValueMapping<S> for CreateStructArrayField<
             .bind(StructArrayAccessor {
                 struct_field: self.struct_field,
                 struct_accessor: self.struct_accessor.clone(),
-                _marker: PhantomData::<Z>,
+                _marker: PhantomData::<fn() -> Z>,
             })
     }
 }
@@ -179,8 +179,8 @@ pub trait Structure: Value {
 
 struct StructArrayAccessor<Z: Selector<S>, S: Structure, T: EmanationType> {
     struct_field: Field<Expr<S>, T>,
-    struct_accessor: Weak<dyn DynAccessor<T>>,
-    _marker: PhantomData<Z>,
+    struct_accessor: Weak<dyn DynAccessor<T> + Send + Sync>,
+    _marker: PhantomData<fn() -> Z>,
 }
 
 impl<Z: Selector<S>, S: Structure, T: EmanationType> Accessor<T> for StructArrayAccessor<Z, S, T> {

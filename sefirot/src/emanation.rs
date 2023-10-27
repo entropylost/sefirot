@@ -22,7 +22,7 @@ pub struct RawFieldHandle(pub(crate) Index);
 pub(crate) struct RawField<T: EmanationType> {
     pub(crate) name: String,
     pub(crate) ty_name: String,
-    pub(crate) accessor: Option<Arc<dyn DynAccessor<T>>>,
+    pub(crate) accessor: Option<Arc<dyn DynAccessor<T> + Send + Sync>>,
 }
 impl<T: EmanationType> Debug for RawField<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -129,4 +129,17 @@ impl<'a, V: CanReference> Reference<'a, V> {
 
 pub trait CanReference: Copy {
     type T: EmanationType;
+}
+
+#[allow(dead_code)]
+mod tests {
+    use static_assertions::assert_impl_all;
+
+    use super::*;
+
+    #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+    struct Ty;
+    impl EmanationType for Ty {}
+
+    assert_impl_all!(Emanation<Ty>: Send, Sync);
 }
