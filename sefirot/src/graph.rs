@@ -1,5 +1,6 @@
 use std::any::Any;
 use std::collections::{HashMap, HashSet};
+use std::fmt::Debug;
 use std::mem::transmute;
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Exclusive};
@@ -35,6 +36,7 @@ where
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct NodeHandle(Index);
 
+#[derive(Debug)]
 pub struct Node<'a> {
     incoming: HashSet<NodeHandle>,
     outgoing: HashSet<NodeHandle>,
@@ -43,17 +45,28 @@ pub struct Node<'a> {
 }
 
 #[non_exhaustive]
+#[derive(Debug, Clone)]
 pub struct FenceNode;
+
 pub struct CommandNode<'a> {
     #[allow(dead_code)]
     pub(crate) context: Arc<Context>,
     pub command: Exclusive<Command<'a, 'a>>,
     pub debug_name: Option<String>,
 }
+impl Debug for CommandNode<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct(&format!("CommandNode({:?})", self.debug_name))
+            .finish()
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct ContainerNode {
     pub(crate) nodes: HashSet<NodeHandle>,
 }
 
+#[derive(Debug)]
 pub enum NodeData<'a> {
     Fence(FenceNode),
     Command(CommandNode<'a>),
@@ -135,6 +148,15 @@ pub struct ComputeGraph<'a> {
     context: Option<GraphContext<'a>>,
 }
 assert_impl_all!(ComputeGraph: Send, Sync);
+impl Debug for ComputeGraph<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ComputeGraph")
+            .field("tags", &self.tags)
+            .field("nodes", &self.nodes)
+            .field("root", &self.root)
+            .finish()
+    }
+}
 impl<'a> Deref for ComputeGraph<'a> {
     type Target = GraphContext<'a>;
     fn deref(&self) -> &Self::Target {

@@ -6,11 +6,13 @@ use smallvec::SmallVec;
 
 use super::*;
 
-pub trait Tag: Eq + Hash + Copy + Clone + Send + Sync + 'static {}
+// The `Debug` is necessary to have good `Debug` impls for `TagMap`.
+pub trait Tag: Debug + Eq + Hash + Copy + Clone + Send + Sync + 'static {}
 
 trait DynTag<H: Hasher + 'static = ahash::AHasher>: Send + Sync + 'static {
     fn hash(&self, hasher: &mut H) -> u64;
     fn type_id(&self) -> TypeId;
+    fn debug(&self) -> String;
     fn as_any(&self) -> &dyn Any;
     fn eq(&self, other: &dyn DynTag<H>) -> bool;
     fn clone_box(&self) -> Box<dyn DynTag<H>>;
@@ -25,6 +27,9 @@ where
     }
     fn type_id(&self) -> TypeId {
         TypeId::of::<X>()
+    }
+    fn debug(&self) -> String {
+        format!("{:?}", self)
     }
     fn as_any(&self) -> &dyn Any {
         self
@@ -45,6 +50,15 @@ pub struct TagMap<T: Clone + Eq + Hash, S: BuildHasher + 'static = RandomState> 
     state: S,
     tags: HashMap<T, Box<dyn DynTag<S::Hasher>>, S>,
     reverse_tags: HashMap<(u64, TypeId), SmallVec<[(Box<dyn DynTag<S::Hasher>>, T); 1]>, S>,
+}
+impl<T: Debug + Clone + Eq + Hash, S: BuildHasher + 'static> Debug for TagMap<T, S> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut st = f.debug_struct("TagMap");
+        for (value, tag) in &self.tags {
+            st.field(&tag.debug(), value);
+        }
+        st.finish()
+    }
 }
 impl<T: Clone + Eq + Hash, S: BuildHasher + Default + 'static> Default for TagMap<T, S> {
     fn default() -> Self {
