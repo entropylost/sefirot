@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use std::sync::{Arc, Exclusive};
 
 use parking_lot::Mutex;
 
@@ -66,7 +66,7 @@ where
         let dispatch_size = self.dispatch_size(domain_args);
         *graph.add(NodeData::Command(CommandNode {
             context: args.context.clone(),
-            command: (args.call_kernel_async)(dispatch_size),
+            command: Exclusive::new((args.call_kernel_async)(dispatch_size)),
             debug_name: args.debug_name.clone(),
         }))
     }

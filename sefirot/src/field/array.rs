@@ -162,7 +162,7 @@ impl<T: EmanationType> ArrayIndex2d<T> {
             "Morton indexing only supports power-of-two arrays."
         );
         assert!(
-            self.size[0] < 1 << 16,
+            self.size[0] <= 1 << 16,
             "Morton indexing only supports arrays with size < 65536."
         );
         let name = emanation.on(self.field).name() + "-morton";
@@ -283,10 +283,12 @@ impl<'a, V: Value, T: EmanationType> Reference<'a, Field<Expr<V>, T>> {
             .as_any()
             .downcast_ref::<BufferAccessor<V, T>>()
             .expect("Cannot create atomic reference to non-buffer field.");
-        self.emanation.create_field("").bind(AtomicBufferAccessor {
-            index: accessor.index,
-            buffer: accessor.buffer.clone(),
-        })
+        self.emanation
+            .create_field(&format!("{}-atomic", self.name()))
+            .bind(AtomicBufferAccessor {
+                index: accessor.index,
+                buffer: accessor.buffer.clone(),
+            })
     }
 }
 

@@ -8,7 +8,7 @@ use super::*;
 
 pub trait Tag: Eq + Hash + Copy + Clone + Send + Sync + 'static {}
 
-trait DynTag<H: Hasher + 'static = ahash::AHasher>: 'static {
+trait DynTag<H: Hasher + 'static = ahash::AHasher>: Send + Sync + 'static {
     fn hash(&self, hasher: &mut H) -> u64;
     fn type_id(&self) -> TypeId;
     fn as_any(&self) -> &dyn Any;

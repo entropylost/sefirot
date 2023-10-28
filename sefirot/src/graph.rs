@@ -2,9 +2,10 @@ use std::any::Any;
 use std::collections::{HashMap, HashSet};
 use std::mem::transmute;
 use std::ops::{Deref, DerefMut};
-use std::sync::Arc;
+use std::sync::{Arc, Exclusive};
 
 use generational_arena::{Arena, Index};
+use static_assertions::assert_impl_all;
 
 use crate::element::Context;
 use crate::prelude::*;
@@ -46,7 +47,7 @@ pub struct FenceNode;
 pub struct CommandNode<'a> {
     #[allow(dead_code)]
     pub(crate) context: Arc<Context>,
-    pub command: Command<'a, 'a>,
+    pub command: Exclusive<Command<'a, 'a>>,
     pub debug_name: Option<String>,
 }
 pub struct ContainerNode {
@@ -65,7 +66,7 @@ impl<'a> NodeData<'a> {
     pub fn command(command: Command<'a, 'a>, name: Option<&str>) -> Self {
         Self::Command(CommandNode {
             context: Arc::new(Context::new()),
-            command,
+            command: Exclusive::new(command),
             debug_name: name.map(|s| s.to_string()),
         })
     }
@@ -128,11 +129,12 @@ pub struct ComputeGraph<'a> {
     root: NodeHandle,
     device: Device,
     // Resources to be released after the graph is executed.
-    release: Vec<Box<dyn Any + Send>>,
+    release: Vec<Exclusive<Box<dyn Any + Send>>>,
     // Variable for storing the context.
     // SAFETY: This is only ever accessed using a mutable borrow with a lifetime less than the graph's lifetime.
     context: Option<GraphContext<'a>>,
 }
+assert_impl_all!(ComputeGraph: Send, Sync);
 impl<'a> Deref for ComputeGraph<'a> {
     type Target = GraphContext<'a>;
     fn deref(&self) -> &Self::Target {
@@ -167,6 +169,10 @@ impl<'a> ComputeGraph<'a> {
             release: Vec::new(),
             context: None,
         }
+    }
+    pub fn root(&mut self) -> NodeRef<'_, 'a> {
+        let r = self.root;
+        self.on(r)
     }
 
     fn depth_first(&self) -> Vec<NodeHandle> {
@@ -294,7 +300,7 @@ impl<'a> ComputeGraph<'a> {
             let node = self.nodes.remove(handle.0).unwrap();
             match node.data {
                 NodeData::Command(CommandNode { command, .. }) => {
-                    commands.push(command);
+                    commands.push(command.into_inner());
                 }
                 NodeData::Container(_) => unreachable!(),
                 NodeData::Fence(_) => {}
@@ -327,7 +333,7 @@ impl<'a> GraphContext<'a> {
     pub fn container<'b>(&'b mut self) -> NodeRef<'b, 'a> {
         self.add(NodeData::container())
     }
-    pub fn root(&self) -> NodeHandle {
+    pub fn head(&self) -> NodeHandle {
         self.root
     }
     pub fn device(&self) -> &Device {
@@ -535,7 +541,7 @@ impl<'a, T: Value + Send> AddToComputeGraph<'a> for CopyFromBuffer<T> {
         let mut guard = self.guard;
         let dst = &mut **guard;
         let dst = unsafe { std::mem::transmute::<&mut [T], &'static mut [T]>(dst) };
-        graph.release.push(Box::new(guard));
+        graph.release.push(Exclusive::new(Box::new(guard)));
         NodeData::command(self.src.copy_to_async(dst), None).add(graph)
     }
 }
