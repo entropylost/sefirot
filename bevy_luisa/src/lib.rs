@@ -126,7 +126,7 @@ impl<T: LuisaCommandsType> LuisaCommands<'_, T> {
     }
 }
 
-#[derive(Resource)]
+#[derive(Resource, Deref)]
 pub struct LuisaDeviceResource(pub Device);
 
 #[derive(SystemParam)]
@@ -266,7 +266,6 @@ impl<F: Fn(&mut App, Box<dyn System<In = (), Out = ()>>) + Send + Sync + 'static
             self.default_kernel_build_options.clone(),
         ))
         .insert_non_send_resource(LuisaDeviceResource(device))
-        // .add_systems(PreStartup, move |mut commands: Commands| {})
         .configure_sets(
             PostStartup,
             (

@@ -1,5 +1,5 @@
 use proc_macro2::TokenStream;
-use quote::{quote, quote_spanned};
+use quote::{quote, quote_spanned, ToTokens};
 use syn::spanned::Spanned;
 use syn::*;
 
@@ -9,13 +9,13 @@ fn init_kernel_impl(f: ItemFn) -> TokenStream {
     let span = f.span();
     let vis = f.vis;
     let mut sig = f.sig;
-    let block = f.block;
+    let mut block = f.block;
     let attrs = f.attrs;
     let ReturnType::Type(_, kernel_type) = std::mem::replace(&mut sig.output, ReturnType::Default)
     else {
         panic!("Function must return a `Kernel`.");
     };
-    let (emanation_ty, kernel_sig) = {
+    let (emanation_ty, kernel_sig, domain_args_sig) = {
         let Type::Path(path) = &*kernel_type else {
             panic!("Function must return a `Kernel`.");
         };
@@ -28,7 +28,7 @@ fn init_kernel_impl(f: ItemFn) -> TokenStream {
         else {
             panic!("Function must return a `Kernel`.");
         };
-        if args.len() != 2 {
+        if args.len() != 2 && args.len() != 3 {
             panic!("Function must return a `Kernel`.");
         }
         let GenericArgument::Type(emanation_ty) = &args[0] else {
@@ -37,9 +37,34 @@ fn init_kernel_impl(f: ItemFn) -> TokenStream {
         let GenericArgument::Type(kernel_sig) = &args[1] else {
             panic!("Function must return a `Kernel`.");
         };
-        (emanation_ty.clone(), kernel_sig.clone())
+        let domain_args_sig = if args.len() == 3 {
+            match &args[2] {
+                GenericArgument::Type(x) => x.clone(),
+                _ => panic!("Function must return a `Kernel`."),
+            }
+        } else {
+            parse_quote!(())
+        };
+        (emanation_ty.clone(), kernel_sig.clone(), domain_args_sig)
     };
     let kernel_name = sig.ident;
+
+    let mut last_stmt = block.stmts.pop().unwrap();
+    if let Stmt::Expr(
+        Expr::MethodCall(ExprMethodCall {
+            method, turbofish, ..
+        }),
+        _,
+    ) = &mut last_stmt
+    {
+        if method == "build_kernel" && turbofish.is_none() {
+            *turbofish = Some(parse_quote!(::<#kernel_sig, #domain_args_sig>));
+            *method = Ident::new("build_kernel_with_domain_args", method.span());
+        }
+    }
+    block.stmts.push(parse_quote! {
+        #kernel_name.init(#last_stmt);
+    });
 
     sig.ident = Ident::new(&format!("init_{}", kernel_name), kernel_name.span());
     let init_name = sig.ident.clone();
@@ -64,7 +89,8 @@ fn init_kernel_impl(f: ItemFn) -> TokenStream {
 
     quote_spanned! {span=>
         #[allow(non_upper_case_globals)]
-        #vis static #kernel_name: #bevy_sefirot_path::KernelCell<#emanation_ty, #kernel_sig> = #bevy_sefirot_path::KernelCell::default();
+        #vis static #kernel_name: #bevy_sefirot_path::KernelCell<#emanation_ty, #kernel_sig, #domain_args_sig> =
+            #bevy_sefirot_path::KernelCell::default();
         #(#attrs)*
         #sig #block
         #init

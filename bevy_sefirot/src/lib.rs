@@ -12,19 +12,19 @@ pub mod prelude {
     pub use {bevy_luisa, sefirot};
 }
 
-pub struct KernelCell<T: EmanationType, S: KernelSignature>(OnceLock<Kernel<T, S>>);
+pub struct KernelCell<T: EmanationType, S: KernelSignature, A = ()>(OnceLock<Kernel<T, S, A>>);
 
-impl<T: EmanationType, S: KernelSignature> Deref for KernelCell<T, S> {
-    type Target = Kernel<T, S>;
+impl<T: EmanationType, S: KernelSignature, A> Deref for KernelCell<T, S, A> {
+    type Target = Kernel<T, S, A>;
     fn deref(&self) -> &Self::Target {
         self.0.get().unwrap()
     }
 }
-impl<T: EmanationType, S: KernelSignature> KernelCell<T, S> {
+impl<T: EmanationType, S: KernelSignature, A> KernelCell<T, S, A> {
     pub const fn default() -> Self {
         Self(OnceLock::new())
     }
-    pub fn init(&self, kernel: Kernel<T, S>) {
+    pub fn init(&self, kernel: Kernel<T, S, A>) {
         self.0.set(kernel).ok().unwrap();
     }
 }

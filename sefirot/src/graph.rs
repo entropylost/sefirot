@@ -302,6 +302,7 @@ impl<'a> ComputeGraph<'a> {
     }
 
     // TODO: This currently does not parallelize anything.
+    /// Consumes the graph, executing it.
     pub fn execute(mut self) {
         self.reduce_containers();
         assert_eq!(
@@ -332,6 +333,10 @@ impl<'a> ComputeGraph<'a> {
         scope.submit_with_callback(commands, || {
             drop(self.release);
         });
+    }
+    /// Executes the graph and clears it.
+    pub fn execute_clear(&mut self) {
+        std::mem::replace(self, Self::new(&self.device)).execute();
     }
 }
 
