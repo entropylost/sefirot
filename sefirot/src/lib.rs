@@ -22,7 +22,7 @@ pub mod prelude {
     pub use crate::domain::Domain;
     pub use crate::element::Element;
     pub use crate::emanation::{Emanation, EmanationType};
-    pub use crate::field::Field;
+    pub use crate::field::{EField, Field};
     pub use luisa::prelude::*;
     pub use luisa_compute as luisa;
     pub use sefirot_macro::{track, tracked, Structure};

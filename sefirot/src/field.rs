@@ -48,7 +48,9 @@ impl<V: Any, T: EmanationType> Drop for FieldAccess<'_, V, T> {
     }
 }
 
-/// A single property of an [`Emanation`]. Note that by default, a `Field`
+pub type EField<V, T> = Field<Expr<V>, T>;
+
+/// A single property of an [`Emanation`]. Note that by default, a `Field` has no actual data associated with it.
 #[cfg_attr(
     feature = "bevy",
     derive(bevy_ecs::prelude::Resource, bevy_ecs::prelude::Component)
