@@ -1,3 +1,4 @@
+use kernel::KernelFunction;
 use once_cell::sync::Lazy;
 use std::env::current_exe;
 use std::ops::Deref;
@@ -33,7 +34,6 @@ extern crate self as bevy_luisa;
 pub mod display;
 
 mod kernel;
-use kernel::KernelFunction;
 
 pub struct KernelCell<S: KernelSignature>(OnceLock<Kernel<S>>);
 
@@ -127,35 +127,28 @@ impl<T: LuisaCommandsType> LuisaCommands<'_, T> {
 }
 
 #[derive(Resource, Deref)]
-pub struct LuisaDeviceResource(pub Device);
-
-#[derive(SystemParam)]
-pub struct LuisaDevice<'w> {
-    pub device: NonSend<'w, LuisaDeviceResource>,
-    pub kernel_build_options: Res<'w, DefaultKernelBuildOptions>,
-}
-impl LuisaDevice<'_> {
-    pub fn create_kernel<S, F: KernelFunction<S>>(&self, f: F) -> Kernel<F::Signature> {
-        f.build(&self.device.0, self.kernel_build_options.0.clone())
-    }
-    pub fn create_kernel_with_name<S, F: KernelFunction<S>>(
+pub struct LuisaDevice(pub Device);
+impl LuisaDevice {
+    pub fn create_kernel_from_fn<S, F: KernelFunction<S>>(
         &self,
+        options: &KernelBuildOptions,
         f: F,
+    ) -> Kernel<F::Signature> {
+        f.build(self, options.clone())
+    }
+    pub fn create_kernel_from_fn_with_name<S, F: KernelFunction<S>>(
+        &self,
+        options: &KernelBuildOptions,
         name: impl AsRef<str>,
+        f: F,
     ) -> Kernel<F::Signature> {
         f.build(
-            &self.device.0,
+            self,
             KernelBuildOptions {
                 name: Some(name.as_ref().to_string()),
-                ..self.kernel_build_options.0.clone()
+                ..options.clone()
             },
         )
-    }
-}
-impl Deref for LuisaDevice<'_> {
-    type Target = Device;
-    fn deref(&self) -> &Self::Target {
-        &self.device.0
     }
 }
 
@@ -193,7 +186,7 @@ pub fn execute_luisa_commands<T: LuisaCommandsType>(
             SyncCell::to_inner(c.raw)
         })
         .collect::<Vec<_>>();
-    let scope = device.device.0.default_stream().scope();
+    let scope = device.0.default_stream().scope();
     scope.submit(commands);
     scope.synchronize();
     trace!("Synchronized [{}]", T::debug_name());
@@ -214,7 +207,7 @@ pub fn execute_luisa_commands_delayed<T: LuisaCommandsType>(
             SyncCell::to_inner(c.raw)
         })
         .collect::<Vec<_>>();
-    let scope = device.device.0.default_stream().scope();
+    let scope = device.0.default_stream().scope();
     AsyncComputeTaskPool::get()
         .spawn_local(async move {
             let _guard = lock.lock().unwrap();
@@ -265,7 +258,7 @@ impl<F: Fn(&mut App, Box<dyn System<In = (), Out = ()>>) + Send + Sync + 'static
         app.insert_resource(DefaultKernelBuildOptions(
             self.default_kernel_build_options.clone(),
         ))
-        .insert_non_send_resource(LuisaDeviceResource(device))
+        .insert_resource(LuisaDevice(device))
         .configure_sets(
             PostStartup,
             (

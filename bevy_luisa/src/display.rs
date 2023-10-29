@@ -18,7 +18,7 @@ impl Default for ClearColor {
 
 pub fn setup_display(
     mut commands: Commands,
-    device: LuisaDevice,
+    device: Res<LuisaDevice>,
     settings: Res<LuisaDisplaySettings>,
     winit_windows: NonSend<WinitWindows>,
     query: Query<(Entity, &Window)>,
@@ -47,7 +47,7 @@ pub fn setup_display(
 }
 
 pub fn update_display(
-    device: LuisaDevice,
+    device: Res<LuisaDevice>,
     settings: Res<LuisaDisplaySettings>,
     winit_windows: NonSend<WinitWindows>,
     mut query: Query<(Entity, &Window, &mut LuisaSwapchain, &mut DisplayTexture), Changed<Window>>,
@@ -81,7 +81,7 @@ fn clear_display_kernel() {
 }
 
 pub fn present_swapchain_and_clear(
-    device: LuisaDevice,
+    device: Res<LuisaDevice>,
     clear_color: Option<Res<ClearColor>>,
     query: Query<(&LuisaSwapchain, &DisplayTexture, &Window)>,
 ) {

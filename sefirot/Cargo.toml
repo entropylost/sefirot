@@ -36,3 +36,4 @@ optional = true
 bevy = ["dep:bevy_ecs", "sefirot_macro/bevy"]
 copy-from = ["dep:tokio"]
 partition = ["copy-from"]
+check-recursive-access = []

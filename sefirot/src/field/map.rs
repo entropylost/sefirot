@@ -2,8 +2,9 @@ use super::array::ArrayIndex;
 use super::*;
 
 pub struct IndexMapAccessor<T: EmanationType, S: EmanationType> {
-    map: Field<Expr<u32>, T>,
+    map: EField<u32, T>,
     index: ArrayIndex<S>,
+    // TODO: This should be weak, as otherwise a cyclic chain will prevent dropping.
     emanation: Emanation<S>,
 }
 
@@ -43,7 +44,7 @@ impl<T: EmanationType> Emanation<T> {
     pub fn map_index<S: EmanationType>(
         &self,
         other: &Emanation<S>,
-        map: Field<Expr<u32>, T>,
+        map: EField<u32, T>,
         index: ArrayIndex<S>,
     ) -> Reference<'_, Field<Element<S>, T>> {
         let accessor = IndexMapAccessor {

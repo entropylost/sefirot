@@ -111,7 +111,7 @@ impl<V: Any, T: EmanationType> CanReference for Field<V, T> {
 impl<'a, V: Any, T: EmanationType> Reference<'a, Field<V, T>> {
     /// Binds an accessor to a [`Field`], potentially allowing read and write access to it.
     pub fn bind(self, accessor: impl Accessor<T, V = V> + Send + Sync) -> Self {
-        let a = &mut self.emanation.fields.lock()[self.value.raw.0].accessor;
+        let a = &mut self.emanation.fields.write()[self.value.raw.0].accessor;
         if a.is_some() {
             panic!("Cannot bind accessor to already-bound field. If this is intentional, use `bind_override` instead.");
         }
@@ -119,18 +119,16 @@ impl<'a, V: Any, T: EmanationType> Reference<'a, Field<V, T>> {
         self
     }
     pub fn try_bind(self, accessor: impl Accessor<T, V = V> + Send + Sync) -> Result<Self, Self> {
-        if self.emanation.fields.lock()[self.value.raw.0]
-            .accessor
-            .is_some()
-        {
+        let a = &mut self.emanation.fields.write()[self.value.raw.0].accessor;
+        if a.is_some() {
             Err(self)
         } else {
-            self.bind(accessor);
+            *a = Some(Arc::new(accessor));
             Ok(self)
         }
     }
     pub fn bind_override(self, accessor: impl Accessor<T, V = V> + Send + Sync) -> Self {
-        self.emanation.fields.lock()[self.value.raw.0].accessor = Some(Arc::new(accessor));
+        self.emanation.fields.write()[self.value.raw.0].accessor = Some(Arc::new(accessor));
         self
     }
     /// Binds an accessor to this field, returning the accessor. Equivalent to `.bind(accessor).accessor().unwrap()`.
@@ -139,16 +137,16 @@ impl<'a, V: Any, T: EmanationType> Reference<'a, Field<V, T>> {
         accessor: impl Accessor<T, V = V> + Send + Sync,
     ) -> Arc<dyn DynAccessor<T> + Send + Sync> {
         let accessor = Arc::new(accessor);
-        self.emanation.fields.lock()[self.value.raw.0].accessor = Some(accessor.clone());
+        self.emanation.fields.write()[self.value.raw.0].accessor = Some(accessor.clone());
         accessor
     }
     pub fn accessor(self) -> Option<Arc<dyn DynAccessor<T> + Send + Sync>> {
-        self.emanation.fields.lock()[self.value.raw.0]
+        self.emanation.fields.read()[self.value.raw.0]
             .accessor
             .clone()
     }
     pub fn exists(self) -> bool {
-        self.emanation.fields.lock()[self.value.raw.0]
+        self.emanation.fields.read()[self.value.raw.0]
             .accessor
             .is_some()
     }
@@ -156,10 +154,10 @@ impl<'a, V: Any, T: EmanationType> Reference<'a, Field<V, T>> {
         self.accessor().map_or(false, |x| x.can_write())
     }
     pub fn name(self) -> String {
-        self.emanation.fields.lock()[self.value.raw.0].name.clone()
+        self.emanation.fields.read()[self.value.raw.0].name.clone()
     }
     pub fn named(self, name: &str) -> Self {
-        self.emanation.fields.lock()[self.value.raw.0].name = name.to_string();
+        self.emanation.fields.write()[self.value.raw.0].name = name.to_string();
         self
     }
 
@@ -285,14 +283,18 @@ pub trait Accessor<T: EmanationType>: 'static {
     ) -> Result<(), WriteError>;
     fn save(&self, element: &Element<T>, field: Field<Self::V, T>);
     fn insert_cache(&self, element: &Element<T>, field: Field<Self::V, T>, value: Self::C) {
-        element.cache.lock().insert(field.raw, Box::new(value));
+        element
+            .cache
+            .try_lock()
+            .unwrap()
+            .insert(field.raw, Box::new(value));
     }
     fn get_cache<'a>(
         &'a self,
         element: &'a Element<T>,
         field: Field<Self::V, T>,
     ) -> Option<MappedMutexGuard<'a, Self::C>> {
-        MutexGuard::try_map(element.cache.lock(), |x| {
+        MutexGuard::try_map(element.cache.try_lock().unwrap(), |x| {
             x.get_mut(&field.raw)
                 .map(move |x| x.downcast_mut().unwrap())
         })
@@ -304,12 +306,18 @@ pub trait Accessor<T: EmanationType>: 'static {
         field: Field<Self::V, T>,
         f: impl FnOnce() -> Self::C,
     ) -> MappedMutexGuard<'a, Self::C> {
-        MutexGuard::map(element.cache.lock(), |x| {
-            x.entry(field.raw)
-                .or_insert_with(|| Box::new(f()))
-                .downcast_mut()
+        if let Some(x) = self.get_cache(element, field) {
+            x
+        } else {
+            // PERF: This is kind of unoptimal since it does 3 accesses.
+            let res = f();
+            element
+                .cache
+                .try_lock()
                 .unwrap()
-        })
+                .insert(field.raw, Box::new(res));
+            self.get_cache(element, field).unwrap()
+        }
     }
     fn can_write(&self) -> bool;
 }

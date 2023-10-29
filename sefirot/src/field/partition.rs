@@ -5,7 +5,6 @@ use super::array::ArrayIndex;
 use super::constant::ConstantAccessor;
 use super::slice::Slice;
 use super::*;
-use luisa::lang::types::AtomicRef;
 use tokio::sync::Mutex;
 
 pub const NULL_PARTITION: u32 = u32::MAX;
@@ -18,34 +17,50 @@ pub struct ArrayPartition<T: EmanationType, P: EmanationType> {
     pub index: ArrayIndex<T>,
     pub partition_index: ArrayIndex<P>,
     pub const_partition: Field<u32, T>,
-    pub partition: Field<Expr<u32>, T>,
-    pub partition_ref: Field<Expr<u32>, T>,
-    #[allow(dead_code)]
-    partition_lists: Field<Slice<Expr<u32>>, T>,
-    partition_size: Field<Expr<u32>, P>,
-    #[allow(dead_code)]
-    partition_size_atomic: Field<AtomicRef<u32>, P>,
+    pub partition: EField<u32, T>,
+    pub partition_ref: EField<u32, T>,
+    pub partition_map: Field<Element<P>, T>,
+    partition_lists: Field<Slice<Expr<u32>>, P>,
+    partition_size: EField<u32, P>,
     partition_size_host: Arc<Mutex<Vec<u32>>>,
     update_lists_kernel: Kernel<T, fn()>,
     zero_lists_kernel: Kernel<P, fn()>,
 }
 
 #[derive(Debug, Clone)]
-pub struct DynArrayPartitionDomain<T: EmanationType> {
-    partition: Field<Expr<u32>, T>,
-    partition_ref: Field<Expr<u32>, T>,
+pub struct DynArrayPartitionDomain<T: EmanationType, P: EmanationType> {
+    index: ArrayIndex<T>,
+    partition: EField<u32, T>,
+    partition_ref: EField<u32, T>,
+    partition_map: Field<Element<P>, T>,
+    partition_lists: Field<Slice<Expr<u32>>, P>,
     sizes: Arc<Mutex<Vec<u32>>>,
-    index: ConstantAccessor<u32, T>,
+    partition_index: ConstantAccessor<u32, T>,
 }
-impl<T: EmanationType> IndexEmanation<Expr<u32>> for DynArrayPartitionDomain<T> {
+impl<T: EmanationType, P: EmanationType> IndexEmanation<Expr<u32>>
+    for DynArrayPartitionDomain<T, P>
+{
     type T = T;
     fn bind_fields(&self, index: Expr<u32>, element: &Element<Self::T>) {
-        element.bind(self.partition, self.index.clone());
+        let partition_lists = self.partition_lists;
+        let partition_map = self.partition_map;
 
+        element.bind(self.partition, self.partition_index.clone());
         element.bind(self.partition_ref, ValueAccessor(index));
+        element.bind(
+            self.index.field,
+            FnAccessor::new(move |el| {
+                println!("Accessing lists");
+                el.get(partition_map)
+                    .unwrap()
+                    .get(partition_lists)
+                    .unwrap()
+                    .read(index)
+            }),
+        );
     }
 }
-impl<T: EmanationType> IndexDomain for DynArrayPartitionDomain<T> {
+impl<T: EmanationType, P: EmanationType> IndexDomain for DynArrayPartitionDomain<T, P> {
     type I = Expr<u32>;
     type A = u32;
     fn get_index(&self) -> Self::I {
@@ -57,54 +72,79 @@ impl<T: EmanationType> IndexDomain for DynArrayPartitionDomain<T> {
 }
 
 #[derive(Debug, Clone)]
-pub struct ArrayPartitionDomain<T: EmanationType> {
+pub struct ArrayPartitionDomain<T: EmanationType, P: EmanationType> {
+    index: ArrayIndex<T>,
     const_partition: Field<u32, T>,
-    partition: Field<Expr<u32>, T>,
-    partition_ref: Field<Expr<u32>, T>,
+    partition: EField<u32, T>,
+    partition_ref: EField<u32, T>,
+    partition_map: Field<Element<P>, T>,
+    partition_lists: Field<Slice<Expr<u32>>, P>,
     sizes: Arc<Mutex<Vec<u32>>>,
-    index: u32,
+    partition_index: u32,
 }
-impl<T: EmanationType> IndexEmanation<Expr<u32>> for ArrayPartitionDomain<T> {
+impl<T: EmanationType, P: EmanationType> IndexEmanation<Expr<u32>> for ArrayPartitionDomain<T, P> {
     type T = T;
     fn bind_fields(&self, index: Expr<u32>, element: &Element<Self::T>) {
-        let partition_index = self.index;
+        let partition_index = self.partition_index;
+        let partition_map = self.partition_map;
+        let partition_lists = self.partition_lists;
+
         element.bind(self.const_partition, ValueAccessor(partition_index));
         element.bind(
             self.partition,
             FnAccessor::new(move |_| partition_index.expr()),
         );
-
         element.bind(self.partition_ref, ValueAccessor(index));
+        element.bind(
+            self.index.field,
+            FnAccessor::new(move |el| {
+                el.get(partition_map)
+                    .unwrap()
+                    .get(partition_lists)
+                    .unwrap()
+                    .read(index)
+            }),
+        );
     }
 }
-impl<T: EmanationType> IndexDomain for ArrayPartitionDomain<T> {
+impl<T: EmanationType, P: EmanationType> IndexDomain for ArrayPartitionDomain<T, P> {
     type I = Expr<u32>;
     type A = ();
     fn get_index(&self) -> Self::I {
         dispatch_size().x
     }
     fn dispatch_size(&self, _: ()) -> [u32; 3] {
-        [self.sizes.blocking_lock()[self.index as usize], 1, 1]
+        [
+            self.sizes.blocking_lock()[self.partition_index as usize],
+            1,
+            1,
+        ]
     }
 }
 impl<T: EmanationType, P: EmanationType> ArrayPartition<T, P> {
     /// Creates a domain for a partition with a kernel-constant index.
-    pub fn select(&self, index: u32) -> ArrayPartitionDomain<T> {
+    pub fn select(&self, partition_index: u32) -> ArrayPartitionDomain<T, P> {
         ArrayPartitionDomain {
+            index: self.index,
             const_partition: self.const_partition,
             partition: self.partition,
             partition_ref: self.partition_ref,
+            partition_map: self.partition_map,
+            partition_lists: self.partition_lists,
             sizes: self.partition_size_host.clone(),
-            index,
+            partition_index,
         }
     }
     /// Creates a domain for a partition with an index that might vary between invocations.
-    pub fn select_dyn(&self) -> DynArrayPartitionDomain<T> {
+    pub fn select_dyn(&self) -> DynArrayPartitionDomain<T, P> {
         DynArrayPartitionDomain {
+            index: self.index,
             partition: self.partition,
             partition_ref: self.partition_ref,
+            partition_map: self.partition_map,
+            partition_lists: self.partition_lists,
             sizes: self.partition_size_host.clone(),
-            index: ConstantAccessor::new(0),
+            partition_index: ConstantAccessor::new(0),
         }
     }
 }
@@ -130,7 +170,7 @@ impl<T: EmanationType> Emanation<T> {
         index: ArrayIndex<T>,
         partitions: &Emanation<P>,
         partition_index: ArrayIndex<P>,
-        partition: Field<Expr<u32>, T>,
+        partition: EField<u32, T>,
         max_partition_size: Option<u32>,
     ) -> ArrayPartition<T, P> {
         let max_partition_size = max_partition_size.unwrap_or(index.size);
@@ -138,41 +178,48 @@ impl<T: EmanationType> Emanation<T> {
         let partition_ref = *self
             .create_field(&(partition_name.clone() + "-ref"))
             .bind_array(index, ());
-        let partition_lists = *self
+        let partition_map = *self.map_index(partitions, partition, partition_index);
+        let partition_lists = *partitions
             .create_field(&(partition_name.clone() + "-lists"))
-            .bind_array_slices(index, max_partition_size, false, ());
+            .bind_array_slices(partition_index, max_partition_size, false, ());
         let partition_size = *partitions
-            .create_field(&(partition_name.clone() + "-list-size"))
+            .create_field::<Expr<u32>>(&(partition_name.clone() + "-list-size"))
             .bind_array(partition_index, ());
         let partition_size_atomic = *partitions.on(partition_size).atomic();
+
+        println!("Built most things");
+        let update_lists_kernel = self.build_kernel::<fn()>(
+            index,
+            track!(&|el| {
+                println!("Start update_list");
+                if partition[[el]] == NULL_PARTITION {
+                    return;
+                }
+                let pt = &partitions.get(&el.context, &partition_index, partition[[el]]);
+                let this_ref = partition_size_atomic[[pt]].fetch_add(1);
+                partition_ref[[el]] = this_ref;
+                partition_lists[[partition_map[[el]]]].write(this_ref, index.field[[el]]);
+            }),
+        );
+        let zero_lists_kernel = partitions.build_kernel::<fn()>(
+            partition_index,
+            track!(&|el| {
+                partition_size[[el]] = 0.expr();
+            }),
+        );
+        println!("Built kernels");
         ArrayPartition {
             index,
             partition_index,
             const_partition: *self.create_field(&(partition_name.clone() + "-const")),
             partition,
             partition_ref,
+            partition_map,
             partition_lists,
             partition_size,
-            partition_size_atomic,
             partition_size_host: Arc::new(Mutex::new(vec![0; partition_index.size as usize])),
-            update_lists_kernel: self.build_kernel::<fn()>(
-                index,
-                track!(&|el| {
-                    if partition[[el]] == NULL_PARTITION {
-                        return;
-                    }
-                    let pt = &partitions.get(&el.context, &partition_index, partition[[el]]);
-                    let this_ref = partition_size_atomic[[pt]].fetch_add(1);
-                    partition_ref[[el]] = this_ref;
-                    partition_lists[[el]].write(this_ref, index.field[[el]]);
-                }),
-            ),
-            zero_lists_kernel: partitions.build_kernel::<fn()>(
-                partition_index,
-                track!(&|el| {
-                    partition_size[[el]] = 0.expr();
-                }),
-            ),
+            update_lists_kernel,
+            zero_lists_kernel,
         }
     }
 }

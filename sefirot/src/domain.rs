@@ -1,4 +1,3 @@
-use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Exclusive};
 
 use parking_lot::Mutex;
@@ -24,14 +23,10 @@ impl<T: EmanationType> Emanation<T> {
         indexer: &Idx,
         idx: I,
     ) -> Element<T> {
-        let element = Element {
-            emanation: self.clone(),
-            overridden_accessors: Mutex::new(HashMap::new()),
-            context: context.clone(),
-            cache: Mutex::new(HashMap::new()),
-            unsaved_fields: Mutex::new(HashSet::new()),
-        };
+        println!("Started get");
+        let element = Element::new(self.clone(), context.clone());
         indexer.bind_fields(idx, &element);
+        println!("Finished access");
         element
     }
 }

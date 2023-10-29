@@ -59,7 +59,7 @@ impl<V: Value> IntoBuffer<V> for BufferView<V> {
     }
 }
 
-impl<V: Value, T: EmanationType> Reference<'_, Field<Expr<V>, T>> {
+impl<V: Value, T: EmanationType> Reference<'_, EField<V, T>> {
     pub fn bind_array(self, index: ArrayIndex<T>, values: impl IntoBuffer<V>) -> Self {
         let (buffer, handle) = values.into_buffer(self.device(), index.size);
         let accessor = BufferAccessor {
@@ -98,10 +98,10 @@ impl<V: Value, T: EmanationType> Reference<'_, Field<Expr<V>, T>> {
 /// Also implements [`Domain`] via [`IndexDomain`], which allows [`Kernel`] calls over the array.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ArrayIndex<T: EmanationType> {
-    pub field: Field<Expr<u32>, T>,
+    pub field: EField<u32, T>,
     pub size: u32,
 }
-impl<T: EmanationType> From<ArrayIndex<T>> for Field<Expr<u32>, T> {
+impl<T: EmanationType> From<ArrayIndex<T>> for EField<u32, T> {
     fn from(index: ArrayIndex<T>) -> Self {
         index.field
     }
@@ -126,10 +126,10 @@ impl<T: EmanationType> IndexDomain for ArrayIndex<T> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ArrayIndex2d<T: EmanationType> {
-    pub field: Field<Expr<Vec2<u32>>, T>,
+    pub field: EField<Vec2<u32>, T>,
     pub size: [u32; 2],
 }
-impl<T: EmanationType> From<ArrayIndex2d<T>> for Field<Expr<Vec2<u32>>, T> {
+impl<T: EmanationType> From<ArrayIndex2d<T>> for EField<Vec2<u32>, T> {
     fn from(index: ArrayIndex2d<T>) -> Self {
         index.field
     }
@@ -205,11 +205,15 @@ impl<V: Value, T: EmanationType> Accessor<T> for BufferAccessor<V, T> {
     type C = Var<V>;
 
     fn get(&self, element: &Element<T>, field: Field<Self::V, T>) -> Result<Self::V, ReadError> {
+        println!("Accessing buffer field: {:?}", pretty_type_name::<V>());
         if let Some(cache) = self.get_cache(element, field) {
+            println!("In cache: Skipping");
             Ok(cache.load())
         } else {
+            println!("Not in cache");
             let value = self.buffer.var().read(element.get(self.index.field)?);
             self.insert_cache(element, field, value.var());
+            println!("Finished buffer field read");
             Ok(value)
         }
     }
@@ -273,7 +277,7 @@ impl<V: Value, T: EmanationType> Accessor<T> for AtomicBufferAccessor<V, T> {
         false
     }
 }
-impl<'a, V: Value, T: EmanationType> Reference<'a, Field<Expr<V>, T>> {
+impl<'a, V: Value, T: EmanationType> Reference<'a, EField<V, T>> {
     /// Creates a [`Field`] that can be used to perform atomic operations on the values of this [`Field`].
     /// Panics if this [`Field`] is not bound to a [`BufferAccessor`].
     pub fn atomic(self) -> Reference<'a, Field<AtomicRef<V>, T>> {

@@ -66,13 +66,7 @@ impl<T: EmanationType> Emanation<T> {
                 };
                 let builder = context.builder.clone();
 
-                let element = Element {
-                    emanation: self.clone(),
-                    overridden_accessors: Mutex::new(HashMap::new()),
-                    context,
-                    cache: Mutex::new(HashMap::new()),
-                    unsaved_fields: Mutex::new(HashSet::new()),
-                };
+                let element = Element::new(self.clone(), context);
                 domain.before_record(&element);
                 f.execute(element);
                 Arc::into_inner(builder).unwrap().into_inner()

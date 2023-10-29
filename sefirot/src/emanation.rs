@@ -6,7 +6,7 @@ use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
 use generational_arena::{Arena, Index};
-use parking_lot::Mutex;
+use parking_lot::RwLock;
 
 use crate::field::DynAccessor;
 use crate::prelude::*;
@@ -49,13 +49,13 @@ impl<T: EmanationType> Debug for RawField<T> {
 #[derive(Clone)]
 pub struct Emanation<T: EmanationType> {
     pub(crate) id: u64,
-    pub(crate) fields: Arc<Mutex<Arena<RawField<T>>>>,
+    pub(crate) fields: Arc<RwLock<Arena<RawField<T>>>>,
     pub(crate) device: Device,
 }
 impl<T: EmanationType> Debug for Emanation<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut st = f.debug_struct(&format!("Emanation<{}>", std::any::type_name::<T>()));
-        for (_, f) in self.fields.lock().iter() {
+        for (_, f) in self.fields.read().iter() {
             st.field(
                 &f.name,
                 &format!(
@@ -75,13 +75,13 @@ impl<T: EmanationType> Emanation<T> {
     pub fn new(device: &Device) -> Self {
         Self {
             id: NEXT_EMANATION_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
-            fields: Arc::new(Mutex::new(Arena::new())),
+            fields: Arc::new(RwLock::new(Arena::new())),
             device: device.clone(),
         }
     }
 
     pub fn create_field<V: Any>(&self, name: &str) -> Reference<'_, Field<V, T>> {
-        let raw = RawFieldHandle(self.fields.lock().insert(RawField {
+        let raw = RawFieldHandle(self.fields.write().insert(RawField {
             name: name.to_string(),
             ty_name: std::any::type_name::<V>().to_string(),
             accessor: None,

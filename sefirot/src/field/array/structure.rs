@@ -10,7 +10,7 @@ impl<T: EmanationType> Emanation<T> {
         index: ArrayIndex<T>,
         prefix: &str,
         values: &[S],
-    ) -> S::Map<Field<Expr<__>, T>> {
+    ) -> S::Map<EField<__, T>> {
         assert_eq!(values.len(), index.size as usize);
         S::apply(CreateArrayField {
             emanation: self,
@@ -24,7 +24,7 @@ impl<T: EmanationType> Emanation<T> {
         index: ArrayIndex<T>,
         prefix: &str,
         f: impl Fn(u32) -> S,
-    ) -> S::Map<Field<Expr<__>, T>> {
+    ) -> S::Map<EField<__, T>> {
         let values = (0..index.size).map(f).collect::<Vec<_>>();
         S::apply(CreateArrayField {
             emanation: self,
@@ -38,7 +38,7 @@ impl<T: EmanationType> Emanation<T> {
         index: ArrayIndex<T>,
         prefix: &str,
         values: &[S],
-    ) -> S::Map<Field<Expr<__>, T>> {
+    ) -> S::Map<EField<__, T>> {
         assert_eq!(values.len(), index.size as usize);
         let buffer = self.device.create_buffer_from_slice(values);
         self.create_aos_fields_with_struct_field(index, prefix, buffer.clone(), Some(buffer))
@@ -49,7 +49,7 @@ impl<T: EmanationType> Emanation<T> {
         index: ArrayIndex<T>,
         prefix: &str,
         f: impl Fn(u32) -> S,
-    ) -> S::Map<Field<Expr<__>, T>> {
+    ) -> S::Map<EField<__, T>> {
         let buffer = self
             .device
             .create_buffer_from_fn(index.size as usize, |i| f(i as u32));
@@ -62,7 +62,7 @@ impl<T: EmanationType> Emanation<T> {
         prefix: &str,
         buffer: BufferView<S>,
         handle: Option<Buffer<S>>,
-    ) -> (Field<Expr<S>, T>, S::Map<Field<Expr<__>, T>>) {
+    ) -> (EField<S, T>, S::Map<EField<__, T>>) {
         let prefix = prefix.to_string();
         let struct_field = *self.create_field(&(prefix.clone() + "struct"));
         let struct_accessor =
@@ -89,8 +89,8 @@ struct CreateArrayField<'a, S: Structure, T: EmanationType> {
     values: &'a [S],
 }
 impl<S: Structure, T: EmanationType> ValueMapping<S> for CreateArrayField<'_, S, T> {
-    type M = Field<Expr<__>, T>;
-    fn map<Z: Selector<S>>(&mut self, name: &'static str) -> Field<Expr<Z::Result>, T> {
+    type M = EField<__, T>;
+    fn map<Z: Selector<S>>(&mut self, name: &'static str) -> EField<Z::Result, T> {
         let field_name = self.prefix.clone() + name;
         let buffer = self
             .emanation
@@ -106,12 +106,12 @@ impl<S: Structure, T: EmanationType> ValueMapping<S> for CreateArrayField<'_, S,
 struct CreateStructArrayField<'a, S: Structure, T: EmanationType> {
     emanation: &'a Emanation<T>,
     prefix: String,
-    struct_field: Field<Expr<S>, T>,
+    struct_field: EField<S, T>,
     struct_accessor: Weak<dyn DynAccessor<T> + Send + Sync>,
 }
 impl<S: Structure, T: EmanationType> ValueMapping<S> for CreateStructArrayField<'_, S, T> {
-    type M = Field<Expr<__>, T>;
-    fn map<Z: Selector<S>>(&mut self, name: &'static str) -> Field<Expr<Z::Result>, T> {
+    type M = EField<__, T>;
+    fn map<Z: Selector<S>>(&mut self, name: &'static str) -> EField<Z::Result, T> {
         let field_name = self.prefix.clone() + name;
         *self
             .emanation
@@ -160,8 +160,12 @@ impl Mapping for Buffer<__> {
     type Result<X: Value> = Buffer<X>;
 }
 
-impl<T: EmanationType> Mapping for Field<Expr<__>, T> {
-    type Result<X: Value> = Field<Expr<X>, T>;
+impl Mapping for Expr<__> {
+    type Result<X: Value> = Expr<X>;
+}
+
+impl<A: Mapping, T: EmanationType> Mapping for Field<A, T> {
+    type Result<X: Value> = Field<A::Result<X>, T>;
 }
 
 pub trait ValueMapping<S: Structure> {
@@ -178,7 +182,7 @@ pub trait Structure: Value {
 }
 
 struct StructArrayAccessor<Z: Selector<S>, S: Structure, T: EmanationType> {
-    struct_field: Field<Expr<S>, T>,
+    struct_field: EField<S, T>,
     struct_accessor: Weak<dyn DynAccessor<T> + Send + Sync>,
     _marker: PhantomData<fn() -> Z>,
 }

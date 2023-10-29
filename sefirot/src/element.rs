@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use parking_lot::Mutex;
+use pretty_type_name::pretty_type_name;
 use static_assertions::assert_impl_all;
 
 use luisa_compute::runtime::{AsKernelArg, KernelArg, KernelArgEncoder, KernelBuilder};
@@ -60,19 +61,38 @@ impl Context {
 }
 
 pub struct Element<T: EmanationType> {
-    pub(crate) emanation: Emanation<T>,
+    pub emanation: Emanation<T>,
     pub(crate) overridden_accessors: Mutex<HashMap<RawFieldHandle, Arc<dyn DynAccessor<T>>>>,
     pub context: KernelContext,
     pub cache: Mutex<HashMap<RawFieldHandle, Box<dyn Any>>>,
     pub unsaved_fields: Mutex<HashSet<RawFieldHandle>>,
+    #[cfg(feature = "check-recursive-access")]
+    pub(crate) locked_fields: Mutex<HashSet<RawFieldHandle>>,
 }
 
 impl<T: EmanationType> Element<T> {
+    pub(crate) fn new(emanation: Emanation<T>, context: KernelContext) -> Self {
+        Self {
+            emanation,
+            overridden_accessors: Mutex::new(HashMap::new()),
+            context,
+            cache: Mutex::new(HashMap::new()),
+            unsaved_fields: Mutex::new(HashSet::new()),
+            #[cfg(feature = "check-recursive-access")]
+            locked_fields: Mutex::new(HashSet::new()),
+        }
+    }
+
     fn get_accessor(&self, field: RawFieldHandle) -> Arc<dyn DynAccessor<T>> {
         if let Some(accessor) = self.overridden_accessors.lock().get(&field) {
             return accessor.clone();
         }
-        self.emanation.fields.lock()[field.0]
+        println!(
+            "Accessing: {} {}",
+            self.emanation.fields.read()[field.0].name,
+            self.emanation.fields.read()[field.0].ty_name,
+        );
+        self.emanation.fields.read()[field.0]
             .accessor
             .as_ref()
             .unwrap()
@@ -87,10 +107,22 @@ impl<T: EmanationType> Element<T> {
 
     pub fn get<V: Any>(&self, field: Field<V, T>) -> Result<V, ReadError> {
         let field = field.raw;
+        #[cfg(feature = "check-recursive-access")]
+        if !self.locked_fields.lock().insert(field) {
+            panic!(
+                "Recursive Access to Field<{}, {}> {}",
+                pretty_type_name::<V>(),
+                pretty_type_name::<T>(),
+                self.emanation.fields.read()[field.0].name,
+            );
+        }
         self.context.context.accessed_fields.lock().insert(field);
 
         let accessor = self.get_accessor(field);
-        Ok(*accessor.get(self, field)?.downcast::<V>().unwrap())
+        let res = *accessor.get(self, field)?.downcast::<V>().unwrap();
+        #[cfg(feature = "check-recursive-access")]
+        self.locked_fields.lock().remove(&field);
+        Ok(res)
     }
 
     pub fn set<V: Any>(&self, field: Field<V, T>, value: &V) -> Result<(), WriteError> {
@@ -116,7 +148,7 @@ impl<T: EmanationType> Element<T> {
             || self
                 .emanation
                 .fields
-                .lock()
+                .read()
                 .get(field.0)
                 .and_then(|x| x.accessor.as_ref())
                 .is_some()

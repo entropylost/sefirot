@@ -39,10 +39,11 @@ fn kernel_impl(init: bool, f: ItemFn) -> TokenStream {
         }
     }) {
         sig.inputs
-            .push(parse_quote!(device: #bevy_luisa_path::LuisaDevice));
+            .push(parse_quote!(device: ::bevy::prelude::Res<#bevy_luisa_path::LuisaDevice>));
+        sig.inputs.push(parse_quote!(kernel_build_options: ::bevy::prelude::Res<#bevy_luisa_path::DefaultKernelBuildOptions>));
     }
     block.stmts.push(parse_quote! {
-        #kernel_name.init(device.create_kernel_with_name(#kernel, stringify!(#kernel_name)));
+        #kernel_name.init(device.create_kernel_from_fn_with_name(&**kernel_build_options, stringify!(#kernel_name), #kernel));
     });
 
     let init_name = sig.ident.clone();
