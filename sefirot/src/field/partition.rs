@@ -9,22 +9,15 @@ use tokio::sync::Mutex;
 
 pub const NULL_PARTITION: u32 = u32::MAX;
 
-#[cfg_attr(
-    feature = "bevy",
-    derive(bevy_ecs::prelude::Resource, bevy_ecs::prelude::Component)
-)]
-pub struct ArrayPartition<T: EmanationType, P: EmanationType> {
-    pub index: ArrayIndex<T>,
-    pub partition_index: ArrayIndex<P>,
+/// A set of fields that are used to partition an array, used as an argument to [`Emanation::partition`].
+pub struct PartitionFields<T: EmanationType, P: EmanationType> {
+    /// A field representing the partition index of an element, if this can be known at kernel build time.
+    /// (eg: If using an [`ArrayPartitionDomain`])
+    /// Should be unbound when passed in.
     pub const_partition: Field<u32, T>,
+    /// A field representing the partition index of an element.
     pub partition: EField<u32, T>,
-    pub partition_ref: EField<u32, T>,
     pub partition_map: Field<Element<P>, T>,
-    partition_lists: Field<Slice<Expr<u32>>, P>,
-    partition_size: EField<u32, P>,
-    partition_size_host: Arc<Mutex<Vec<u32>>>,
-    update_lists_kernel: Kernel<T, fn()>,
-    zero_lists_kernel: Kernel<P, fn()>,
 }
 
 #[derive(Debug, Clone)]
@@ -120,7 +113,40 @@ impl<T: EmanationType, P: EmanationType> IndexDomain for ArrayPartitionDomain<T,
         ]
     }
 }
+#[cfg_attr(
+    feature = "bevy",
+    derive(bevy_ecs::prelude::Resource, bevy_ecs::prelude::Component)
+)]
+pub struct ArrayPartition<T: EmanationType, P: EmanationType> {
+    index: ArrayIndex<T>,
+    const_partition: Field<u32, T>,
+    partition: EField<u32, T>,
+    partition_ref: EField<u32, T>,
+    partition_map: Field<Element<P>, T>,
+    partition_lists: Field<Slice<Expr<u32>>, P>,
+    partition_size: EField<u32, P>,
+    partition_size_host: Arc<Mutex<Vec<u32>>>,
+    update_lists_kernel: Kernel<T, fn()>,
+    zero_lists_kernel: Kernel<P, fn()>,
+}
+
 impl<T: EmanationType, P: EmanationType> ArrayPartition<T, P> {
+    /// The field representing the index of each element in a contiguous list of elements per partition.
+    pub fn partition_ref(&self) -> EField<u32, T> {
+        self.partition_ref
+    }
+
+    /// The field representing the size of each partition.
+    pub fn partition_size(&self) -> EField<u32, P> {
+        self.partition_size
+    }
+
+    /// The size of the partitions as a vector.
+    /// May be out of date when the [`PartitionFields::partition`] field is changed, until the [`update`] function is called.
+    pub fn partition_size_host(&self) -> Arc<Mutex<Vec<u32>>> {
+        self.partition_size_host.clone()
+    }
+
     /// Creates a domain for a partition with a kernel-constant index.
     pub fn select(&self, partition_index: u32) -> ArrayPartitionDomain<T, P> {
         ArrayPartitionDomain {
@@ -169,15 +195,19 @@ impl<T: EmanationType> Emanation<T> {
         index: ArrayIndex<T>,
         partitions: &Emanation<P>,
         partition_index: ArrayIndex<P>,
-        partition: EField<u32, T>,
+        partition_fields: PartitionFields<T, P>,
         max_partition_size: Option<u32>,
     ) -> ArrayPartition<T, P> {
+        let PartitionFields {
+            const_partition,
+            partition,
+            partition_map,
+        } = partition_fields;
         let max_partition_size = max_partition_size.unwrap_or(index.size);
         let partition_name = self.on(partition).name();
         let partition_ref = *self
             .create_field(&(partition_name.clone() + "-ref"))
             .bind_array(index, ());
-        let partition_map = *self.map_index(partitions, partition, partition_index);
         let partition_lists = *partitions
             .create_field(&(partition_name.clone() + "-lists"))
             .bind_array_slices(partition_index, max_partition_size, false, ());
@@ -206,8 +236,7 @@ impl<T: EmanationType> Emanation<T> {
         );
         ArrayPartition {
             index,
-            partition_index,
-            const_partition: *self.create_field(&(partition_name.clone() + "-const")),
+            const_partition,
             partition,
             partition_ref,
             partition_map,

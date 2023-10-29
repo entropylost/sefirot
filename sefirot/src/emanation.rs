@@ -38,10 +38,6 @@ impl<T: EmanationType> Debug for RawField<T> {
 
 /// A structure representing a single format or space of data,
 /// which might have a number of [`Field`]s associated with it.
-///
-/// Note that by default, a `Field` does not actually provide any data access mechanism.
-/// In order to do that, it's necessary to bind an [`Accessor`].
-/// This is done by most of the [`Emanation`] creation methods apart from [`create_field`].
 #[cfg_attr(
     feature = "bevy",
     derive(bevy_ecs::prelude::Resource, bevy_ecs::prelude::Component)

@@ -3,7 +3,6 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use parking_lot::Mutex;
-use pretty_type_name::pretty_type_name;
 use static_assertions::assert_impl_all;
 
 use luisa_compute::runtime::{AsKernelArg, KernelArg, KernelArgEncoder, KernelBuilder};
@@ -104,6 +103,7 @@ impl<T: EmanationType> Element<T> {
         let field = field.raw;
         #[cfg(feature = "check-recursive-access")]
         if !self.locked_fields.lock().insert(field) {
+            use pretty_type_name::pretty_type_name;
             panic!(
                 "Recursive Access to Field<{}, {}> {}",
                 pretty_type_name::<V>(),

@@ -517,7 +517,7 @@ impl<'a> NodeRef<'_, 'a> {
 }
 
 /// A trait representing something that can be added to a [`ComputeGraph`], returning a [`NodeHandle`]
-/// for the node that was added. Note that [`add`] might add multiple nodes, as long as they're
+/// for the node that was added. Note that [`add`](AddToComputeGraph::add) might add multiple nodes, as long as they're
 /// all children of the return node.
 pub trait AddToComputeGraph<'a> {
     fn add<'b>(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle;
