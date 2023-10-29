@@ -50,7 +50,7 @@ pub trait SliceAccessor<V: Any> {
 }
 impl<V: Any> Debug for dyn SliceAccessor<V> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct(&self.type_name()).finish()
+        f.write_str(&self.type_name())
     }
 }
 

@@ -56,7 +56,8 @@ pub struct CommandNode<'a> {
 }
 impl Debug for CommandNode<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct(&format!("CommandNode({:?})", self.debug_name))
+        f.debug_tuple("CommandNode")
+            .field(&self.debug_name)
             .finish()
     }
 }

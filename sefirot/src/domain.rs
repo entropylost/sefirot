@@ -23,10 +23,8 @@ impl<T: EmanationType> Emanation<T> {
         indexer: &Idx,
         idx: I,
     ) -> Element<T> {
-        println!("Started get");
         let element = Element::new(self.clone(), context.clone());
         indexer.bind_fields(idx, &element);
-        println!("Finished access");
         element
     }
 }

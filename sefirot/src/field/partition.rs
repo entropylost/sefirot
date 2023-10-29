@@ -129,6 +129,15 @@ pub struct ArrayPartition<T: EmanationType, P: EmanationType> {
     update_lists_kernel: Kernel<T, fn()>,
     zero_lists_kernel: Kernel<P, fn()>,
 }
+impl<T: EmanationType, P: EmanationType> Debug for ArrayPartition<T, P> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&format!(
+            "ArrayPartition<{}, {}>",
+            pretty_type_name::<T>(),
+            pretty_type_name::<P>()
+        ))
+    }
+}
 
 impl<T: EmanationType, P: EmanationType> ArrayPartition<T, P> {
     /// The field representing the index of each element in a contiguous list of elements per partition.
