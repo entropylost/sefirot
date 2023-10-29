@@ -87,11 +87,6 @@ impl<T: EmanationType> Element<T> {
         if let Some(accessor) = self.overridden_accessors.lock().get(&field) {
             return accessor.clone();
         }
-        println!(
-            "Accessing: {} {}",
-            self.emanation.fields.read()[field.0].name,
-            self.emanation.fields.read()[field.0].ty_name,
-        );
         self.emanation.fields.read()[field.0]
             .accessor
             .as_ref()

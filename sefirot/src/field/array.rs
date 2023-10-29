@@ -205,15 +205,11 @@ impl<V: Value, T: EmanationType> Accessor<T> for BufferAccessor<V, T> {
     type C = Var<V>;
 
     fn get(&self, element: &Element<T>, field: Field<Self::V, T>) -> Result<Self::V, ReadError> {
-        println!("Accessing buffer field: {:?}", pretty_type_name::<V>());
         if let Some(cache) = self.get_cache(element, field) {
-            println!("In cache: Skipping");
             Ok(cache.load())
         } else {
-            println!("Not in cache");
             let value = self.buffer.var().read(element.get(self.index.field)?);
             self.insert_cache(element, field, value.var());
-            println!("Finished buffer field read");
             Ok(value)
         }
     }

@@ -50,7 +50,6 @@ impl<T: EmanationType, P: EmanationType> IndexEmanation<Expr<u32>>
         element.bind(
             self.index.field,
             FnAccessor::new(move |el| {
-                println!("Accessing lists");
                 el.get(partition_map)
                     .unwrap()
                     .get(partition_lists)
@@ -187,11 +186,9 @@ impl<T: EmanationType> Emanation<T> {
             .bind_array(partition_index, ());
         let partition_size_atomic = *partitions.on(partition_size).atomic();
 
-        println!("Built most things");
         let update_lists_kernel = self.build_kernel::<fn()>(
             index,
             track!(&|el| {
-                println!("Start update_list");
                 if partition[[el]] == NULL_PARTITION {
                     return;
                 }
@@ -207,7 +204,6 @@ impl<T: EmanationType> Emanation<T> {
                 partition_size[[el]] = 0.expr();
             }),
         );
-        println!("Built kernels");
         ArrayPartition {
             index,
             partition_index,
