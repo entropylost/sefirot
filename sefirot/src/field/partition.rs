@@ -7,31 +7,47 @@ use super::slice::Slice;
 use super::*;
 use tokio::sync::Mutex;
 
-pub const NULL_PARTITION: u32 = u32::MAX;
+pub trait PartitionIndex: Value + Send + Sync {
+    fn to(this: Self) -> u32;
+    fn to_expr(this: Expr<Self>) -> Expr<u32>;
+    fn null() -> Self;
+}
+
+impl PartitionIndex for u32 {
+    fn to(this: Self) -> u32 {
+        this
+    }
+    fn to_expr(this: Expr<Self>) -> Expr<u32> {
+        this
+    }
+    fn null() -> Self {
+        u32::MAX
+    }
+}
 
 /// A set of fields that are used to partition an array, used as an argument to [`Emanation::partition`].
-pub struct PartitionFields<T: EmanationType, P: EmanationType> {
+pub struct PartitionFields<I: PartitionIndex, T: EmanationType, P: EmanationType> {
     /// A field representing the partition index of an element, if this can be known at kernel build time.
     /// (eg: If using an [`ArrayPartitionDomain`])
     /// Should be unbound when passed in.
-    pub const_partition: Field<u32, T>,
+    pub const_partition: Field<I, T>,
     /// A field representing the partition index of an element.
-    pub partition: EField<u32, T>,
+    pub partition: EField<I, T>,
     pub partition_map: Field<Element<P>, T>,
 }
 
 #[derive(Debug, Clone)]
-pub struct DynArrayPartitionDomain<T: EmanationType, P: EmanationType> {
+pub struct DynArrayPartitionDomain<I: PartitionIndex, T: EmanationType, P: EmanationType> {
     index: ArrayIndex<T>,
-    partition: EField<u32, T>,
+    partition: EField<I, T>,
     partition_ref: EField<u32, T>,
     partition_map: Field<Element<P>, T>,
     partition_lists: Field<Slice<Expr<u32>>, P>,
     sizes: Arc<Mutex<Vec<u32>>>,
-    partition_index: ConstantAccessor<u32, T>,
+    partition_index: ConstantAccessor<I, T>,
 }
-impl<T: EmanationType, P: EmanationType> IndexEmanation<Expr<u32>>
-    for DynArrayPartitionDomain<T, P>
+impl<I: PartitionIndex, T: EmanationType, P: EmanationType> IndexEmanation<Expr<u32>>
+    for DynArrayPartitionDomain<I, T, P>
 {
     type T = T;
     fn bind_fields(&self, index: Expr<u32>, element: &Element<Self::T>) {
@@ -52,29 +68,36 @@ impl<T: EmanationType, P: EmanationType> IndexEmanation<Expr<u32>>
         );
     }
 }
-impl<T: EmanationType, P: EmanationType> IndexDomain for DynArrayPartitionDomain<T, P> {
+impl<I: PartitionIndex, T: EmanationType, P: EmanationType> IndexDomain
+    for DynArrayPartitionDomain<I, T, P>
+{
     type I = Expr<u32>;
-    type A = u32;
+    type A = I;
     fn get_index(&self) -> Self::I {
         dispatch_size().x
     }
-    fn dispatch_size(&self, index: u32) -> [u32; 3] {
-        [self.sizes.blocking_lock()[index as usize], 1, 1]
+    fn dispatch_size(&self, index: I) -> [u32; 3] {
+        [self.sizes.blocking_lock()[I::to(index) as usize], 1, 1]
+    }
+    fn before_dispatch(&self, index: &I) {
+        *self.partition_index.value.lock() = *index;
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct ArrayPartitionDomain<T: EmanationType, P: EmanationType> {
+pub struct ArrayPartitionDomain<I: PartitionIndex, T: EmanationType, P: EmanationType> {
     index: ArrayIndex<T>,
-    const_partition: Field<u32, T>,
-    partition: EField<u32, T>,
+    const_partition: Field<I, T>,
+    partition: EField<I, T>,
     partition_ref: EField<u32, T>,
     partition_map: Field<Element<P>, T>,
     partition_lists: Field<Slice<Expr<u32>>, P>,
     sizes: Arc<Mutex<Vec<u32>>>,
-    partition_index: u32,
+    partition_index: I,
 }
-impl<T: EmanationType, P: EmanationType> IndexEmanation<Expr<u32>> for ArrayPartitionDomain<T, P> {
+impl<I: PartitionIndex, T: EmanationType, P: EmanationType> IndexEmanation<Expr<u32>>
+    for ArrayPartitionDomain<I, T, P>
+{
     type T = T;
     fn bind_fields(&self, index: Expr<u32>, element: &Element<Self::T>) {
         let partition_index = self.partition_index;
@@ -99,7 +122,9 @@ impl<T: EmanationType, P: EmanationType> IndexEmanation<Expr<u32>> for ArrayPart
         );
     }
 }
-impl<T: EmanationType, P: EmanationType> IndexDomain for ArrayPartitionDomain<T, P> {
+impl<I: PartitionIndex, T: EmanationType, P: EmanationType> IndexDomain
+    for ArrayPartitionDomain<I, T, P>
+{
     type I = Expr<u32>;
     type A = ();
     fn get_index(&self) -> Self::I {
@@ -107,7 +132,7 @@ impl<T: EmanationType, P: EmanationType> IndexDomain for ArrayPartitionDomain<T,
     }
     fn dispatch_size(&self, _: ()) -> [u32; 3] {
         [
-            self.sizes.blocking_lock()[self.partition_index as usize],
+            self.sizes.blocking_lock()[I::to(self.partition_index) as usize],
             1,
             1,
         ]
@@ -117,10 +142,10 @@ impl<T: EmanationType, P: EmanationType> IndexDomain for ArrayPartitionDomain<T,
     feature = "bevy",
     derive(bevy_ecs::prelude::Resource, bevy_ecs::prelude::Component)
 )]
-pub struct ArrayPartition<T: EmanationType, P: EmanationType> {
+pub struct ArrayPartition<T: EmanationType, P: EmanationType, I: PartitionIndex> {
     index: ArrayIndex<T>,
-    const_partition: Field<u32, T>,
-    partition: EField<u32, T>,
+    const_partition: Field<I, T>,
+    partition: EField<I, T>,
     partition_ref: EField<u32, T>,
     partition_map: Field<Element<P>, T>,
     partition_lists: Field<Slice<Expr<u32>>, P>,
@@ -129,17 +154,17 @@ pub struct ArrayPartition<T: EmanationType, P: EmanationType> {
     update_lists_kernel: Kernel<T, fn()>,
     zero_lists_kernel: Kernel<P, fn()>,
 }
-impl<T: EmanationType, P: EmanationType> Debug for ArrayPartition<T, P> {
+impl<T: EmanationType, P: EmanationType, I: PartitionIndex> Debug for ArrayPartition<T, P, I> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&format!(
-            "ArrayPartition<{}, {}>",
+            "ArrayPartition<{}, {}> {{ .. }}",
             pretty_type_name::<T>(),
             pretty_type_name::<P>()
         ))
     }
 }
 
-impl<T: EmanationType, P: EmanationType> ArrayPartition<T, P> {
+impl<T: EmanationType, P: EmanationType, I: PartitionIndex> ArrayPartition<T, P, I> {
     /// The field representing the index of each element in a contiguous list of elements per partition.
     pub fn partition_ref(&self) -> EField<u32, T> {
         self.partition_ref
@@ -157,7 +182,7 @@ impl<T: EmanationType, P: EmanationType> ArrayPartition<T, P> {
     }
 
     /// Creates a domain for a partition with a kernel-constant index.
-    pub fn select(&self, partition_index: u32) -> ArrayPartitionDomain<T, P> {
+    pub fn select(&self, partition_index: I) -> ArrayPartitionDomain<I, T, P> {
         ArrayPartitionDomain {
             index: self.index,
             const_partition: self.const_partition,
@@ -170,7 +195,7 @@ impl<T: EmanationType, P: EmanationType> ArrayPartition<T, P> {
         }
     }
     /// Creates a domain for a partition with an index that might vary between invocations.
-    pub fn select_dyn(&self) -> DynArrayPartitionDomain<T, P> {
+    pub fn select_dyn(&self) -> DynArrayPartitionDomain<I, T, P> {
         DynArrayPartitionDomain {
             index: self.index,
             partition: self.partition,
@@ -178,14 +203,18 @@ impl<T: EmanationType, P: EmanationType> ArrayPartition<T, P> {
             partition_map: self.partition_map,
             partition_lists: self.partition_lists,
             sizes: self.partition_size_host.clone(),
-            partition_index: ConstantAccessor::new(0),
+            partition_index: ConstantAccessor::new(I::null()),
         }
     }
 }
-impl<'b, T: EmanationType, P: EmanationType> CanReference for &'b ArrayPartition<T, P> {
+impl<'b, T: EmanationType, P: EmanationType, I: PartitionIndex> CanReference
+    for &'b ArrayPartition<T, P, I>
+{
     type T = P;
 }
-impl<'a: 'b, 'b, T: EmanationType, P: EmanationType> Reference<'a, &'b ArrayPartition<T, P>> {
+impl<'a: 'b, 'b, T: EmanationType, P: EmanationType, I: PartitionIndex>
+    Reference<'a, &'b ArrayPartition<T, P, I>>
+{
     pub fn update<'c>(self) -> impl AddToComputeGraph<'c> + 'b {
         move |graph: &mut ComputeGraph<'c>| {
             let zero = *graph.add(self.zero_lists_kernel.dispatch());
@@ -199,14 +228,15 @@ impl<'a: 'b, 'b, T: EmanationType, P: EmanationType> Reference<'a, &'b ArrayPart
     }
 }
 impl<T: EmanationType> Emanation<T> {
-    pub fn partition<P: EmanationType>(
+    #[allow(clippy::double_parens)]
+    pub fn partition<I: PartitionIndex, P: EmanationType>(
         &self,
         index: ArrayIndex<T>,
         partitions: &Emanation<P>,
         partition_index: ArrayIndex<P>,
-        partition_fields: PartitionFields<T, P>,
+        partition_fields: PartitionFields<I, T, P>,
         max_partition_size: Option<u32>,
-    ) -> ArrayPartition<T, P> {
+    ) -> ArrayPartition<T, P, I> {
         let PartitionFields {
             const_partition,
             partition,
@@ -228,10 +258,11 @@ impl<T: EmanationType> Emanation<T> {
         let update_lists_kernel = self.build_kernel::<fn()>(
             index,
             track!(&|el| {
-                if partition[[el]] == NULL_PARTITION {
+                if I::to_expr(partition[[el]]) == I::to(I::null()) {
                     return;
                 }
-                let pt = &partitions.get(&el.context, &partition_index, partition[[el]]);
+                let pt =
+                    &partitions.get(&el.context, &partition_index, I::to_expr(partition[[el]]));
                 let this_ref = partition_size_atomic[[pt]].fetch_add(1);
                 partition_ref[[el]] = this_ref;
                 partition_lists[[partition_map[[el]]]].write(this_ref, index.field[[el]]);

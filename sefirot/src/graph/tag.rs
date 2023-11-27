@@ -9,7 +9,7 @@ use super::*;
 // The `Debug` is necessary to have good `Debug` impls for `TagMap`.
 pub trait Tag: Debug + Eq + Hash + Copy + Clone + Send + Sync + 'static {}
 
-trait DynTag<H: Hasher + 'static = ahash::AHasher>: Send + Sync + 'static {
+pub trait DynTag<H: Hasher + 'static = ahash::AHasher>: Send + Sync + 'static {
     fn hash(&self, hasher: &mut H) -> u64;
     fn type_id(&self) -> TypeId;
     fn debug(&self) -> String;
@@ -147,5 +147,8 @@ impl<T: Clone + Eq + Hash, S: BuildHasher + 'static> TagMap<T, S> {
                     .find(|(t, _)| DynTag::<S::Hasher>::eq(&tag, t.as_ref()))
             })
             .map(|(_, v)| v)
+    }
+    pub fn get_tag(&self, value: &T) -> Option<&dyn DynTag<S::Hasher>> {
+        self.tags.get(value).map(|x| x.as_ref())
     }
 }

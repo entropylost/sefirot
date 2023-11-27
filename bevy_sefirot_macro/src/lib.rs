@@ -54,13 +54,19 @@ fn init_kernel_impl(f: ItemFn) -> TokenStream {
         Expr::MethodCall(ExprMethodCall {
             method, turbofish, ..
         }),
-        _,
+        None,
     ) = &mut last_stmt
     {
         if method == "build_kernel" && turbofish.is_none() {
             *turbofish = Some(parse_quote!(::<#kernel_sig, #domain_args_sig>));
             *method = Ident::new("build_kernel_with_domain_args", method.span());
         }
+        last_stmt = Stmt::Expr(
+            parse_quote! {
+                #last_stmt.with_name(stringify!(#kernel_name))
+            },
+            None,
+        );
     }
     block.stmts.push(parse_quote! {
         #kernel_name.init(#last_stmt);

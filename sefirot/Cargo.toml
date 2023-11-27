@@ -13,6 +13,7 @@ sefirot_macro = { path = "../sefirot_macro" }
 smallvec = "1.11.1"
 static_assertions = "1.1.0"
 take_mut = "0.2.2"
+tracing = { version = "0.1.40", optional = true }
 
 [dependencies.luisa_compute]
 git = "https://github.com/iMplode-nZ/luisa-compute-rs"
@@ -37,3 +38,4 @@ bevy = ["dep:bevy_ecs", "sefirot_macro/bevy"]
 copy-from = ["dep:tokio"]
 partition = ["copy-from"]
 check-recursive-access = []
+debug = ["dep:tracing"]

@@ -41,7 +41,8 @@ pub struct Node<'a> {
     incoming: HashSet<NodeHandle>,
     outgoing: HashSet<NodeHandle>,
     parent: Option<NodeHandle>,
-    pub data: NodeData<'a>,
+    pub debug_name: String,
+    data: NodeData<'a>,
 }
 
 #[non_exhaustive]
@@ -52,13 +53,10 @@ pub struct CommandNode<'a> {
     #[allow(dead_code)]
     pub(crate) context: Arc<Context>,
     pub command: Exclusive<Command<'a, 'a>>,
-    pub debug_name: Option<String>,
 }
 impl Debug for CommandNode<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("CommandNode")
-            .field(&self.debug_name)
-            .finish()
+        f.write_str("CommandNode { .. }")
     }
 }
 
@@ -77,11 +75,10 @@ impl<'a> NodeData<'a> {
     pub fn fence() -> Self {
         Self::Fence(FenceNode)
     }
-    pub fn command(command: Command<'a, 'a>, name: Option<&str>) -> Self {
+    pub fn command(command: Command<'a, 'a>) -> Self {
         Self::Command(CommandNode {
             context: Arc::new(Context::new()),
             command: Exclusive::new(command),
-            debug_name: name.map(|s| s.to_string()),
         })
     }
     pub fn container() -> Self {
@@ -180,6 +177,7 @@ impl<'a> ComputeGraph<'a> {
             incoming: HashSet::new(),
             outgoing: HashSet::new(),
             parent: None,
+            debug_name: "root".to_string(),
             data: NodeData::Container(ContainerNode {
                 nodes: HashSet::new(),
             }),
@@ -302,9 +300,7 @@ impl<'a> ComputeGraph<'a> {
         }
     }
 
-    // TODO: This currently does not parallelize anything.
-    /// Consumes the graph, executing it.
-    pub fn execute(mut self) {
+    fn reduce(&mut self) {
         self.reduce_containers();
         assert_eq!(
             self.nodes.len() - 1,
@@ -318,6 +314,14 @@ impl<'a> ComputeGraph<'a> {
         );
         self.reduce_transitive();
         self.reduce_fences();
+        self.reduce_transitive();
+    }
+
+    // TODO: This currently does not parallelize anything.
+    /// Consumes the graph, executing it.
+    pub fn execute(mut self) {
+        self.reduce();
+
         let order = self.order();
         let mut commands = Vec::new();
         for handle in order {
@@ -335,6 +339,34 @@ impl<'a> ComputeGraph<'a> {
             drop(self.release);
         });
     }
+
+    /// Executes the graph without parallelism, printing debug information.
+    #[cfg(feature = "debug")]
+    #[tracing::instrument(skip_all, name = "ComputeGraph::execute_dbg")]
+    pub fn execute_dbg(mut self) {
+        use tracing::info_span;
+        self.reduce();
+
+        let order = self.order();
+        for handle in order {
+            let node = self.nodes.remove(handle.0).unwrap();
+            match node.data {
+                NodeData::Command(CommandNode { command, .. }) => {
+                    let _span = info_span!("command", name = node.debug_name).entered();
+                    let scope = self.device.default_stream().scope();
+                    scope.submit(std::iter::once(command.into_inner()));
+                }
+                NodeData::Container(_) => unreachable!(),
+                NodeData::Fence(_) => {}
+            }
+        }
+    }
+
+    #[cfg(feature = "debug")]
+    pub fn execute_clear_dbg(&mut self) {
+        std::mem::replace(self, Self::new(&self.device)).execute_dbg();
+    }
+
     /// Executes the graph and clears it.
     pub fn execute_clear(&mut self) {
         std::mem::replace(self, Self::new(&self.device)).execute();
@@ -367,7 +399,9 @@ impl<'a> GraphContext<'a> {
     pub fn device(&self) -> &Device {
         &self.graph.device
     }
+    /// Removes a node, pushing its children up to its parent.
     pub fn remove(&mut self, handle: impl AsNodeHandle) -> Option<Node<'a>> {
+        // TODO: Also remove the tag.
         let handle = handle.into_node_handle(self.graph);
         if let Some(node) = self.graph.nodes.remove(handle.0) {
             for incoming in &node.incoming {
@@ -376,13 +410,33 @@ impl<'a> GraphContext<'a> {
             for outgoing in &node.outgoing {
                 self.graph.nodes[outgoing.0].incoming.remove(&handle);
             }
-            if let Some(parent) = node.parent {
-                self.graph.nodes[parent.0]
-                    .data
-                    .container_mut()
-                    .unwrap()
-                    .nodes
-                    .remove(&handle);
+            let parent = node.parent.expect("Cannot remove the root node.");
+
+            if !self.graph.nodes.contains(parent.0) {
+                panic!(
+                    "Error: Cannot find parent node {:?} ({:?}) of node {:?} ({:?}).",
+                    self.graph.tags.get_tag(&parent).map(|x| x.debug()),
+                    parent,
+                    self.graph.tags.get_tag(&parent).map(|x| x.debug()),
+                    handle
+                );
+            }
+            self.graph.nodes[parent.0]
+                .data
+                .container_mut()
+                .unwrap()
+                .nodes
+                .remove(&handle);
+            if let Some(ContainerNode { nodes }) = node.data.container_ref() {
+                for child in nodes {
+                    self.graph.nodes[child.0].parent = Some(parent);
+                    self.graph.nodes[parent.0]
+                        .data
+                        .container_mut()
+                        .unwrap()
+                        .nodes
+                        .insert(*child);
+                }
             }
             Some(node)
         } else {
@@ -413,6 +467,10 @@ impl Deref for NodeRef<'_, '_> {
 impl<'a> NodeRef<'_, 'a> {
     pub fn tag(self, tag: impl Tag + Copy) -> Self {
         self.context.graph.tags.insert(tag, self.handle);
+        self.name(format!("{:?}", tag))
+    }
+    pub fn name(self, name: impl AsRef<str>) -> Self {
+        self.context.graph.nodes[self.handle.0].debug_name = name.as_ref().to_string();
         self
     }
     pub fn before(self, node: impl AsNodeHandle) -> Self {
@@ -529,6 +587,7 @@ impl<'a> AddToComputeGraph<'a> for NodeData<'a> {
             incoming: HashSet::new(),
             outgoing: HashSet::new(),
             parent: None,
+            debug_name: String::new(),
             data: self,
         }))
     }
@@ -543,7 +602,7 @@ where
 }
 impl<'a> AddToComputeGraph<'a> for Command<'a, 'a> {
     fn add<'b>(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle {
-        NodeData::command(self, None).add(graph)
+        NodeData::command(self).add(graph)
     }
 }
 
@@ -570,6 +629,6 @@ impl<'a, T: Value + Send> AddToComputeGraph<'a> for CopyFromBuffer<T> {
         let dst = &mut **guard;
         let dst = unsafe { std::mem::transmute::<&mut [T], &'static mut [T]>(dst) };
         graph.release.push(Exclusive::new(Box::new(guard)));
-        NodeData::command(self.src.copy_to_async(dst), None).add(graph)
+        NodeData::command(self.src.copy_to_async(dst)).add(graph)
     }
 }

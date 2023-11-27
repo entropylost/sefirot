@@ -146,6 +146,11 @@ impl VisitMut for RewriteIndexVisitor {
         let np = self.needs_parens;
         self.needs_parens = true;
         match expr {
+            Expr::Paren(node) => {
+                self.needs_parens = false;
+                self.visit_expr_paren_mut(node);
+                return;
+            }
             Expr::Binary(node) => {
                 self.needs_parens = false;
                 self.visit_expr_mut(&mut node.left);
@@ -220,6 +225,17 @@ pub fn tracked(
     let sig = &item.sig;
     let vis = &item.vis;
     quote_spanned!(item.span()=> #(#attrs)* #vis #sig { #body }).into()
+}
+
+#[proc_macro_derive(Tag)]
+pub fn derive_tag(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let item = syn::parse_macro_input!(item as DeriveInput);
+    let ident = item.ident;
+    let (impl_generics, ty_generics, where_clause) = item.generics.split_for_impl();
+    quote! {
+        impl #impl_generics ::sefirot::graph::Tag for #ident #ty_generics #where_clause {}
+    }
+    .into()
 }
 
 #[test]
