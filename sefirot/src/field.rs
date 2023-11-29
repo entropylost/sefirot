@@ -309,7 +309,6 @@ pub trait Accessor<T: EmanationType>: 'static {
         if let Some(x) = self.get_cache(element, field) {
             x
         } else {
-            // PERF: This is kind of unoptimal since it does 3 accesses.
             let res = f();
             element
                 .cache

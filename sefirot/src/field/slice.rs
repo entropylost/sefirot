@@ -126,7 +126,7 @@ impl<V: Value, T: EmanationType> Reference<'_, Field<Slice<Expr<V>>, T>> {
         check_bounds: bool,
         values: impl IntoBuffer<V>,
     ) -> Self {
-        let (buffer, handle) = values.into_buffer(self.device(), index.size);
+        let (buffer, handle) = values.into_buffer(self.device(), index.size * slice_size);
         self.bind_fn(move |el| {
             let _handle = &handle;
             let buffer = buffer.clone();

@@ -138,6 +138,7 @@ impl<I: PartitionIndex, T: EmanationType, P: EmanationType> IndexDomain
         ]
     }
 }
+// TODO: Add support for other-Domain partitions using `IndexEmanation`.
 #[cfg_attr(
     feature = "bevy",
     derive(bevy_ecs::prelude::Resource, bevy_ecs::prelude::Component)

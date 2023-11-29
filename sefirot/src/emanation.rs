@@ -120,8 +120,6 @@ impl<'a, V: CanReference> Reference<'a, V> {
         &self.emanation.device
     }
 }
-// TODO: Add name here.
-// Also iadd trait for reference. Perhaps rename? Also index refs for `morton`.
 
 pub trait CanReference: Copy {
     type T: EmanationType;

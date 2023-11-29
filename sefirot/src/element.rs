@@ -27,7 +27,7 @@ impl KernelContext {
 }
 
 pub struct Context {
-    // TODO: Make this use domains.
+    // TODO: Make this use domains. (Also track which Emanation is being accessed)
     accessed_fields: Mutex<HashSet<RawFieldHandle>>,
     mutated_fields: Mutex<HashSet<RawFieldHandle>>,
     bindings: Mutex<Vec<Box<dyn Fn(&mut KernelArgEncoder) + Send>>>,
