@@ -9,10 +9,9 @@ use super::*;
 // The `Debug` is necessary to have good `Debug` impls for `TagMap`.
 pub trait Tag: Debug + Eq + Hash + Copy + Clone + Send + Sync + 'static {}
 
-pub trait DynTag<H: Hasher + 'static = ahash::AHasher>: Send + Sync + 'static {
+pub trait DynTag<H: Hasher + 'static = ahash::AHasher>: Debug + Send + Sync + 'static {
     fn hash(&self, hasher: &mut H) -> u64;
     fn type_id(&self) -> TypeId;
-    fn debug(&self) -> String;
     fn as_any(&self) -> &dyn Any;
     fn eq(&self, other: &dyn DynTag<H>) -> bool;
     fn clone_box(&self) -> Box<dyn DynTag<H>>;
@@ -27,9 +26,6 @@ where
     }
     fn type_id(&self) -> TypeId {
         TypeId::of::<X>()
-    }
-    fn debug(&self) -> String {
-        format!("{:?}", self)
     }
     fn as_any(&self) -> &dyn Any {
         self
@@ -55,7 +51,7 @@ impl<T: Debug + Clone + Eq + Hash, S: BuildHasher + 'static> Debug for TagMap<T,
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut st = f.debug_struct("TagMap");
         for (value, tag) in &self.tags {
-            st.field(&tag.debug(), value);
+            st.field(&format!("{:?}", tag), value);
         }
         st.finish()
     }

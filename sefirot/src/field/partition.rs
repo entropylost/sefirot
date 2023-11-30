@@ -1,5 +1,5 @@
 use crate::domain::{IndexDomain, IndexEmanation};
-use crate::graph::{AddToComputeGraph, ComputeGraph, CopyFromBuffer};
+use crate::graph::{AsNode, ComputeGraph, CopyFromBuffer};
 
 use super::array::ArrayIndex;
 use super::constant::ConstantAccessor;
@@ -216,7 +216,7 @@ impl<'b, T: EmanationType, P: EmanationType, I: PartitionIndex> CanReference
 impl<'a: 'b, 'b, T: EmanationType, P: EmanationType, I: PartitionIndex>
     Reference<'a, &'b ArrayPartition<T, P, I>>
 {
-    pub fn update<'c>(self) -> impl AddToComputeGraph<'c> + 'b {
+    pub fn update<'c>(self) -> impl AsNode<'c> + 'b {
         move |graph: &mut ComputeGraph<'c>| {
             let zero = *graph.add(self.zero_lists_kernel.dispatch());
             let update = *graph.add(self.update_lists_kernel.dispatch());

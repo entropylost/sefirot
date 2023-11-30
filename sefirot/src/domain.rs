@@ -8,7 +8,7 @@ use luisa::runtime::KernelBuilder;
 use pretty_type_name::pretty_type_name;
 
 use crate::element::{Context, KernelContext};
-use crate::graph::{AddToComputeGraph, CommandNode, ComputeGraph, NodeData, NodeHandle};
+use crate::graph::{AsNode, CommandNode, ComputeGraph, NodeData, NodeHandle};
 use crate::prelude::*;
 
 pub mod kernel;

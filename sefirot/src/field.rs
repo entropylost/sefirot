@@ -211,7 +211,6 @@ pub trait DynAccessor<T: EmanationType>: Any {
     fn can_write(&self) -> bool;
     fn value_type(&self) -> TypeId;
     fn value_type_name(&self) -> String;
-    fn self_type(&self) -> TypeId;
     fn self_type_name(&self) -> String;
     fn as_any(&self) -> &dyn Any;
 }
@@ -246,9 +245,6 @@ where
     }
     fn value_type_name(&self) -> String {
         pretty_type_name::<X::V>()
-    }
-    fn self_type(&self) -> TypeId {
-        TypeId::of::<X>()
     }
     fn self_type_name(&self) -> String {
         pretty_type_name::<X>()

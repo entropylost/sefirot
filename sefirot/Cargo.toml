@@ -26,10 +26,10 @@ features = ["sync"]
 
 [dev-dependencies]
 rand = "0.8.5"
-winit = "0.28.7"
+winit = "0.29.4"
 
 [dependencies.bevy_ecs]
-version = "0.11.3"
+version = "0.12.1"
 default-features = false
 optional = true
 

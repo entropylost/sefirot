@@ -92,7 +92,7 @@ macro_rules! impl_kernel {
             pub fn dispatch_blocking(&self) {
                 self.dispatch_blocking_with_domain_args(())
             }
-            pub fn dispatch<'a: 'b, 'b>(&'b self) -> impl AddToComputeGraph<'a> + 'b {
+            pub fn dispatch<'a: 'b, 'b>(&'b self) -> impl AsNode<'a> + 'b {
                 self.dispatch_with_domain_args(())
             }
         }
@@ -102,7 +102,7 @@ macro_rules! impl_kernel {
                 graph.add(self.dispatch_with_domain_args(domain_args));
                 graph.execute();
             }
-            pub fn dispatch_with_domain_args<'a: 'b, 'b>(&'b self, domain_args: A) -> impl AddToComputeGraph<'a> + 'b {
+            pub fn dispatch_with_domain_args<'a: 'b, 'b>(&'b self, domain_args: A) -> impl AsNode<'a> + 'b {
                 move |graph: &mut ComputeGraph<'a>| {
                     let args = DispatchArgs {
                         context: self.context.clone(),
@@ -127,7 +127,7 @@ macro_rules! impl_kernel {
             #[allow(non_snake_case)]
             #[allow(clippy::too_many_arguments)]
             pub fn dispatch<'a: 'b, 'b, $S0: AsKernelArg<Output = $T0> $(, $Sn: AsKernelArg<Output = $Tn>)*>
-                (&'b self, $S0: &'b $S0 $(, $Sn: &'b $Sn)*) -> impl AddToComputeGraph<'a> + 'b {
+                (&'b self, $S0: &'b $S0 $(, $Sn: &'b $Sn)*) -> impl AsNode<'a> + 'b {
                 self.dispatch_with_domain_args((), $S0 $(, $Sn)*)
             }
         }
@@ -145,7 +145,7 @@ macro_rules! impl_kernel {
             #[allow(unused_variables)]
             #[allow(clippy::too_many_arguments)]
             pub fn dispatch_with_domain_args<'a: 'b, 'b, $S0: AsKernelArg<Output = $T0> $(, $Sn: AsKernelArg<Output = $Tn>)*>
-                (&'b self, domain_args: A, $S0: &'b $S0 $(, $Sn: &'b $Sn)*) -> impl AddToComputeGraph<'a> + 'b {
+                (&'b self, domain_args: A, $S0: &'b $S0 $(, $Sn: &'b $Sn)*) -> impl AsNode<'a> + 'b {
                 let context = self.context.clone();
                 move |graph: &mut ComputeGraph<'a>| {
                     let args = DispatchArgs {

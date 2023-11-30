@@ -381,7 +381,7 @@ impl<'a> GraphContext<'a> {
     pub fn graph(&mut self) -> &mut ComputeGraph<'a> {
         self.graph
     }
-    pub fn add<'b>(&'b mut self, f: impl AddToComputeGraph<'a>) -> NodeRef<'b, 'a> {
+    pub fn add<'b>(&'b mut self, f: impl AsNode<'a>) -> NodeRef<'b, 'a> {
         let id = f.add(self.graph);
         let root = self.root;
         let node = self.on(id);
@@ -415,9 +415,9 @@ impl<'a> GraphContext<'a> {
             if !self.graph.nodes.contains(parent.0) {
                 panic!(
                     "Error: Cannot find parent node {:?} ({:?}) of node {:?} ({:?}).",
-                    self.graph.tags.get_tag(&parent).map(|x| x.debug()),
+                    self.graph.tags.get_tag(&parent),
                     parent,
-                    self.graph.tags.get_tag(&parent).map(|x| x.debug()),
+                    self.graph.tags.get_tag(&parent),
                     handle
                 );
             }
@@ -578,10 +578,10 @@ impl<'a> NodeRef<'_, 'a> {
 /// A trait representing something that can be added to a [`ComputeGraph`], returning a [`NodeHandle`]
 /// for the node that was added. Note that [`add`](AddToComputeGraph::add) might add multiple nodes, as long as they're
 /// all children of the return node.
-pub trait AddToComputeGraph<'a> {
+pub trait AsNode<'a> {
     fn add<'b>(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle;
 }
-impl<'a> AddToComputeGraph<'a> for NodeData<'a> {
+impl<'a> AsNode<'a> for NodeData<'a> {
     fn add<'b>(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle {
         NodeHandle(graph.nodes.insert(Node {
             incoming: HashSet::new(),
@@ -592,7 +592,7 @@ impl<'a> AddToComputeGraph<'a> for NodeData<'a> {
         }))
     }
 }
-impl<'a, F> AddToComputeGraph<'a> for F
+impl<'a, F> AsNode<'a> for F
 where
     F: for<'b> FnOnce(&'b mut ComputeGraph<'a>) -> NodeHandle,
 {
@@ -600,7 +600,7 @@ where
         self(graph)
     }
 }
-impl<'a> AddToComputeGraph<'a> for Command<'a, 'a> {
+impl<'a> AsNode<'a> for Command<'a, 'a> {
     fn add<'b>(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle {
         NodeData::command(self).add(graph)
     }
@@ -618,12 +618,13 @@ impl<T: Value> CopyFromBuffer<T> {
         dst: Arc<tokio::sync::Mutex<Vec<T>>>,
     ) -> Self {
         let src = src.clone();
+        // TODO: Make this lock upon initialization of the graph.
         let guard = dst.clone().blocking_lock_owned();
         Self { src, guard }
     }
 }
 #[cfg(feature = "copy-from")]
-impl<'a, T: Value + Send> AddToComputeGraph<'a> for CopyFromBuffer<T> {
+impl<'a, T: Value + Send> AsNode<'a> for CopyFromBuffer<T> {
     fn add<'b>(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle {
         let mut guard = self.guard;
         let dst = &mut **guard;
