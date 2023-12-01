@@ -1,6 +1,7 @@
 use std::any::Any;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
+use std::marker::PhantomData;
 use std::mem::transmute;
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Exclusive};
@@ -371,6 +372,10 @@ impl<'a> ComputeGraph<'a> {
     pub fn execute_clear(&mut self) {
         std::mem::replace(self, Self::new(&self.device)).execute();
     }
+
+    pub fn clear(&mut self) {
+        *self = Self::new(&self.device);
+    }
 }
 
 pub struct GraphContext<'a> {
@@ -382,10 +387,7 @@ impl<'a> GraphContext<'a> {
         self.graph
     }
     pub fn add<'b>(&'b mut self, f: impl AsNode<'a>) -> NodeRef<'b, 'a> {
-        let id = f.add(self.graph);
-        let root = self.root;
-        let node = self.on(id);
-        node.parent(root)
+        f.node_add_ref(self.graph).parent(self.root)
     }
     pub fn fence<'b>(&'b mut self) -> NodeRef<'b, 'a> {
         self.add(NodeData::fence())
@@ -578,11 +580,41 @@ impl<'a> NodeRef<'_, 'a> {
 /// A trait representing something that can be added to a [`ComputeGraph`], returning a [`NodeHandle`]
 /// for the node that was added. Note that [`add`](AddToComputeGraph::add) might add multiple nodes, as long as they're
 /// all children of the return node.
-pub trait AsNode<'a> {
-    fn add<'b>(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle;
+pub trait AsNode<'a>: Sized {
+    /// Adds the node to the graph, returning a handle to the node.
+    /// Should not be called directly; use [`add`](GraphContext::add) instead.
+    fn node_add<'b>(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle;
+    /// Adds the node to the graph, returning a reference to the node.
+    /// Should not be called directly; use [`add`](GraphContext::add) instead.
+    fn node_add_ref<'b>(self, graph: &'b mut ComputeGraph<'a>) -> NodeRef<'b, 'a> {
+        let handle = self.node_add(graph);
+        graph.on(handle)
+    }
+    fn name(self, name: impl AsRef<str>) -> NamedNode<'a, Self> {
+        NamedNode {
+            node: self,
+            name: name.as_ref().to_string(),
+            _marker: PhantomData,
+        }
+    }
 }
+
+pub struct NamedNode<'a, N: AsNode<'a>> {
+    node: N,
+    name: String,
+    _marker: PhantomData<&'a ()>,
+}
+impl<'a, N: AsNode<'a>> AsNode<'a> for NamedNode<'a, N> {
+    fn node_add<'b>(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle {
+        *self.node_add_ref(graph)
+    }
+    fn node_add_ref<'b>(self, graph: &'b mut ComputeGraph<'a>) -> NodeRef<'b, 'a> {
+        self.node.node_add_ref(graph).name(self.name)
+    }
+}
+
 impl<'a> AsNode<'a> for NodeData<'a> {
-    fn add<'b>(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle {
+    fn node_add<'b>(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle {
         NodeHandle(graph.nodes.insert(Node {
             incoming: HashSet::new(),
             outgoing: HashSet::new(),
@@ -596,13 +628,13 @@ impl<'a, F> AsNode<'a> for F
 where
     F: for<'b> FnOnce(&'b mut ComputeGraph<'a>) -> NodeHandle,
 {
-    fn add<'b>(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle {
+    fn node_add<'b>(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle {
         self(graph)
     }
 }
 impl<'a> AsNode<'a> for Command<'a, 'a> {
-    fn add<'b>(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle {
-        NodeData::command(self).add(graph)
+    fn node_add<'b>(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle {
+        NodeData::command(self).node_add(graph)
     }
 }
 
@@ -625,11 +657,66 @@ impl<T: Value> CopyFromBuffer<T> {
 }
 #[cfg(feature = "copy-from")]
 impl<'a, T: Value + Send> AsNode<'a> for CopyFromBuffer<T> {
-    fn add<'b>(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle {
+    fn node_add<'b>(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle {
         let mut guard = self.guard;
         let dst = &mut **guard;
         let dst = unsafe { std::mem::transmute::<&mut [T], &'static mut [T]>(dst) };
         graph.release.push(Exclusive::new(Box::new(guard)));
-        NodeData::command(self.src.copy_to_async(dst)).add(graph)
+        NodeData::command(self.src.copy_to_async(dst)).node_add(graph)
+    }
+}
+
+pub trait NodeTuple<'a> {
+    fn add_all<'b>(self, graph: &'b mut ComputeGraph<'a>) -> Vec<NodeHandle>;
+    fn chained(self) -> Chain<'a, Self>
+    where
+        Self: Sized,
+    {
+        Chain(self, PhantomData)
+    }
+}
+
+macro_rules! impl_node_tuple {
+    ($($Sn:ident),*) => {
+        #[allow(non_snake_case)]
+        impl<'a, $($Sn),*> NodeTuple<'a> for ($($Sn),*)
+        where
+            $($Sn: AsNode<'a>),*
+        {
+            fn add_all<'b>(self, graph: &'b mut ComputeGraph<'a>) -> Vec<NodeHandle> {
+                let ($($Sn),*) = self;
+                vec![$($Sn.node_add(graph)),*]
+            }
+        }
+        impl<'a, $($Sn),*> AsNode<'a> for ($($Sn),*)
+        where
+            $($Sn: AsNode<'a>),*
+        {
+            fn node_add<'b>(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle {
+                *self.node_add_ref(graph)
+            }
+            fn node_add_ref<'b>(self, graph: &'b mut ComputeGraph<'a>) -> NodeRef<'b, 'a> {
+                let nodes = self.add_all(graph);
+                graph.container().children(&nodes)
+            }
+        }
+        impl_node_tuple!(@ $($Sn),*);
+    };
+    (@ $S0:ident, $S1:ident) => {};
+    (@ $S0:ident, $($Sn:ident),*) => {
+        impl_node_tuple!($($Sn),*);
+    };
+}
+
+impl_node_tuple!(S0, S1, S2, S3, S4, S5, S6, S7, S8, S9, S10, S11, S12, S13, S14, S15);
+
+pub struct Chain<'a, X: NodeTuple<'a>>(X, PhantomData<&'a ()>);
+impl<'a, X: NodeTuple<'a>> AsNode<'a> for Chain<'a, X> {
+    fn node_add<'b>(self, graph: &'b mut ComputeGraph<'a>) -> NodeHandle {
+        *self.node_add_ref(graph)
+    }
+    fn node_add_ref<'b>(self, graph: &'b mut ComputeGraph<'a>) -> NodeRef<'b, 'a> {
+        let nodes = self.0.add_all(graph);
+        graph.container().children_ordered(&nodes)
     }
 }

@@ -1,5 +1,5 @@
 use crate::domain::{IndexDomain, IndexEmanation};
-use crate::graph::{AsNode, ComputeGraph, CopyFromBuffer};
+use crate::graph::{AsNode, ComputeGraph, CopyFromBuffer, NodeTuple};
 
 use super::array::ArrayIndex;
 use super::constant::ConstantAccessor;
@@ -218,13 +218,17 @@ impl<'a: 'b, 'b, T: EmanationType, P: EmanationType, I: PartitionIndex>
 {
     pub fn update<'c>(self) -> impl AsNode<'c> + 'b {
         move |graph: &mut ComputeGraph<'c>| {
-            let zero = *graph.add(self.zero_lists_kernel.dispatch());
-            let update = *graph.add(self.update_lists_kernel.dispatch());
-            let copy = *graph.add(CopyFromBuffer::new(
-                &self.emanation.on(self.partition_size).buffer().unwrap(),
-                self.partition_size_host.clone(),
-            ));
-            *graph.container().children_ordered(&[zero, update, copy])
+            *graph.add(
+                (
+                    self.zero_lists_kernel.dispatch(),
+                    self.update_lists_kernel.dispatch(),
+                    CopyFromBuffer::new(
+                        &self.emanation.on(self.partition_size).buffer().unwrap(),
+                        self.partition_size_host.clone(),
+                    ),
+                )
+                    .chained(),
+            )
         }
     }
 }

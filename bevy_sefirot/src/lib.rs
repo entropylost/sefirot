@@ -1,4 +1,5 @@
 use bevy::ecs::schedule::NodeId;
+use bevy::ecs::system::{CombinatorSystem, Pipe, SystemParamItem};
 use bevy::utils::HashMap;
 use bevy_luisa::luisa;
 
@@ -7,10 +8,11 @@ use sefirot::domain::kernel::KernelSignature;
 use sefirot::graph::{AsNode, ComputeGraph, NodeHandle};
 use sefirot::prelude::{EmanationType, Kernel};
 use std::any::TypeId;
-use std::ops::Deref;
+use std::marker::PhantomData;
+use std::ops::{Deref, DerefMut};
 use std::sync::OnceLock;
 
-pub use bevy_sefirot_macro::init_kernel;
+pub use bevy_sefirot_macro::{add, init_kernel};
 
 use bevy::prelude::*;
 
@@ -46,7 +48,7 @@ impl<T: EmanationType, S: KernelSignature, A> KernelCell<T, S, A> {
 // Also need some way of actually getting a `NodeHandle` from a `impl SystemSet`.
 // Can use the SystemSet hash, and just reuse the SystemSet wrapper for each System that hopefully exists (test this)?
 
-#[derive(DerefMut, Deref, Resource)]
+#[derive(DerefMut, Deref, Resource, Debug)]
 pub struct MirrorGraph {
     #[deref]
     pub graph: ComputeGraph<'static>,
@@ -57,14 +59,31 @@ pub struct MirrorGraph {
 
 impl MirrorGraph {
     pub fn new(device: &Device, schedule: &Schedule) -> Self {
-        let mut graph = ComputeGraph::new(device);
+        let mut graph = Self::null(device);
+        graph.init(schedule);
+        graph
+    }
+    pub fn null(device: &Device) -> Self {
+        Self {
+            graph: ComputeGraph::new(device),
+            set_map: HashMap::new(),
+            system_type_map: HashMap::new(),
+            node_map: HashMap::new(),
+        }
+    }
+    pub fn init(&mut self, schedule: &Schedule) {
+        let graph = &mut self.graph;
+        let set_map = &mut self.set_map;
+        let system_type_map = &mut self.system_type_map;
+        let node_map = &mut self.node_map;
+
+        graph.clear();
+        set_map.clear();
+        system_type_map.clear();
+        node_map.clear();
 
         let hierarchy = schedule.graph().hierarchy().graph();
         let dependency = schedule.graph().dependency().graph();
-
-        let mut set_map = HashMap::new();
-        let mut system_type_map = HashMap::new();
-        let mut node_map = HashMap::new();
 
         for (node, set, _) in schedule.graph().system_sets() {
             let handle = *graph.container();
@@ -86,13 +105,6 @@ impl MirrorGraph {
                 .children(hierarchy.edges(*node).map(|e| &node_map[&e.1]))
                 .before_all(dependency.edges(*node).map(|e| &node_map[&e.1]));
         }
-
-        MirrorGraph {
-            graph,
-            set_map,
-            system_type_map,
-            node_map,
-        }
     }
     pub fn add_to_system<F: IntoSystem<(), (), M> + 'static, M>(
         &mut self,
@@ -104,4 +116,40 @@ impl MirrorGraph {
                 .expect("Cannot add to graph with multiple systems of the same type."),
         )
     }
+}
+
+struct AddToGraphSystemMarker;
+
+struct AddToGraphSystem<G, F, I, M> {
+    _marker: PhantomData<fn(G, F, I, M)>,
+}
+impl<
+        G: DerefMut<Target = MirrorGraph> + Resource + 'static,
+        F: IntoSystem<I, NodeHandle, M> + 'static,
+        I: 'static,
+        M: 'static,
+    > SystemParamFunction<AddToGraphSystemMarker> for AddToGraphSystem<G, F, I, M>
+{
+    type In = NodeHandle;
+    type Out = ();
+    type Param = (ResMut<'static, G>,);
+    fn run(&mut self, node: NodeHandle, (mut graph,): SystemParamItem<Self::Param>) {
+        let parent = graph.system_type_map
+            [&TypeId::of::<CombinatorSystem<Pipe, F::System, Self>>()]
+            .expect("Cannot add to graph with multiple systems of the same type.");
+        graph.graph.on(node).parent(parent);
+    }
+}
+
+pub fn add_node<
+    G: DerefMut<Target = MirrorGraph> + Resource + 'static,
+    F: IntoSystem<I, NodeHandle, M> + 'static,
+    I: 'static,
+    M: 'static,
+>(
+    f: F,
+) -> impl System<In = I, Out = ()> {
+    f.pipe(AddToGraphSystem::<G, F, I, M> {
+        _marker: PhantomData,
+    })
 }
