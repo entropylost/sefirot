@@ -35,7 +35,10 @@ where
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct NodeHandle(Index);
+pub enum NodeHandle {
+    Container(usize),
+    Command(usize),
+}
 
 #[derive(Debug)]
 pub struct Node<'a> {
@@ -137,8 +140,7 @@ impl<'a> NodeData<'a> {
 )]
 pub struct ComputeGraph<'a> {
     tags: TagMap<NodeHandle>,
-    nodes: Arena<Node<'a>>,
-    root: NodeHandle,
+    commands: Vec<CommandNode<'a>>,
     device: Device,
     // Resources to be released after the graph is executed.
     release: Vec<Exclusive<Box<dyn Any + Send>>>,
@@ -574,6 +576,13 @@ impl<'a> NodeRef<'_, 'a> {
         f(self.context);
         self.context.root = prev_root;
         self
+    }
+    pub fn get_children(&self) -> &HashSet<NodeHandle> {
+        &self.context.graph.nodes[self.handle.0]
+            .data
+            .container_ref()
+            .unwrap()
+            .nodes
     }
 }
 

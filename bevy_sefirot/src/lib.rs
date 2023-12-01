@@ -1,4 +1,4 @@
-use bevy::ecs::schedule::NodeId;
+use bevy::ecs::schedule::{NodeId, SystemTypeSet};
 use bevy::ecs::system::{CombinatorSystem, Pipe, SystemParamItem};
 use bevy::utils::HashMap;
 use bevy_luisa::luisa;
@@ -100,6 +100,15 @@ impl MirrorGraph {
         }
 
         for (node, handle) in node_map.iter() {
+            println!(
+                "Adding relations {:?} ({:?}):\n    {:?}",
+                node,
+                handle,
+                hierarchy
+                    .edges(*node)
+                    .map(|e| (e.1, node_map[&e.1]))
+                    .collect::<Vec<_>>()
+            );
             graph
                 .on(*handle)
                 .children(hierarchy.edges(*node).map(|e| &node_map[&e.1]))
@@ -118,6 +127,10 @@ impl MirrorGraph {
     }
 }
 
+fn system_type_set<F>() -> SystemTypeSet<F> {
+    unsafe { std::mem::transmute::<(), SystemTypeSet<F>>(()) }
+}
+
 struct AddToGraphSystemMarker;
 
 struct AddToGraphSystem<G, F, I, M> {
@@ -134,9 +147,19 @@ impl<
     type Out = ();
     type Param = (ResMut<'static, G>,);
     fn run(&mut self, node: NodeHandle, (mut graph,): SystemParamItem<Self::Param>) {
-        let parent = graph.system_type_map
-            [&TypeId::of::<CombinatorSystem<Pipe, F::System, Self>>()]
-            .expect("Cannot add to graph with multiple systems of the same type.");
+        let parent_set = graph.set_map[&(Box::new(system_type_set::<F>()) as Box<dyn SystemSet>)];
+        println!("Parent: {:?}", parent_set);
+        let parent_set = graph.graph.on(parent_set);
+        let children = parent_set.get_children();
+        if children.len() != 1 {
+            println!("Children: {:?}", children);
+            panic!(
+                "Cannot add to graph with multiple systems of the same type. {:?}",
+                system_type_set::<F>()
+            );
+        }
+
+        let parent = *children.iter().next().unwrap();
         graph.graph.on(node).parent(parent);
     }
 }
