@@ -5,7 +5,7 @@ use bevy_luisa::luisa;
 
 use luisa::runtime::Device;
 use sefirot::domain::kernel::KernelSignature;
-use sefirot::graph::{AsNode, ComputeGraph, NodeHandle};
+use sefirot::graph::{AsNodes, ComputeGraph, NodeHandle};
 use sefirot::prelude::{EmanationType, Kernel};
 use std::any::TypeId;
 use std::marker::PhantomData;
@@ -71,6 +71,8 @@ impl MirrorGraph {
             node_map: HashMap::new(),
         }
     }
+    // TODO: Just copy the graph from bevy over.
+    // Also: Fix the add to graph thing (again) and get the particles example working.
     pub fn init(&mut self, schedule: &Schedule) {
         let graph = &mut self.graph;
         let set_map = &mut self.set_map;
@@ -86,12 +88,12 @@ impl MirrorGraph {
         let dependency = schedule.graph().dependency().graph();
 
         for (node, set, _) in schedule.graph().system_sets() {
-            let handle = *graph.container();
+            let handle = graph.add_single(format!("{:?}", set));
             set_map.insert(set.dyn_clone(), handle);
             node_map.insert(node, handle);
         }
         for (node, system, _) in schedule.graph().systems() {
-            let handle = *graph.container();
+            let handle = graph.add_single(&*system.name());
             system_type_map
                 .entry(system.type_id())
                 .and_replace_entry_with(|_, _| Some(None))
@@ -99,38 +101,29 @@ impl MirrorGraph {
             node_map.insert(node, handle);
         }
 
-        for (node, handle) in node_map.iter() {
-            println!(
-                "Adding relations {:?} ({:?}):\n    {:?}",
-                node,
-                handle,
-                hierarchy
-                    .edges(*node)
-                    .map(|e| (e.1, node_map[&e.1]))
-                    .collect::<Vec<_>>()
-            );
-            graph
-                .on(*handle)
-                .children(hierarchy.edges(*node).map(|e| &node_map[&e.1]))
-                .before_all(dependency.edges(*node).map(|e| &node_map[&e.1]));
+        for constraint in hierarchy.all_edges() {
+            graph.add(node_map[&constraint.0].contains(node_map[&constraint.1]));
+        }
+        for constraint in dependency.all_edges() {
+            graph.add(node_map[&constraint.0].before(node_map[&constraint.1]));
         }
     }
-    pub fn add_to_system<F: IntoSystem<(), (), M> + 'static, M>(
-        &mut self,
-        _f: F,
-        node: impl AsNode<'static>,
-    ) -> NodeHandle {
-        *self.graph.add(node).parent(
-            self.system_type_map[&TypeId::of::<F>()]
-                .expect("Cannot add to graph with multiple systems of the same type."),
-        )
-    }
+    // pub fn add_to_system<F: IntoSystem<(), (), M> + 'static, M>(
+    //     &mut self,
+    //     _f: F,
+    //     node: impl AsNodes<'static>,
+    // ) -> NodeHandle {
+    //     *self.graph.add(node).parent(
+    //         self.system_type_map[&TypeId::of::<F>()]
+    //             .expect("Cannot add to graph with multiple systems of the same type."),
+    //     )
+    // }
 }
 
 fn system_type_set<F>() -> SystemTypeSet<F> {
     unsafe { std::mem::transmute::<(), SystemTypeSet<F>>(()) }
 }
-
+/*
 struct AddToGraphSystemMarker;
 
 struct AddToGraphSystem<G, F, I, M> {
@@ -176,3 +169,4 @@ pub fn add_node<
         _marker: PhantomData,
     })
 }
+ */

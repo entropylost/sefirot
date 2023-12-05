@@ -92,7 +92,7 @@ macro_rules! impl_kernel {
             pub fn dispatch_blocking(&self) {
                 self.dispatch_blocking_with_domain_args(())
             }
-            pub fn dispatch<'a: 'b, 'b>(&'b self) -> impl AsNode<'a> + 'b {
+            pub fn dispatch(&self) -> NodeConfigs<'static> {
                 self.dispatch_with_domain_args(())
             }
         }
@@ -102,17 +102,15 @@ macro_rules! impl_kernel {
                 graph.add(self.dispatch_with_domain_args(domain_args));
                 graph.execute();
             }
-            pub fn dispatch_with_domain_args<'a: 'b, 'b>(&'b self, domain_args: A) -> impl AsNode<'a> + 'b {
-                move |graph: &mut ComputeGraph<'a>| {
-                    let args = DispatchArgs {
-                        context: self.context.clone(),
-                        call_kernel_async: &|dispatch_size| {
-                            self.raw.dispatch_async(dispatch_size, &*self.context)
-                        },
-                        debug_name: self.debug_name.clone(),
-                    };
-                    self.domain.dispatch_async(graph, domain_args, args)
-                }
+            pub fn dispatch_with_domain_args(&self, domain_args: A) -> NodeConfigs<'static> {
+                let args = DispatchArgs {
+                    context: self.context.clone(),
+                    call_kernel_async: &|dispatch_size| {
+                        self.raw.dispatch_async(dispatch_size, &*self.context)
+                    },
+                    debug_name: self.debug_name.clone(),
+                };
+                self.domain.dispatch_async(domain_args, args)
             }
         }
     };
@@ -126,8 +124,8 @@ macro_rules! impl_kernel {
             }
             #[allow(non_snake_case)]
             #[allow(clippy::too_many_arguments)]
-            pub fn dispatch<'a: 'b, 'b, $S0: AsKernelArg<Output = $T0> $(, $Sn: AsKernelArg<Output = $Tn>)*>
-                (&'b self, $S0: &'b $S0 $(, $Sn: &'b $Sn)*) -> impl AsNode<'a> + 'b {
+            pub fn dispatch<$S0: AsKernelArg<Output = $T0> $(, $Sn: AsKernelArg<Output = $Tn>)*>
+                (&self, $S0: &$S0 $(, $Sn: &$Sn)*) -> NodeConfigs<'static> {
                 self.dispatch_with_domain_args((), $S0 $(, $Sn)*)
             }
         }
@@ -144,19 +142,16 @@ macro_rules! impl_kernel {
             #[allow(non_snake_case)]
             #[allow(unused_variables)]
             #[allow(clippy::too_many_arguments)]
-            pub fn dispatch_with_domain_args<'a: 'b, 'b, $S0: AsKernelArg<Output = $T0> $(, $Sn: AsKernelArg<Output = $Tn>)*>
-                (&'b self, domain_args: A, $S0: &'b $S0 $(, $Sn: &'b $Sn)*) -> impl AsNode<'a> + 'b {
-                let context = self.context.clone();
-                move |graph: &mut ComputeGraph<'a>| {
-                    let args = DispatchArgs {
-                        context: self.context.clone(),
-                        call_kernel_async: &|dispatch_size| {
-                            self.raw.dispatch_async(dispatch_size, $S0, $($Sn,)* &*self.context)
-                        },
-                        debug_name: self.debug_name.clone(),
-                    };
-                    self.domain.dispatch_async(graph, domain_args, args)
-                }
+            pub fn dispatch_with_domain_args<$S0: AsKernelArg<Output = $T0> $(, $Sn: AsKernelArg<Output = $Tn>)*>
+                (&self, domain_args: A, $S0: &$S0 $(, $Sn: &$Sn)*) -> NodeConfigs<'static> {
+                let args = DispatchArgs {
+                    context: self.context.clone(),
+                    call_kernel_async: &|dispatch_size| {
+                        self.raw.dispatch_async(dispatch_size, $S0, $($Sn,)* &*self.context)
+                    },
+                    debug_name: self.debug_name.clone(),
+                };
+                self.domain.dispatch_async(domain_args, args)
             }
         }
         impl_kernel!( $($Tn: $Sn),* );

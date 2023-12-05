@@ -1,5 +1,5 @@
 use crate::domain::{IndexDomain, IndexEmanation};
-use crate::graph::{AsNode, ComputeGraph, CopyFromBuffer, NodeTuple};
+use crate::graph::{AsNodes, CopyToExt, NodeConfigs};
 
 use super::array::ArrayIndex;
 use super::constant::ConstantAccessor;
@@ -216,20 +216,18 @@ impl<'b, T: EmanationType, P: EmanationType, I: PartitionIndex> CanReference
 impl<'a: 'b, 'b, T: EmanationType, P: EmanationType, I: PartitionIndex>
     Reference<'a, &'b ArrayPartition<T, P, I>>
 {
-    pub fn update<'c>(self) -> impl AsNode<'c> + 'b {
-        move |graph: &mut ComputeGraph<'c>| {
-            *graph.add(
-                (
-                    self.zero_lists_kernel.dispatch(),
-                    self.update_lists_kernel.dispatch(),
-                    CopyFromBuffer::new(
-                        &self.emanation.on(self.partition_size).buffer().unwrap(),
-                        self.partition_size_host.clone(),
-                    ),
-                )
-                    .chained(),
-            )
-        }
+    pub fn update(&self) -> NodeConfigs<'static> {
+        (
+            self.zero_lists_kernel.dispatch(),
+            self.update_lists_kernel.dispatch(),
+            self.emanation
+                .on(self.partition_size)
+                .buffer()
+                .unwrap()
+                .cp(&self.partition_size_host),
+        )
+            .into_node_configs()
+            .chain()
     }
 }
 impl<T: EmanationType> Emanation<T> {

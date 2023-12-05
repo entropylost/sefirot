@@ -21,12 +21,11 @@ branch = "main"
 
 [dependencies.tokio]
 version = "1.32.0"
-optional = true
 features = ["sync"]
 
 [dev-dependencies]
 rand = "0.8.5"
-winit = "0.28.7"
+winit = "0.29.4"
 
 [dependencies.bevy_ecs]
 version = "0.12.1"
@@ -35,7 +34,6 @@ optional = true
 
 [features]
 bevy = ["dep:bevy_ecs", "sefirot_macro/bevy"]
-copy-from = ["dep:tokio"]
-partition = ["copy-from"]
+partition = []
 check-recursive-access = []
 debug = ["dep:tracing"]

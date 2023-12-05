@@ -2,21 +2,56 @@ use std::any::TypeId;
 use std::hash::{BuildHasher, Hash, Hasher};
 
 use ahash::random_state::RandomState;
-use smallvec::SmallVec;
+use ahash::AHasher;
 
 use super::*;
 
-// The `Debug` is necessary to have good `Debug` impls for `TagMap`.
 pub trait Tag: Debug + Eq + Hash + Copy + Clone + Send + Sync + 'static {}
 
-pub trait DynTag<H: Hasher + 'static = ahash::AHasher>: Debug + Send + Sync + 'static {
+pub struct DynTag<H: Hasher + 'static = AHasher> {
+    tag: Box<dyn SafeTag<H>>,
+}
+impl<H: Hasher + 'static> DynTag<H> {
+    pub fn new(tag: impl Tag) -> Self {
+        Self { tag: Box::new(tag) }
+    }
+}
+impl<H: Hasher + 'static> PartialEq for DynTag<H> {
+    fn eq(&self, other: &Self) -> bool {
+        self.tag.eq(other.tag.as_ref())
+    }
+}
+impl<H: Hasher + 'static> Eq for DynTag<H> {}
+impl<H: Hasher + 'static> Hash for DynTag<H> {
+    fn hash<H1: Hasher>(&self, state: &mut H1) {
+        // if TypeId::of::<H1>() == TypeId::of::<H>() {
+        self.tag.hash(unsafe { std::mem::transmute(state) });
+        // } else {
+        //     unreachable!("Invalid hasher type.");
+        // }
+    }
+}
+impl<H: Hasher + 'static> Debug for DynTag<H> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.tag.fmt(f)
+    }
+}
+impl<H: Hasher + 'static> Clone for DynTag<H> {
+    fn clone(&self) -> Self {
+        Self {
+            tag: self.tag.clone_box(),
+        }
+    }
+}
+
+pub trait SafeTag<H: Hasher + 'static = AHasher>: Debug + Send + Sync + 'static {
     fn hash(&self, hasher: &mut H) -> u64;
     fn type_id(&self) -> TypeId;
     fn as_any(&self) -> &dyn Any;
-    fn eq(&self, other: &dyn DynTag<H>) -> bool;
-    fn clone_box(&self) -> Box<dyn DynTag<H>>;
+    fn eq(&self, other: &dyn SafeTag<H>) -> bool;
+    fn clone_box(&self) -> Box<dyn SafeTag<H>>;
 }
-impl<X, H: Hasher + 'static> DynTag<H> for X
+impl<X, H: Hasher + 'static> SafeTag<H> for X
 where
     X: Tag,
 {
@@ -30,22 +65,21 @@ where
     fn as_any(&self) -> &dyn Any {
         self
     }
-    fn eq(&self, other: &dyn DynTag<H>) -> bool {
+    fn eq(&self, other: &dyn SafeTag<H>) -> bool {
         other
             .as_any()
             .downcast_ref::<X>()
             .map_or(false, |x| x == self)
     }
-    fn clone_box(&self) -> Box<dyn DynTag<H>> {
+    fn clone_box(&self) -> Box<dyn SafeTag<H>> {
         Box::new(*self)
     }
 }
 
 /// A bi-directional map from values to tags of arbitrary types.
 pub struct TagMap<T: Clone + Eq + Hash, S: BuildHasher + 'static = RandomState> {
-    state: S,
-    tags: HashMap<T, Box<dyn DynTag<S::Hasher>>, S>,
-    reverse_tags: HashMap<(u64, TypeId), SmallVec<[(Box<dyn DynTag<S::Hasher>>, T); 1]>, S>,
+    tags: HashMap<T, DynTag<S::Hasher>, S>,
+    values: HashMap<DynTag<S::Hasher>, T, S>,
 }
 impl<T: Debug + Clone + Eq + Hash, S: BuildHasher + 'static> Debug for TagMap<T, S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -68,83 +102,59 @@ impl<T: Clone + Eq + Hash, S: BuildHasher + 'static> TagMap<T, S> {
         S: Default,
     {
         Self {
-            state: S::default(),
             tags: HashMap::with_hasher(S::default()),
-            reverse_tags: HashMap::with_hasher(S::default()),
+            values: HashMap::with_hasher(S::default()),
         }
     }
-    fn index(&self, tag: &dyn DynTag<S::Hasher>) -> (u64, TypeId) {
-        (tag.hash(&mut self.state.build_hasher()), tag.type_id())
+    pub fn insert_dyn(&mut self, tag: DynTag<S::Hasher>, value: T) -> bool {
+        if self.tags.contains_key(&value) {
+            return false;
+        }
+        self.tags.insert(value.clone(), tag.clone());
+        self.values.insert(tag, value);
+        true
     }
     /// Inserts a value with a given tag into the map, returning `false` and doing nothing if the value was already present.
     pub fn insert(&mut self, tag: impl Tag, value: T) -> bool {
-        let index = self.index(&tag);
-        if self.tags.contains_key(&value)
-            || self.reverse_tags.get(&index).map_or(false, |tags| {
-                tags.iter()
-                    .any(|(t, _)| DynTag::<S::Hasher>::eq(&tag, t.as_ref()))
-            })
-        {
-            return false;
-        }
-        self.tags.insert(value.clone(), Box::new(tag));
-        self.reverse_tags
-            .entry(index)
-            .or_default()
-            .push((Box::new(tag), value));
-        true
+        self.insert_dyn(DynTag::new(tag), value)
     }
-    /// Removes a value with a given tag from the map, returning the value removed.
-    pub fn remove_tag(&mut self, tag: impl Tag) -> Option<T> {
-        let index = self.index(&tag);
-        if let Some(tags) = self.reverse_tags.get_mut(&index) {
-            let Some(index) = tags
-                .iter()
-                .position(|(t, _)| DynTag::<S::Hasher>::eq(&tag, t.as_ref()))
-            else {
-                return None;
-            };
-            let (_tag, value) = tags.swap_remove(index);
+    pub fn remove_dyn(&mut self, tag: DynTag<S::Hasher>) -> Option<T> {
+        if let Some(value) = self.values.remove(&tag) {
             self.tags.remove(&value).unwrap();
             Some(value)
         } else {
             None
         }
     }
+    /// Removes a value with a given tag from the map, returning the value removed.
+    pub fn remove(&mut self, tag: impl Tag) -> Option<T> {
+        self.remove_dyn(DynTag::new(tag))
+    }
     /// Removes a value from the map, returning if the removal was sucessful.
-    pub fn remove_value(&mut self, value: &T) -> bool {
-        let Some(tag) = self.tags.remove(value) else {
-            return false;
-        };
-        let index = self.index(&*tag);
-        let tags = self.reverse_tags.get_mut(&index).unwrap();
-        tags.retain(|(_, v)| v != value);
-        if tags.is_empty() {
-            self.reverse_tags.remove(&index);
+    pub fn remove_value(&mut self, value: &T) -> Option<DynTag<S::Hasher>> {
+        if let Some(tag) = self.tags.remove(value) {
+            self.values.remove(&tag).unwrap();
+            Some(tag)
+        } else {
+            None
         }
-        true
     }
     pub fn contains_value(&self, value: &T) -> bool {
         self.tags.contains_key(value)
     }
-    pub fn contains_tag(&self, tag: impl Tag) -> bool {
-        let index = self.index(&tag);
-        self.reverse_tags.get(&index).map_or(false, |tags| {
-            tags.iter()
-                .any(|(t, _)| DynTag::<S::Hasher>::eq(&tag, t.as_ref()))
-        })
+    pub fn contains_dyn(&self, tag: DynTag<S::Hasher>) -> bool {
+        self.values.contains_key(&tag)
+    }
+    pub fn contains(&self, tag: impl Tag) -> bool {
+        self.contains_dyn(DynTag::new(tag))
+    }
+    pub fn get_dyn(&self, tag: DynTag<S::Hasher>) -> Option<&T> {
+        self.values.get(&tag)
     }
     pub fn get(&self, tag: impl Tag) -> Option<&T> {
-        let index = self.index(&tag);
-        self.reverse_tags
-            .get(&index)
-            .and_then(|tags| {
-                tags.iter()
-                    .find(|(t, _)| DynTag::<S::Hasher>::eq(&tag, t.as_ref()))
-            })
-            .map(|(_, v)| v)
+        self.get_dyn(DynTag::new(tag))
     }
-    pub fn get_tag(&self, value: &T) -> Option<&dyn DynTag<S::Hasher>> {
-        self.tags.get(value).map(|x| x.as_ref())
+    pub fn get_tag(&self, value: &T) -> Option<DynTag<S::Hasher>> {
+        self.tags.get(value).cloned()
     }
 }

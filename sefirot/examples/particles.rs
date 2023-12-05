@@ -1,7 +1,7 @@
 use std::env::current_exe;
 
 use luisa::lang::types::vector::{Vec2, Vec3, Vec4};
-use sefirot::graph::ComputeGraph;
+use sefirot::graph::{AsNodes, ComputeGraph};
 use sefirot::prelude::*;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::ControlFlow;
@@ -24,7 +24,7 @@ fn main() {
     luisa::init_logger();
     let device = Context::new(current_exe().unwrap()).create_device("cuda");
 
-    let event_loop = winit::event_loop::EventLoop::new();
+    let event_loop = winit::event_loop::EventLoop::new().unwrap();
     let window = winit::window::WindowBuilder::new()
         .with_title("Sefirot - Particles Example")
         .with_inner_size(winit::dpi::PhysicalSize::new(SIZE, SIZE))
@@ -68,30 +68,33 @@ fn main() {
     let clear_kernel = device.create_kernel_async::<fn()>(&|| {
         display.write(dispatch_id().xy(), Vec3::splat_expr(0.0_f32).extend(1.0));
     });
-    event_loop.run(move |event, _, control_flow| {
-        control_flow.set_poll();
-        match event {
+    event_loop.set_control_flow(ControlFlow::Poll);
+    event_loop
+        .run(move |event, elwt| match event {
+            Event::AboutToWait => {
+                window.request_redraw();
+            }
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
                 window_id,
             } if window_id == window.id() => {
-                *control_flow = ControlFlow::Exit;
+                elwt.exit();
             }
-            Event::MainEventsCleared => {
-                window.request_redraw();
-            }
-            Event::RedrawRequested(_) => {
+            Event::WindowEvent {
+                event: WindowEvent::RedrawRequested,
+                window_id,
+            } if window_id == window.id() => {
                 device
                     .default_stream()
                     .scope()
                     .present(&swapchain, &display);
                 let mut graph = ComputeGraph::new(&device);
-                let clear = *graph.add(clear_kernel.dispatch_async([SIZE, SIZE, 1]));
-                graph.add(update_kernel.dispatch(&1.0)).after(clear);
+                let clear = graph.add_single(clear_kernel.dispatch_async([SIZE, SIZE, 1]));
+                graph.add(update_kernel.dispatch(&1.0).after(clear));
                 graph.execute();
                 window.request_redraw();
             }
             _ => {}
-        }
-    });
+        })
+        .unwrap();
 }
