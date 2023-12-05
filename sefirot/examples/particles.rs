@@ -24,7 +24,7 @@ fn main() {
     luisa::init_logger();
     let device = Context::new(current_exe().unwrap()).create_device("cuda");
 
-    let event_loop = winit::event_loop::EventLoop::new().unwrap();
+    let event_loop = winit::event_loop::EventLoop::new();
     let window = winit::window::WindowBuilder::new()
         .with_title("Sefirot - Particles Example")
         .with_inner_size(winit::dpi::PhysicalSize::new(SIZE, SIZE))
@@ -68,22 +68,19 @@ fn main() {
     let clear_kernel = device.create_kernel_async::<fn()>(&|| {
         display.write(dispatch_id().xy(), Vec3::splat_expr(0.0_f32).extend(1.0));
     });
-    event_loop.set_control_flow(ControlFlow::Poll);
-    event_loop
-        .run(move |event, elwt| match event {
-            Event::AboutToWait => {
-                window.request_redraw();
-            }
+    event_loop.run(move |event, _, control_flow| {
+        control_flow.set_poll();
+        match event {
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
                 window_id,
             } if window_id == window.id() => {
-                elwt.exit();
+                *control_flow = ControlFlow::Exit;
             }
-            Event::WindowEvent {
-                event: WindowEvent::RedrawRequested,
-                window_id,
-            } if window_id == window.id() => {
+            Event::MainEventsCleared => {
+                window.request_redraw();
+            }
+            Event::RedrawRequested(_) => {
                 device
                     .default_stream()
                     .scope()
@@ -95,6 +92,6 @@ fn main() {
                 window.request_redraw();
             }
             _ => {}
-        })
-        .unwrap();
+        }
+    });
 }
