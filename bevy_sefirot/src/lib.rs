@@ -1,20 +1,17 @@
 use bevy::ecs::schedule::{NodeId, SystemTypeSet};
-use bevy::ecs::system::{CombinatorSystem, Pipe, SystemParamItem};
+use bevy::prelude::*;
 use bevy::utils::HashMap;
 use bevy_luisa::luisa;
-
 use luisa::runtime::Device;
+use petgraph::graphmap::DiGraphMap;
 use sefirot::domain::kernel::KernelSignature;
 use sefirot::graph::{AsNodes, ComputeGraph, NodeHandle};
 use sefirot::prelude::{EmanationType, Kernel};
 use std::any::TypeId;
-use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::sync::OnceLock;
 
-pub use bevy_sefirot_macro::{add, init_kernel};
-
-use bevy::prelude::*;
+pub use bevy_sefirot_macro::init_kernel;
 
 pub mod prelude {
     pub use bevy_luisa::{LuisaDevice, LuisaPlugin};
@@ -55,6 +52,9 @@ pub struct MirrorGraph {
     pub set_map: HashMap<Box<dyn SystemSet>, NodeHandle>,
     pub system_type_map: HashMap<TypeId, Option<NodeHandle>>, // None if contradiction.
     pub node_map: HashMap<NodeId, NodeHandle>,
+    pub initialized: bool,
+    pub dependency_graph: DiGraphMap<NodeHandle, ()>,
+    pub hierarchy_graph: DiGraphMap<NodeHandle, ()>,
 }
 
 impl MirrorGraph {
@@ -69,8 +69,26 @@ impl MirrorGraph {
             set_map: HashMap::new(),
             system_type_map: HashMap::new(),
             node_map: HashMap::new(),
+            initialized: false,
+            dependency_graph: DiGraphMap::new(),
+            hierarchy_graph: DiGraphMap::new(),
         }
     }
+    /// Initialize the graph with the given schedule, using cached dependency and hierarchy graphs,
+    /// as after the first schedule run, the systems are emptied.
+    pub fn init_cached(&mut self, schedule: &Schedule) {
+        if self.initialized {
+            self.graph.clear();
+            self.graph.set_dependency(self.dependency_graph.clone());
+            self.graph.set_hierarchy(self.hierarchy_graph.clone());
+        } else {
+            self.init(schedule);
+            self.initialized = true;
+            self.dependency_graph = self.graph.dependency().clone();
+            self.hierarchy_graph = self.graph.hierarchy().clone();
+        }
+    }
+
     // TODO: Just copy the graph from bevy over.
     // Also: Fix the add to graph thing (again) and get the particles example working.
     pub fn init(&mut self, schedule: &Schedule) {
@@ -84,15 +102,17 @@ impl MirrorGraph {
         system_type_map.clear();
         node_map.clear();
 
-        let hierarchy = schedule.graph().hierarchy().graph();
-        let dependency = schedule.graph().dependency().graph();
+        let schedule = schedule.graph();
 
-        for (node, set, _) in schedule.graph().system_sets() {
+        let hierarchy = schedule.hierarchy().graph();
+        let dependency = schedule.dependency().graph();
+
+        for (node, set, _) in schedule.system_sets() {
             let handle = graph.add_single(format!("{:?}", set));
             set_map.insert(set.dyn_clone(), handle);
             node_map.insert(node, handle);
         }
-        for (node, system, _) in schedule.graph().systems() {
+        for (node, system, _) in schedule.systems() {
             let handle = graph.add_single(&*system.name());
             system_type_map
                 .entry(system.type_id())
@@ -108,65 +128,40 @@ impl MirrorGraph {
             graph.add(node_map[&constraint.0].before(node_map[&constraint.1]));
         }
     }
-    // pub fn add_to_system<F: IntoSystem<(), (), M> + 'static, M>(
-    //     &mut self,
-    //     _f: F,
-    //     node: impl AsNodes<'static>,
-    // ) -> NodeHandle {
-    //     *self.graph.add(node).parent(
-    //         self.system_type_map[&TypeId::of::<F>()]
-    //             .expect("Cannot add to graph with multiple systems of the same type."),
-    //     )
-    // }
+    pub fn add_node<
+        G: DerefMut<Target = MirrorGraph> + Resource + 'static,
+        F: IntoSystem<I, N, M> + 'static,
+        I: 'static,
+        N: AsNodes<'static> + 'static,
+        M: 'static,
+    >(
+        f: F,
+    ) -> impl System<In = I, Out = ()> {
+        f.pipe(|In(nodes): In<N>, mut graph: ResMut<G>| {
+            let nodes = graph.add_handles(nodes);
+            let parent_set =
+                graph.set_map[&(Box::new(system_type_set::<F>()) as Box<dyn SystemSet>)];
+            let children = graph
+                .hierarchy()
+                .edges(parent_set)
+                .map(|(_, t, ())| t)
+                .collect::<Vec<_>>();
+            if children.len() != 1 {
+                panic!(
+                    "Cannot add to graph with multiple systems within set {:?}: Children are {:?}.",
+                    system_type_set::<F>(),
+                    children
+                );
+            }
+            let parent = children[0];
+            graph.add(nodes.within(parent));
+        })
+    }
 }
 
 fn system_type_set<F>() -> SystemTypeSet<F> {
     unsafe { std::mem::transmute::<(), SystemTypeSet<F>>(()) }
 }
-/*
-struct AddToGraphSystemMarker;
 
-struct AddToGraphSystem<G, F, I, M> {
-    _marker: PhantomData<fn(G, F, I, M)>,
-}
-impl<
-        G: DerefMut<Target = MirrorGraph> + Resource + 'static,
-        F: IntoSystem<I, NodeHandle, M> + 'static,
-        I: 'static,
-        M: 'static,
-    > SystemParamFunction<AddToGraphSystemMarker> for AddToGraphSystem<G, F, I, M>
-{
-    type In = NodeHandle;
-    type Out = ();
-    type Param = (ResMut<'static, G>,);
-    fn run(&mut self, node: NodeHandle, (mut graph,): SystemParamItem<Self::Param>) {
-        let parent_set = graph.set_map[&(Box::new(system_type_set::<F>()) as Box<dyn SystemSet>)];
-        println!("Parent: {:?}", parent_set);
-        let parent_set = graph.graph.on(parent_set);
-        let children = parent_set.get_children();
-        if children.len() != 1 {
-            println!("Children: {:?}", children);
-            panic!(
-                "Cannot add to graph with multiple systems of the same type. {:?}",
-                system_type_set::<F>()
-            );
-        }
-
-        let parent = *children.iter().next().unwrap();
-        graph.graph.on(node).parent(parent);
-    }
-}
-
-pub fn add_node<
-    G: DerefMut<Target = MirrorGraph> + Resource + 'static,
-    F: IntoSystem<I, NodeHandle, M> + 'static,
-    I: 'static,
-    M: 'static,
->(
-    f: F,
-) -> impl System<In = I, Out = ()> {
-    f.pipe(AddToGraphSystem::<G, F, I, M> {
-        _marker: PhantomData,
-    })
-}
- */
+pub trait AsNodesStatic: AsNodes<'static> {}
+impl<X> AsNodesStatic for X where X: AsNodes<'static> {}

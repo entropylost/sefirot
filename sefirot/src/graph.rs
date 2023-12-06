@@ -73,6 +73,13 @@ impl<'a> ComputeGraph<'a> {
         }
     }
 
+    pub fn set_dependency(&mut self, dependency: DiGraphMap<NodeHandle, ()>) {
+        self.dependency = dependency;
+    }
+    pub fn set_hierarchy(&mut self, hierarchy: DiGraphMap<NodeHandle, ()>) {
+        self.hierarchy = hierarchy;
+    }
+
     pub fn dependency(&self) -> &DiGraphMap<NodeHandle, ()> {
         &self.dependency
     }

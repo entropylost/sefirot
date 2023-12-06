@@ -1,5 +1,5 @@
 use proc_macro2::TokenStream;
-use quote::{quote, quote_spanned, ToTokens};
+use quote::{quote, quote_spanned};
 use syn::spanned::Spanned;
 use syn::*;
 
@@ -112,30 +112,6 @@ pub fn init_kernel(
 ) -> proc_macro::TokenStream {
     let f = parse_macro_input!(item as ItemFn);
     init_kernel_impl(f).into()
-}
-
-fn add_impl(graph_name: Ident, mut f: ItemFn) -> TokenStream {
-    let fname = f.sig.ident.clone();
-    let block = &mut f.block;
-    let last @ Stmt::Expr(_, None) = block.stmts.last_mut().unwrap() else {
-        panic!("Function must return an `impl AsNode`.");
-    };
-
-    *last = parse_quote! {
-        #graph_name.add_to_system(#fname, #last);
-    };
-
-    f.into_token_stream()
-}
-
-#[proc_macro_attribute]
-pub fn add(
-    attr: proc_macro::TokenStream,
-    item: proc_macro::TokenStream,
-) -> proc_macro::TokenStream {
-    let graph_name = parse_macro_input!(attr as Ident);
-    let f = parse_macro_input!(item as ItemFn);
-    add_impl(graph_name, f).into()
 }
 
 #[test]

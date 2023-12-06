@@ -1,3 +1,5 @@
+// TODO: Find some way of disabling the `init_kernel` things. Perhaps `Plugin` binding for simplicity?
+
 use kernel::KernelFunction;
 use once_cell::sync::Lazy;
 use std::env::current_exe;
