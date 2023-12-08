@@ -74,7 +74,7 @@ impl<I: PartitionIndex, T: EmanationType, P: EmanationType> IndexDomain
     type I = Expr<u32>;
     type A = I;
     fn get_index(&self) -> Self::I {
-        dispatch_size().x
+        dispatch_id().x
     }
     fn dispatch_size(&self, index: I) -> [u32; 3] {
         [self.sizes.blocking_lock()[I::to(index) as usize], 1, 1]
@@ -128,7 +128,7 @@ impl<I: PartitionIndex, T: EmanationType, P: EmanationType> IndexDomain
     type I = Expr<u32>;
     type A = ();
     fn get_index(&self) -> Self::I {
-        dispatch_size().x
+        dispatch_id().x
     }
     fn dispatch_size(&self, _: ()) -> [u32; 3] {
         [
@@ -250,6 +250,7 @@ impl<T: EmanationType> Emanation<T> {
         let partition_ref = *self
             .create_field(&(partition_name.clone() + "-ref"))
             .bind_array(index, ());
+
         let partition_lists = *partitions
             .create_field(&(partition_name.clone() + "-lists"))
             .bind_array_slices(partition_index, max_partition_size, false, ());
@@ -258,25 +259,29 @@ impl<T: EmanationType> Emanation<T> {
             .bind_array(partition_index, ());
         let partition_size_atomic = *partitions.on(partition_size).atomic();
 
-        let update_lists_kernel = self.build_kernel::<fn()>(
-            index,
-            track!(&|el| {
-                if I::to_expr(partition[[el]]) == I::to(I::null()) {
-                    return;
-                }
-                let pt =
-                    &partitions.get(&el.context, &partition_index, I::to_expr(partition[[el]]));
-                let this_ref = partition_size_atomic[[pt]].fetch_add(1);
-                partition_ref[[el]] = this_ref;
-                partition_lists[[partition_map[[el]]]].write(this_ref, index.field[[el]]);
-            }),
-        );
-        let zero_lists_kernel = partitions.build_kernel::<fn()>(
-            partition_index,
-            track!(&|el| {
-                partition_size[[el]] = 0.expr();
-            }),
-        );
+        let update_lists_kernel = self
+            .build_kernel::<fn()>(
+                index,
+                track!(&|el| {
+                    if I::to_expr(partition[[el]]) == I::to(I::null()) {
+                        return;
+                    }
+                    let pt =
+                        &partitions.get(&el.context, &partition_index, I::to_expr(partition[[el]]));
+                    let this_ref = partition_size_atomic[[pt]].fetch_add(1);
+                    partition_ref[[el]] = this_ref;
+                    partition_lists[[partition_map[[el]]]].write(this_ref, index[[el]]);
+                }),
+            )
+            .with_name(format!("update-lists-{}", partition_name));
+        let zero_lists_kernel = partitions
+            .build_kernel::<fn()>(
+                partition_index,
+                track!(&|el| {
+                    partition_size[[el]] = 0.expr();
+                }),
+            )
+            .with_name(format!("zero-lists-{}", partition_name));
         ArrayPartition {
             index,
             const_partition,

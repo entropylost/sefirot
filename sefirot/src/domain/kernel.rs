@@ -16,6 +16,9 @@ impl<T: EmanationType, S: KernelSignature, A> Kernel<T, S, A> {
         self.debug_name = Some(name.as_ref().to_string());
         self
     }
+    pub fn debug_name(&self) -> Option<&str> {
+        self.debug_name.as_deref()
+    }
 }
 
 impl<T: EmanationType> Emanation<T> {
@@ -73,14 +76,14 @@ impl<T: EmanationType> Emanation<T> {
                 Arc::into_inner(builder).unwrap().into_inner()
             });
         });
-        let name = pretty_type_name::<F>();
+        // TODO: Fix the name - F is generally boring. Perhaps with `CoerceUnsized`?
         Kernel {
             domain,
             raw: self
                 .device
                 .compile_kernel_def_with_options(&kernel, options),
             context,
-            debug_name: Some(name),
+            debug_name: None,
             device: self.device.clone(),
         }
     }

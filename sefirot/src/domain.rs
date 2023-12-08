@@ -5,8 +5,6 @@ use parking_lot::Mutex;
 
 use luisa::runtime::KernelBuilder;
 
-use pretty_type_name::pretty_type_name;
-
 use crate::element::{Context, KernelContext};
 use crate::graph::{AsNodes, ComputeGraph, NodeConfigs};
 use crate::prelude::*;
