@@ -152,6 +152,9 @@ impl<'a> ComputeGraph<'a> {
         let order = self.order();
         let mut commands = self.commands.into_iter().map(Some).collect::<Vec<_>>();
         let mut exec_commands = Vec::new();
+        if order.is_empty() {
+            return;
+        }
         for handle in order {
             let NodeHandle::Command(idx) = handle else {
                 panic!("Order should only produce command nodes.");
@@ -434,7 +437,7 @@ pub trait AsNodes<'a>: Sized {
         *t = Some(DynTag::new(tag));
         cfg
     }
-    fn debug_name(self, name: impl AsRef<str>) -> NodeConfigs<'a> {
+    fn debug(self, name: impl AsRef<str>) -> NodeConfigs<'a> {
         let mut cfg = self.into_node_configs();
         let NodeConfigs::Single {
             config: SingleConfig { debug_name, .. },

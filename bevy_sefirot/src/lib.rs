@@ -8,6 +8,7 @@ use sefirot::domain::kernel::KernelSignature;
 use sefirot::graph::{AsNodes, ComputeGraph, NodeHandle};
 use sefirot::prelude::{EmanationType, Kernel};
 use std::any::TypeId;
+use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::sync::OnceLock;
 
@@ -74,18 +75,23 @@ impl MirrorGraph {
             hierarchy_graph: DiGraphMap::new(),
         }
     }
-    /// Initialize the graph with the given schedule, using cached dependency and hierarchy graphs,
-    /// as after the first schedule run, the systems are emptied.
-    pub fn init_cached(&mut self, schedule: &Schedule) {
+    pub fn reinit(&mut self) {
         if self.initialized {
             self.graph.clear();
             self.graph.set_dependency(self.dependency_graph.clone());
             self.graph.set_hierarchy(self.hierarchy_graph.clone());
         } else {
+            panic!("Cannot reinit an uninitialized graph.");
+        }
+    }
+
+    /// Initialize the graph with the given schedule, using cached dependency and hierarchy graphs,
+    /// as after the first schedule run, the systems are emptied.
+    pub fn init_cached(&mut self, schedule: &Schedule) {
+        if self.initialized {
+            self.reinit();
+        } else {
             self.init(schedule);
-            self.initialized = true;
-            self.dependency_graph = self.graph.dependency().clone();
-            self.hierarchy_graph = self.graph.hierarchy().clone();
         }
     }
 
@@ -127,6 +133,10 @@ impl MirrorGraph {
         for constraint in dependency.all_edges() {
             graph.add(node_map[&constraint.0].before(node_map[&constraint.1]));
         }
+
+        self.initialized = true;
+        self.dependency_graph = self.graph.dependency().clone();
+        self.hierarchy_graph = self.graph.hierarchy().clone();
     }
     pub fn add_node<
         G: DerefMut<Target = MirrorGraph> + Resource + 'static,
@@ -137,25 +147,57 @@ impl MirrorGraph {
     >(
         f: F,
     ) -> impl System<In = I, Out = ()> {
-        f.pipe(|In(nodes): In<N>, mut graph: ResMut<G>| {
-            let nodes = graph.add_handles(nodes);
-            let parent_set =
-                graph.set_map[&(Box::new(system_type_set::<F>()) as Box<dyn SystemSet>)];
-            let children = graph
-                .hierarchy()
-                .edges(parent_set)
-                .map(|(_, t, ())| t)
-                .collect::<Vec<_>>();
-            if children.len() != 1 {
-                panic!(
-                    "Cannot add to graph with multiple systems within set {:?}: Children are {:?}.",
-                    system_type_set::<F>(),
-                    children
-                );
-            }
-            let parent = children[0];
-            graph.add(nodes.within(parent));
-        })
+        f.pipe(AddNodeInterior::<G, F, I, N, M>(PhantomData))
+    }
+    pub fn execute_init(&mut self) {
+        self.graph.execute_clear();
+        self.reinit();
+    }
+    #[cfg(feature = "sefirot/debug")]
+    pub fn execute_init_dbg(&mut self) {
+        self.graph.execute_clear_dbg();
+        self.reinit();
+    }
+}
+
+// This is implemented this way, instead of inline with a single function,
+// as then it allows distinguishing between multiple systems as long as they are have any different chained parts.
+#[allow(clippy::type_complexity)]
+struct AddNodeInterior<G, F, I, N, M>(PhantomData<fn() -> (G, F, I, N, M)>);
+
+struct AddNodeMarker;
+
+impl<
+        G: DerefMut<Target = MirrorGraph> + Resource + 'static,
+        F: IntoSystem<I, N, M> + 'static,
+        I: 'static,
+        N: AsNodes<'static> + 'static,
+        M: 'static,
+    > SystemParamFunction<AddNodeMarker> for AddNodeInterior<G, F, I, N, M>
+{
+    type In = N;
+    type Out = ();
+    type Param = ResMut<'static, G>;
+
+    fn run(&mut self, nodes: N, mut graph: ResMut<G>) {
+        let nodes = graph.add_handles(nodes);
+        let parent_set =
+            graph.set_map[&(Box::new(system_type_set::<Self>()) as Box<dyn SystemSet>)];
+        let children = graph
+            .hierarchy()
+            .edges(parent_set)
+            .map(|(_, t, ())| t)
+            .collect::<Vec<_>>();
+        if children.len() != 1 {
+            panic!(
+                "Cannot add to graph with multiple systems within set {:?} ({:?}): Children are {:?}.",
+                system_type_set::<F>(),
+                parent_set,
+                children
+            );
+        }
+        let parent = children[0];
+        graph.add(nodes.within(parent));
     }
 }
 

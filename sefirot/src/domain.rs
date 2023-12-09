@@ -50,7 +50,7 @@ where
         self.before_dispatch(&domain_args);
         let dispatch_size = self.dispatch_size(domain_args);
         ((args.call_kernel_async)(dispatch_size))
-            .debug_name(args.debug_name.unwrap_or("kernel call".to_string()))
+            .debug(args.debug_name.unwrap_or("kernel call".to_string()))
     }
 }
 
