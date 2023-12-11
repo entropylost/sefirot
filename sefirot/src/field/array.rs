@@ -31,6 +31,11 @@ impl<V: Value> IntoBuffer<V> for &[V] {
         (buffer.clone(), Some(buffer))
     }
 }
+impl<V: Value> IntoBuffer<V> for &Vec<V> {
+    fn into_buffer(self, device: &Device, count: u32) -> (BufferView<V>, Option<Buffer<V>>) {
+        self.as_slice().into_buffer(device, count)
+    }
+}
 impl<V: Value, F> IntoBuffer<V> for F
 where
     F: FnMut(u32) -> V,
@@ -275,7 +280,7 @@ impl<V: Value, T: EmanationType> Accessor<T> for AtomicBufferAccessor<V, T> {
 }
 impl<'a, V: Value, T: EmanationType> Reference<'a, EField<V, T>> {
     /// Creates a [`Field`] that can be used to perform atomic operations on the values of this [`Field`].
-    /// Panics if this [`Field`] is not bound to a [`BufferAccessor`].
+    /// Panics if this [`Field`] is not bound to a [`BufferAccessor`] or a [`StructArrayAccessor`].
     pub fn atomic(self) -> Reference<'a, Field<AtomicRef<V>, T>> {
         let accessor = self.accessor().unwrap();
 
