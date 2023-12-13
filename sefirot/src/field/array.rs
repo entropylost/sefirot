@@ -64,6 +64,48 @@ impl<V: Value> IntoBuffer<V> for BufferView<V> {
     }
 }
 
+pub trait IntoTex2d<V: IoTexel> {
+    fn into_tex2d(
+        self,
+        device: &Device,
+        width: u32,
+        height: u32,
+    ) -> (Tex2dView<V>, Option<Tex2d<V>>);
+}
+impl<V: IoTexel> IntoTex2d<V> for PixelStorage {
+    fn into_tex2d(
+        self,
+        device: &Device,
+        width: u32,
+        height: u32,
+    ) -> (Tex2dView<V>, Option<Tex2d<V>>) {
+        let texture = device.create_tex2d(self, width, height, 1);
+        (texture.view(0), Some(texture))
+    }
+}
+impl<V: IoTexel> IntoTex2d<V> for Tex2d<V> {
+    fn into_tex2d(
+        self,
+        _device: &Device,
+        width: u32,
+        height: u32,
+    ) -> (Tex2dView<V>, Option<Tex2d<V>>) {
+        debug_assert_eq!(self.width(), width);
+        debug_assert_eq!(self.height(), height);
+        (self.view(0), Some(self))
+    }
+}
+impl<V: IoTexel> IntoTex2d<V> for Tex2dView<V> {
+    fn into_tex2d(
+        self,
+        _device: &Device,
+        _width: u32,
+        _height: u32,
+    ) -> (Tex2dView<V>, Option<Tex2d<V>>) {
+        (self, None)
+    }
+}
+
 impl<V: Value, T: EmanationType> Reference<'_, EField<V, T>> {
     pub fn bind_array(self, index: ArrayIndex<T>, values: impl IntoBuffer<V>) -> Self {
         let (buffer, handle) = values.into_buffer(self.device(), index.size);
@@ -82,17 +124,15 @@ impl<V: Value, T: EmanationType> Reference<'_, EField<V, T>> {
                 .map(|a| a.buffer.clone())
         })
     }
-    pub fn bind_tex2d(self, index: ArrayIndex2d<T>, storage: PixelStorage) -> Self
+    pub fn bind_tex2d(self, index: ArrayIndex2d<T>, values: impl IntoTex2d<V>) -> Self
     where
         V: IoTexel,
     {
-        let texture = self
-            .device()
-            .create_tex2d(storage, index.size[0], index.size[1], 1);
+        let (texture, handle) = values.into_tex2d(self.device(), index.size[0], index.size[1]);
         let accessor = Tex2dAccessor {
             index,
-            texture: texture.view(0),
-            handle: Some(texture),
+            texture,
+            handle,
         };
         self.bind(accessor)
     }

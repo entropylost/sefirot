@@ -1,24 +1,29 @@
 use bevy::ecs::schedule::{NodeId, SystemTypeSet};
 use bevy::prelude::*;
 use bevy::utils::HashMap;
-use bevy_luisa::luisa;
-use luisa::runtime::Device;
+use luisa_compute::runtime::Device;
 use petgraph::graphmap::DiGraphMap;
 use sefirot::domain::kernel::KernelSignature;
 use sefirot::graph::{AsNodes, ComputeGraph, NodeHandle};
+use sefirot::luisa as luisa_compute;
 use sefirot::prelude::{EmanationType, Kernel};
 use std::any::TypeId;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::sync::OnceLock;
 
-pub use bevy_sefirot_macro::init_kernel;
+#[cfg(feature = "display")]
+pub mod display;
+
+pub mod luisa;
+
+pub use bevy_sefirot_macro::kernel;
 
 pub mod prelude {
-    pub use bevy_luisa::{LuisaDevice, LuisaPlugin};
-    pub use bevy_sefirot_macro::init_kernel;
+    pub use crate::luisa::{LuisaDevice, LuisaPlugin};
+    pub use bevy_sefirot_macro::kernel;
+    pub use sefirot;
     pub use sefirot::prelude::*;
-    pub use {bevy_luisa, sefirot};
 }
 
 pub struct KernelCell<T: EmanationType, S: KernelSignature, A = ()>(OnceLock<Kernel<T, S, A>>);

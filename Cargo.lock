@@ -428,27 +428,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bevy_luisa"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "bevy_luisa_macro",
- "inventory",
- "luisa_compute",
- "once_cell",
-]
-
-[[package]]
-name = "bevy_luisa_macro"
-version = "0.1.0"
-dependencies = [
- "prettyplease",
- "proc-macro2",
- "quote",
- "syn 2.0.39",
-]
-
-[[package]]
 name = "bevy_macro_utils"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -514,7 +493,6 @@ name = "bevy_sefirot"
 version = "0.1.0"
 dependencies = [
  "bevy",
- "bevy_luisa",
  "bevy_sefirot_macro",
  "once_cell",
  "petgraph",
@@ -1271,12 +1249,6 @@ dependencies = [
  "wasm-bindgen",
  "web-sys",
 ]
-
-[[package]]
-name = "inventory"
-version = "0.3.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0508c56cfe9bfd5dfeb0c22ab9a6abfda2f27bdca422132e494266351ed8d83c"
 
 [[package]]
 name = "is-terminal"

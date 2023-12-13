@@ -1,10 +1,9 @@
 use proc_macro2::TokenStream;
-use quote::{quote, quote_spanned};
+use quote::quote_spanned;
 use syn::spanned::Spanned;
 use syn::*;
 
-fn init_kernel_impl(f: ItemFn) -> TokenStream {
-    let bevy_luisa_path: Path = parse_quote!(::bevy_sefirot::prelude::bevy_luisa);
+fn kernel_impl(f: ItemFn) -> TokenStream {
     let bevy_sefirot_path: Path = parse_quote!(::bevy_sefirot);
     let span = f.span();
     let vis = f.vis;
@@ -73,45 +72,26 @@ fn init_kernel_impl(f: ItemFn) -> TokenStream {
     });
 
     sig.ident = Ident::new(&format!("init_{}", kernel_name), kernel_name.span());
-    let init_name = sig.ident.clone();
-
-    let init = quote! {
-        #bevy_luisa_path::inventory::submit! {
-            static _LAZY: #bevy_luisa_path::once_cell::sync::Lazy<
-                std::sync::Mutex<Option<Box<
-                    dyn System<In = (), Out = ()>
-            >>>> = #bevy_luisa_path::once_cell::sync::Lazy::new(||
-                std::sync::Mutex::new(
-                    Some(
-                        Box::new(
-                            ::bevy::prelude::IntoSystem::into_system(#init_name)
-                        )
-                    )
-                )
-            );
-            #bevy_luisa_path::KernelRegistrationSystem(&_LAZY)
-        }
-    };
 
     quote_spanned! {span=>
         #[allow(non_upper_case_globals)]
         #vis static #kernel_name: #bevy_sefirot_path::KernelCell<#emanation_ty, #kernel_sig, #domain_args_sig> =
             #bevy_sefirot_path::KernelCell::default();
         #(#attrs)*
+        #[tracked]
         #sig #block
-        #init
     }
 }
 
 /// Initializes a function returning a kernel during `PostStartup`.
 /// To use most kernel functions, use the `tracked` attribute or `track` macro.
 #[proc_macro_attribute]
-pub fn init_kernel(
+pub fn kernel(
     _attr: proc_macro::TokenStream,
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     let f = parse_macro_input!(item as ItemFn);
-    init_kernel_impl(f).into()
+    kernel_impl(f).into()
 }
 
 #[test]
@@ -123,7 +103,7 @@ fn test_kernel() {
             })
         }
     };
-    let f = init_kernel_impl(f);
+    let f = kernel_impl(f);
     let file: File = parse_quote!(#f);
     panic!("{}", prettyplease::unparse(&file));
 }
