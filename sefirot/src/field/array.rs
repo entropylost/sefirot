@@ -14,7 +14,7 @@ impl<T: EmanationType> Emanation<T> {
             size: length,
         }
     }
-    pub fn create_index2d(&self, size: [u32; 2]) -> ArrayIndex2d<T> {
+    pub fn create_index2d(&self, size: Vec2<u32>) -> ArrayIndex2d<T> {
         ArrayIndex2d {
             field: *self.create_field("index2d"),
             size,
@@ -128,7 +128,7 @@ impl<V: Value, T: EmanationType> Reference<'_, EField<V, T>> {
     where
         V: IoTexel,
     {
-        let (texture, handle) = values.into_tex2d(self.device(), index.size[0], index.size[1]);
+        let (texture, handle) = values.into_tex2d(self.device(), index.size.x, index.size.y);
         let accessor = Tex2dAccessor {
             index,
             texture,
@@ -172,7 +172,7 @@ impl<T: EmanationType> IndexDomain for ArrayIndex<T> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ArrayIndex2d<T: EmanationType> {
     pub field: EField<Vec2<u32>, T>,
-    pub size: [u32; 2],
+    pub size: Vec2<u32>,
 }
 impl<T: EmanationType> From<ArrayIndex2d<T>> for EField<Vec2<u32>, T> {
     fn from(index: ArrayIndex2d<T>) -> Self {
@@ -193,21 +193,21 @@ impl<T: EmanationType> IndexDomain for ArrayIndex2d<T> {
         dispatch_id().xy()
     }
     fn dispatch_size(&self, _: ()) -> [u32; 3] {
-        [self.size[0], self.size[1], 1]
+        [self.size.x, self.size.y, 1]
     }
 }
 impl<T: EmanationType> ArrayIndex2d<T> {
     pub fn morton(&self, emanation: &Emanation<T>) -> ArrayIndex<T> {
         assert_eq!(
-            self.size[0], self.size[1],
+            self.size.x, self.size.y,
             "Morton indexing only supports square arrays."
         );
         assert!(
-            self.size[0].is_power_of_two(),
+            self.size.x.is_power_of_two(),
             "Morton indexing only supports power-of-two arrays."
         );
         assert!(
-            self.size[0] <= 1 << 16,
+            self.size.x <= 1 << 16,
             "Morton indexing only supports arrays with size < 65536."
         );
         let name = emanation.on(self.field).name() + "-morton";
@@ -234,7 +234,7 @@ impl<T: EmanationType> ArrayIndex2d<T> {
         }));
         ArrayIndex {
             field,
-            size: self.size[0] * self.size[0],
+            size: self.size.x * self.size.y,
         }
     }
 }

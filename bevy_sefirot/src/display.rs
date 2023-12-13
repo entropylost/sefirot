@@ -1,7 +1,7 @@
 use super::prelude::*;
 use bevy::prelude::*;
 use bevy::winit::WinitWindows;
-use luisa::lang::types::vector::Vec4;
+use luisa::lang::types::vector::{Vec2, Vec4};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Display;
@@ -51,7 +51,7 @@ pub fn setup_display(
             settings.back_buffer_size,
         );
         let color_texture = device.create_tex2d::<Vec4<f32>>(swapchain.pixel_storage(), w, h, 1);
-        let index = de.create_index2d([w, h]);
+        let index = de.create_index2d(Vec2::new(w, h));
         let color = *de
             .create_field("display-color-final")
             .bind_tex2d(index, color_texture.view(0));
@@ -94,9 +94,9 @@ impl Default for LuisaDisplaySettings {
     }
 }
 
-pub struct LuisaDisplayPlugin;
+pub struct DisplayPlugin;
 
-impl Plugin for LuisaDisplayPlugin {
+impl Plugin for DisplayPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup_display)
             .add_systems(PostUpdate, present_swapchain);

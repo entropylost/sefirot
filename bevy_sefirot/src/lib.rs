@@ -20,7 +20,7 @@ pub mod luisa;
 pub use bevy_sefirot_macro::kernel;
 
 pub mod prelude {
-    pub use crate::luisa::{LuisaDevice, LuisaPlugin};
+    pub use crate::luisa::{InitKernel, LuisaDevice, LuisaPlugin};
     pub use bevy_sefirot_macro::kernel;
     pub use sefirot;
     pub use sefirot::prelude::*;

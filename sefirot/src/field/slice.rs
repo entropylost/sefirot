@@ -175,7 +175,7 @@ impl<V: Value, T: EmanationType> Reference<'_, Field<Slice<Expr<V>>, T>> {
     {
         let texture =
             self.device()
-                .create_tex3d(storage, index.size[0], index.size[1], slice_size, 1);
+                .create_tex3d(storage, index.size.x, index.size.y, slice_size, 1);
         self.bind_fn(move |el| {
             let texture = texture.view(0);
             let index = index[[el]];

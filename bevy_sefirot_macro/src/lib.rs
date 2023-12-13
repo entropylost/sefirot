@@ -3,7 +3,7 @@ use quote::quote_spanned;
 use syn::spanned::Spanned;
 use syn::*;
 
-fn kernel_impl(f: ItemFn) -> TokenStream {
+fn kernel_impl(f: ItemFn, init_vis: Visibility) -> TokenStream {
     let bevy_sefirot_path: Path = parse_quote!(::bevy_sefirot);
     let span = f.span();
     let vis = f.vis;
@@ -78,8 +78,9 @@ fn kernel_impl(f: ItemFn) -> TokenStream {
         #vis static #kernel_name: #bevy_sefirot_path::KernelCell<#emanation_ty, #kernel_sig, #domain_args_sig> =
             #bevy_sefirot_path::KernelCell::default();
         #(#attrs)*
+        #[forbid(dead_code)]
         #[tracked]
-        #sig #block
+        #init_vis #sig #block
     }
 }
 
@@ -87,11 +88,12 @@ fn kernel_impl(f: ItemFn) -> TokenStream {
 /// To use most kernel functions, use the `tracked` attribute or `track` macro.
 #[proc_macro_attribute]
 pub fn kernel(
-    _attr: proc_macro::TokenStream,
+    attr: proc_macro::TokenStream,
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     let f = parse_macro_input!(item as ItemFn);
-    kernel_impl(f).into()
+    let init_vis = parse_macro_input!(attr as Visibility);
+    kernel_impl(f, init_vis).into()
 }
 
 #[test]
