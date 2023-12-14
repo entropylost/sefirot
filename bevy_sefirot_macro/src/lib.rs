@@ -105,7 +105,7 @@ fn test_kernel() {
             })
         }
     };
-    let f = kernel_impl(f);
+    let f = kernel_impl(f, Visibility::Inherited);
     let file: File = parse_quote!(#f);
     panic!("{}", prettyplease::unparse(&file));
 }
