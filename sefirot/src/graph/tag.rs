@@ -77,6 +77,7 @@ where
 }
 
 /// A bi-directional map from values to tags of arbitrary types.
+#[derive(Clone)]
 pub struct TagMap<T: Clone + Eq + Hash, S: BuildHasher + 'static = RandomState> {
     tags: HashMap<T, DynTag<S::Hasher>, S>,
     values: HashMap<DynTag<S::Hasher>, T, S>,

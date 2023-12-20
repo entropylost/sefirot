@@ -2,7 +2,6 @@ use bevy::ecs::schedule::{NodeId, SystemTypeSet};
 use bevy::prelude::*;
 use bevy::utils::HashMap;
 use luisa_compute::runtime::Device;
-use petgraph::graphmap::DiGraphMap;
 use sefirot::domain::kernel::KernelSignature;
 use sefirot::graph::{AsNodes, ComputeGraph, NodeHandle};
 use sefirot::luisa as luisa_compute;
@@ -55,12 +54,10 @@ impl<T: EmanationType, S: KernelSignature, A> KernelCell<T, S, A> {
 pub struct MirrorGraph {
     #[deref]
     pub graph: ComputeGraph<'static>,
+    pub cached_graph: Option<ComputeGraph<'static>>,
     pub set_map: HashMap<Box<dyn SystemSet>, NodeHandle>,
     pub system_type_map: HashMap<TypeId, Option<NodeHandle>>, // None if contradiction.
     pub node_map: HashMap<NodeId, NodeHandle>,
-    pub initialized: bool,
-    pub dependency_graph: DiGraphMap<NodeHandle, ()>,
-    pub hierarchy_graph: DiGraphMap<NodeHandle, ()>,
 }
 
 impl MirrorGraph {
@@ -72,19 +69,15 @@ impl MirrorGraph {
     pub fn null(device: &Device) -> Self {
         Self {
             graph: ComputeGraph::new(device),
+            cached_graph: None,
             set_map: HashMap::new(),
             system_type_map: HashMap::new(),
             node_map: HashMap::new(),
-            initialized: false,
-            dependency_graph: DiGraphMap::new(),
-            hierarchy_graph: DiGraphMap::new(),
         }
     }
     pub fn reinit(&mut self) {
-        if self.initialized {
-            self.graph.clear();
-            self.graph.set_dependency(self.dependency_graph.clone());
-            self.graph.set_hierarchy(self.hierarchy_graph.clone());
+        if let Some(graph) = &self.cached_graph {
+            self.graph = graph.clone();
         } else {
             panic!("Cannot reinit an uninitialized graph.");
         }
@@ -93,8 +86,8 @@ impl MirrorGraph {
     /// Initialize the graph with the given schedule, using cached dependency and hierarchy graphs,
     /// as after the first schedule run, the systems are emptied.
     pub fn init_cached(&mut self, schedule: &Schedule) {
-        if self.initialized {
-            self.reinit();
+        if let Some(graph) = &self.cached_graph {
+            self.graph = graph.clone();
         } else {
             self.init(schedule);
         }
@@ -139,9 +132,7 @@ impl MirrorGraph {
             graph.add(node_map[&constraint.0].before(node_map[&constraint.1]));
         }
 
-        self.initialized = true;
-        self.dependency_graph = self.graph.dependency().clone();
-        self.hierarchy_graph = self.graph.hierarchy().clone();
+        self.cached_graph = Some(graph.clone());
     }
     pub fn add_node<
         G: DerefMut<Target = MirrorGraph> + Resource + 'static,
@@ -158,7 +149,7 @@ impl MirrorGraph {
         self.graph.execute_clear();
         self.reinit();
     }
-    #[cfg(feature = "sefirot/debug")]
+    #[cfg(feature = "debug")]
     pub fn execute_init_dbg(&mut self) {
         self.graph.execute_clear_dbg();
         self.reinit();

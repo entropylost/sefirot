@@ -1,5 +1,6 @@
 use luisa::lang::types::vector::Vec2;
 use luisa::lang::types::AtomicRef;
+use parking_lot::Mutex;
 
 use crate::domain::{IndexDomain, IndexEmanation};
 
@@ -113,6 +114,7 @@ impl<V: Value, T: EmanationType> Reference<'_, EField<V, T>> {
             index,
             buffer,
             handle,
+            atomic: Mutex::new(None),
         };
         self.bind(accessor)
     }
@@ -146,9 +148,10 @@ pub struct ArrayIndex<T: EmanationType> {
     pub field: EField<u32, T>,
     pub size: u32,
 }
-impl<T: EmanationType> From<ArrayIndex<T>> for EField<u32, T> {
-    fn from(index: ArrayIndex<T>) -> Self {
-        index.field
+impl<T: EmanationType> Deref for ArrayIndex<T> {
+    type Target = EField<u32, T>;
+    fn deref(&self) -> &Self::Target {
+        &self.field
     }
 }
 
@@ -174,9 +177,10 @@ pub struct ArrayIndex2d<T: EmanationType> {
     pub field: EField<Vec2<u32>, T>,
     pub size: Vec2<u32>,
 }
-impl<T: EmanationType> From<ArrayIndex2d<T>> for EField<Vec2<u32>, T> {
-    fn from(index: ArrayIndex2d<T>) -> Self {
-        index.field
+impl<T: EmanationType> Deref for ArrayIndex2d<T> {
+    type Target = EField<Vec2<u32>, T>;
+    fn deref(&self) -> &Self::Target {
+        &self.field
     }
 }
 
@@ -244,6 +248,7 @@ pub struct BufferAccessor<V: Value, T: EmanationType> {
     pub buffer: BufferView<V>,
     /// Used to prevent the buffer from being dropped.
     pub handle: Option<Buffer<V>>,
+    atomic: Mutex<Option<RawFieldHandle>>,
 }
 impl<V: Value, T: EmanationType> Accessor<T> for BufferAccessor<V, T> {
     type V = Expr<V>;
@@ -282,6 +287,21 @@ impl<V: Value, T: EmanationType> Accessor<T> for BufferAccessor<V, T> {
     fn can_write(&self) -> bool {
         true
     }
+
+    fn get_atomic(&self, emanation: &Emanation<T>) -> Option<RawFieldHandle> {
+        if let Some(&handle) = self.atomic.lock().as_ref() {
+            return Some(handle);
+        }
+        let handle = emanation
+            .create_field("")
+            .bind(AtomicBufferAccessor {
+                index: self.index,
+                buffer: self.buffer.clone(),
+            })
+            .raw();
+        *self.atomic.lock() = Some(handle);
+        Some(handle)
+    }
 }
 
 pub struct AtomicBufferAccessor<V: Value, T: EmanationType> {
@@ -316,24 +336,6 @@ impl<V: Value, T: EmanationType> Accessor<T> for AtomicBufferAccessor<V, T> {
 
     fn can_write(&self) -> bool {
         false
-    }
-}
-impl<'a, V: Value, T: EmanationType> Reference<'a, EField<V, T>> {
-    /// Creates a [`Field`] that can be used to perform atomic operations on the values of this [`Field`].
-    /// Panics if this [`Field`] is not bound to a [`BufferAccessor`] or a [`StructArrayAccessor`].
-    pub fn atomic(self) -> Reference<'a, Field<AtomicRef<V>, T>> {
-        let accessor = self.accessor().unwrap();
-
-        let accessor = accessor
-            .as_any()
-            .downcast_ref::<BufferAccessor<V, T>>()
-            .expect("Cannot create atomic reference to non-buffer field.");
-        self.emanation
-            .create_field(&format!("{}-atomic", self.name()))
-            .bind(AtomicBufferAccessor {
-                index: accessor.index,
-                buffer: accessor.buffer.clone(),
-            })
     }
 }
 

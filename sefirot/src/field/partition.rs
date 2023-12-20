@@ -245,6 +245,8 @@ impl<T: EmanationType> Emanation<T> {
             partition,
             partition_map,
         } = partition_fields;
+        // TODO: Instead of having fixed partition sizes, first do a size scan,
+        // then running-sum and do the partitions directly inline basically like a sort.
         let max_partition_size = max_partition_size.unwrap_or(index.size);
         let partition_name = self.on(partition).name();
         let partition_ref = *self

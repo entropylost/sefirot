@@ -73,6 +73,7 @@ impl<T: EmanationType> Emanation<T> {
                 index,
                 buffer,
                 handle,
+                atomic: Mutex::new(None),
             }));
 
         let fields = S::apply(CreateStructArrayField {
@@ -131,6 +132,7 @@ pub trait Selector<S: Structure>: 'static {
     type Result: Value;
     fn select_expr(structure: &Expr<S>) -> Expr<Self::Result>;
     fn select_var(structure: &Var<S>) -> Var<Self::Result>;
+    fn select_atomic(structure: &AtomicRef<S>) -> AtomicRef<Self::Result>;
 
     fn select_ref(structure: &S) -> &Self::Result;
     fn select_mut(structure: &mut S) -> &mut Self::Result;
@@ -230,5 +232,15 @@ impl<Z: Selector<S>, S: Structure, T: EmanationType> Accessor<T> for StructArray
 
     fn can_write(&self) -> bool {
         true
+    }
+
+    fn get_atomic(&self, emanation: &Emanation<T>) -> Option<RawFieldHandle> {
+        Some(
+            emanation
+                .on(self.struct_field)
+                .atomic()
+                .map(|x, _| Z::select_atomic(&x))
+                .raw(),
+        )
     }
 }

@@ -4,6 +4,7 @@ use std::fmt::Debug;
 use std::sync::{Arc, Exclusive};
 
 use petgraph::algo::toposort;
+use petgraph::dot::Dot;
 use petgraph::graphmap::DiGraphMap;
 use petgraph::Direction;
 use static_assertions::assert_impl_all;
@@ -13,6 +14,33 @@ use crate::prelude::*;
 use self::tag::{DynTag, Tag, TagMap};
 
 pub mod tag;
+
+pub fn dot_graph(compute: &ComputeGraph<'_>, graph: &DiGraphMap<NodeHandle, ()>) -> String {
+    struct StrDbg(String);
+    impl Debug for StrDbg {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{}", self.0)
+        }
+    }
+
+    struct NoDbg;
+    impl Debug for NoDbg {
+        fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            Ok(())
+        }
+    }
+
+    let graph = graph.clone().into_graph::<u32>().map(
+        |_, n| {
+            let mut s = compute.name_of(*n).to_string();
+            s.truncate(30);
+            StrDbg(s)
+        },
+        |_, _| NoDbg,
+    );
+
+    format!("{:?}", Dot::new(&graph))
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum NodeHandle {
@@ -60,6 +88,21 @@ impl Debug for ComputeGraph<'_> {
             .finish()
     }
 }
+impl Clone for ComputeGraph<'_> {
+    fn clone(&self) -> Self {
+        assert!(self.commands.is_empty());
+        assert!(self.release.is_empty());
+        Self {
+            tags: self.tags.clone(),
+            commands: Vec::new(),
+            containers: self.containers.clone(),
+            hierarchy: self.hierarchy.clone(),
+            dependency: self.dependency.clone(),
+            device: self.device.clone(),
+            release: Vec::new(),
+        }
+    }
+}
 impl<'a> ComputeGraph<'a> {
     pub fn new(device: &Device) -> Self {
         Self {
@@ -102,6 +145,8 @@ impl<'a> ComputeGraph<'a> {
             next_fence += 1;
             let after = NodeHandle::Container(next_fence);
             next_fence += 1;
+
+            dependency.add_edge(before, after, ());
 
             for child in hierarchy
                 .neighbors_directed(node, Direction::Outgoing)
@@ -175,11 +220,11 @@ impl<'a> ComputeGraph<'a> {
 
     /// Executes the graph without parallelism, printing debug information.
     #[cfg(feature = "debug")]
-    #[tracing::instrument(skip_all, name = "ComputeGraph::execute_dbg")]
     pub fn execute_dbg(self) {
-        use tracing::info_span;
+        use tracing::info;
 
         let order = self.order();
+
         let mut commands = self.commands.into_iter().map(Some).collect::<Vec<_>>();
         for handle in order {
             let NodeHandle::Command(idx) = handle else {
@@ -189,7 +234,7 @@ impl<'a> ComputeGraph<'a> {
                 .take()
                 .expect("Cannot have duplicate commands.");
 
-            let _span = info_span!("command", name = command.debug_name).entered();
+            info!("Executing {:?}", command.debug_name);
             let scope = self.device.default_stream().scope();
             scope.submit(std::iter::once(command.command.into_inner()));
         }
@@ -325,6 +370,19 @@ impl<'a> ComputeGraph<'a> {
         self.add_nodes(&mut cfg);
         self.add_constraints(&mut cfg);
         self
+    }
+
+    pub fn name_of(&self, handle: NodeHandle) -> &str {
+        match handle {
+            NodeHandle::Container(idx) => self
+                .containers
+                .get(idx)
+                .map(|x| &*x.debug_name)
+                .unwrap_or(""),
+            NodeHandle::Command(idx) => {
+                self.commands.get(idx).map(|x| &*x.debug_name).unwrap_or("")
+            }
+        }
     }
 }
 

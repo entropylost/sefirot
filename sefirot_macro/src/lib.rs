@@ -66,10 +66,13 @@ fn derive_structure_impl(input: DeriveInput) -> TokenStream {
             #vis enum #sel {}
             impl<#(#generics),*> #sf_path::Selector<#st_name<#(#generics_stripped),*>> for #sel #where_clause {
                 type Result = #ft;
-                fn select_expr(structure: &#luisa_path::Expr<#st_name<#(#generics_stripped),*>>) -> Expr<Self::Result> {
+                fn select_expr(structure: &#luisa_path::Expr<#st_name<#(#generics_stripped),*>>) -> #luisa_path::Expr<Self::Result> {
                     structure.#fi.clone()
                 }
-                fn select_var(structure: &#luisa_path::Var<#st_name<#(#generics_stripped),*>>) -> Var<Self::Result> {
+                fn select_var(structure: &#luisa_path::Var<#st_name<#(#generics_stripped),*>>) -> #luisa_path::Var<Self::Result> {
+                    structure.#fi.clone()
+                }
+                fn select_atomic(structure: &#luisa_path::AtomicRef<#st_name<#(#generics_stripped),*>>) -> #luisa_path::AtomicRef<Self::Result> {
                     structure.#fi.clone()
                 }
 
@@ -169,12 +172,12 @@ impl VisitMut for RewriteIndexVisitor {
                         if np {
                             *expr = parse_quote_spanned! {span=>
                                 #(#attrs)*
-                                (*(#index).__at(#n_expr))
+                                (*(#index).__at((#n_expr).__into_self()))
                             };
                         } else {
                             *expr = parse_quote_spanned! {span=>
                                 #(#attrs)*
-                                *(#index).__at(#n_expr)
+                                *(#index).__at((#n_expr).__into_self())
                             }
                         }
                     }

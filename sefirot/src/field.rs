@@ -4,6 +4,7 @@ use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
+use luisa::lang::types::AtomicRef;
 use parking_lot::{MappedMutexGuard, MutexGuard};
 use pretty_type_name::pretty_type_name;
 
@@ -89,6 +90,9 @@ impl<V: Any, T: EmanationType> Field<V, T> {
             _marker: PhantomData,
         }
     }
+    pub fn raw(&self) -> RawFieldHandle {
+        self.raw
+    }
     pub fn at<'a>(&self, el: &'a Element<T>) -> FieldAccess<'a, V, T> {
         let v = el.get(*self).unwrap();
         FieldAccess {
@@ -98,11 +102,15 @@ impl<V: Any, T: EmanationType> Field<V, T> {
             changed: false,
         }
     }
+    #[doc(hidden)]
+    pub fn __into_self(&self) -> Self {
+        *self
+    }
 }
 impl<T: EmanationType> Element<T> {
     #[doc(hidden)]
-    pub fn __at<V: Any>(&self, field: impl Into<Field<V, T>>) -> FieldAccess<V, T> {
-        field.into().at(self)
+    pub fn __at<V: Any>(&self, field: Field<V, T>) -> FieldAccess<V, T> {
+        field.at(self)
     }
 }
 impl<V: Any, T: EmanationType> CanReference for Field<V, T> {
@@ -189,6 +197,20 @@ impl<'a, V: Any, T: EmanationType> Reference<'a, Field<V, T>> {
     }
 }
 
+impl<'a, V: Value, T: EmanationType> Reference<'a, EField<V, T>> {
+    /// Creates a [`Field`] that can be used to perform atomic operations on the values of this [`Field`].
+    /// Panics if this [`Field`] is not bound to an [`Accessor`] with an implemented [`Accessor::get_atomic`].
+    /// The only implementations in this crate are [`BufferAccessor`] and [`StructArrayAccessor`].
+    pub fn atomic(self) -> Reference<'a, Field<AtomicRef<V>, T>> {
+        let name = self.name();
+        let accessor = self.accessor().unwrap();
+        let atomic = accessor.get_atomic(self.emanation).unwrap();
+        self.emanation
+            .on(Field::from_raw(atomic, self.value.emanation_id))
+            .named(&format!("{}-atomic", name))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ReadError {
     message: String,
@@ -213,6 +235,7 @@ pub trait DynAccessor<T: EmanationType>: Any {
     fn value_type_name(&self) -> String;
     fn self_type_name(&self) -> String;
     fn as_any(&self) -> &dyn Any;
+    fn get_atomic(&self, emanation: &Emanation<T>) -> Option<RawFieldHandle>;
 }
 impl<X, T: EmanationType> DynAccessor<T> for X
 where
@@ -251,6 +274,9 @@ where
     }
     fn as_any(&self) -> &dyn Any {
         self
+    }
+    fn get_atomic(&self, emanation: &Emanation<T>) -> Option<RawFieldHandle> {
+        Accessor::get_atomic(self, emanation)
     }
 }
 impl<T: EmanationType> Debug for dyn DynAccessor<T> {
@@ -315,6 +341,9 @@ pub trait Accessor<T: EmanationType>: 'static {
         }
     }
     fn can_write(&self) -> bool;
+    fn get_atomic(&self, _emanation: &Emanation<T>) -> Option<RawFieldHandle> {
+        None
+    }
 }
 
 pub struct ValueAccessor<V: Clone + Any>(pub V);
