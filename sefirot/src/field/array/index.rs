@@ -1,34 +1,95 @@
 use super::*;
 
-pub trait LinearIndex<T: EmanationType>:
-    Deref<Target = EField<u32, T>>
-    + IndexEmanation<Expr<u32>, T = T>
-    + IndexDomain<I = Expr<u32>, A = ()>
-    + Send
-    + Sync
-{
+pub trait Linear<T: EmanationType>: Deref<Target = EField<u32, T>> + Send + Sync {
     fn size(&self) -> u32;
-    fn as_index(&self) -> ArrayIndex<T> {
-        ArrayIndex {
+    fn reduce(&self) -> ReducedIndex<T> {
+        ReducedIndex {
             field: **self,
             size: self.size(),
         }
     }
 }
 
-pub trait PlanarIndex<T: EmanationType>:
-    Deref<Target = EField<Vec2<u32>, T>>
-    + IndexEmanation<Expr<Vec2<u32>>, T = T>
-    + IndexDomain<I = Expr<Vec2<u32>>, A = ()>
-    + Send
-    + Sync
-{
+pub trait Planar<T: EmanationType>: Deref<Target = EField<Vec2<u32>, T>> + Send + Sync {
     fn size(&self) -> Vec2<u32>;
-    fn as_index(&self) -> ArrayIndex2d<T> {
-        ArrayIndex2d {
+    fn reduce(&self) -> ReducedIndex2d<T> {
+        ReducedIndex2d {
             field: **self,
             size: self.size(),
         }
+    }
+}
+
+trait ExprFieldLike<T: EmanationType> {
+    type V: Value;
+}
+impl<T: EmanationType, V: Value> ExprFieldLike<T> for EField<V, T> {
+    type V = V;
+}
+
+#[allow(private_bounds)]
+pub trait SpatialIndex<T: EmanationType>: Deref
+where
+    <Self as Deref>::Target: ExprFieldLike<T>,
+    Self: IndexEmanation<Expr<<<Self as Deref>::Target as ExprFieldLike<T>>::V>, T = T>
+        + IndexDomain<I = Expr<<<Self as Deref>::Target as ExprFieldLike<T>>::V>, A = ()>
+        + Send
+        + Sync,
+{
+}
+
+impl<T: EmanationType, X> SpatialIndex<T> for X
+where
+    X: Deref,
+    <X as Deref>::Target: ExprFieldLike<T>,
+    X: IndexEmanation<Expr<<<X as Deref>::Target as ExprFieldLike<T>>::V>, T = T>
+        + IndexDomain<I = Expr<<<X as Deref>::Target as ExprFieldLike<T>>::V>, A = ()>
+        + Send
+        + Sync,
+{
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReducedIndex<T: EmanationType> {
+    field: EField<u32, T>,
+    size: u32,
+}
+impl<T: EmanationType> Deref for ReducedIndex<T> {
+    type Target = EField<u32, T>;
+    fn deref(&self) -> &Self::Target {
+        &self.field
+    }
+}
+impl<T: EmanationType> ReducedIndex<T> {
+    pub fn size(&self) -> u32 {
+        self.size
+    }
+}
+impl<T: EmanationType> Linear<T> for ReducedIndex<T> {
+    fn size(&self) -> u32 {
+        self.size
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReducedIndex2d<T: EmanationType> {
+    field: EField<Vec2<u32>, T>,
+    size: Vec2<u32>,
+}
+impl<T: EmanationType> Deref for ReducedIndex2d<T> {
+    type Target = EField<Vec2<u32>, T>;
+    fn deref(&self) -> &Self::Target {
+        &self.field
+    }
+}
+impl<T: EmanationType> ReducedIndex2d<T> {
+    pub fn size(&self) -> Vec2<u32> {
+        self.size
+    }
+}
+impl<T: EmanationType> Planar<T> for ReducedIndex2d<T> {
+    fn size(&self) -> Vec2<u32> {
+        self.size
     }
 }
 
@@ -64,7 +125,7 @@ impl<T: EmanationType> IndexDomain for ArrayIndex<T> {
     }
 }
 
-impl<T: EmanationType> LinearIndex<T> for ArrayIndex<T> {
+impl<T: EmanationType> Linear<T> for ArrayIndex<T> {
     fn size(&self) -> u32 {
         self.size
     }
@@ -99,7 +160,7 @@ impl<T: EmanationType> IndexDomain for ArrayIndex2d<T> {
     }
 }
 
-impl<T: EmanationType> PlanarIndex<T> for ArrayIndex2d<T> {
+impl<T: EmanationType> Planar<T> for ArrayIndex2d<T> {
     fn size(&self) -> Vec2<u32> {
         self.size
     }

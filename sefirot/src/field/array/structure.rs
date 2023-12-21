@@ -37,7 +37,7 @@ impl<T: EmanationType> Emanation<T> {
     // TODO: Change to use the `IntoBuffer`.
     pub fn create_soa_fields<'a, S: Structure>(
         &self,
-        index: ArrayIndex<T>,
+        index: impl Linear<T>,
         prefix: &str,
         values: impl IntoSlice<'a, S>,
     ) -> S::Map<EField<__, T>> {
@@ -51,7 +51,7 @@ impl<T: EmanationType> Emanation<T> {
     }
     pub fn create_aos_fields<S: Structure>(
         &self,
-        index: ArrayIndex<T>,
+        index: impl Linear<T>,
         prefix: &str,
         values: impl IntoBuffer<S>,
     ) -> S::Map<EField<__, T>> {
@@ -60,7 +60,7 @@ impl<T: EmanationType> Emanation<T> {
     }
     pub fn create_aos_fields_with_struct_field<S: Structure>(
         &self,
-        index: ArrayIndex<T>,
+        index: impl Linear<T>,
         prefix: &str,
         values: impl IntoBuffer<S>,
     ) -> (EField<S, T>, S::Map<EField<__, T>>) {
@@ -70,7 +70,7 @@ impl<T: EmanationType> Emanation<T> {
         let struct_field = *self.create_field(&(prefix.clone() + "struct"));
         let struct_accessor =
             Arc::downgrade(&self.on(struct_field).bind_accessor(BufferAccessor {
-                index,
+                index: index.reduce(),
                 buffer,
                 handle,
                 atomic: Mutex::new(None),
@@ -86,13 +86,15 @@ impl<T: EmanationType> Emanation<T> {
     }
 }
 
-struct CreateArrayField<'a, S: Structure, T: EmanationType> {
+struct CreateArrayField<'a, S: Structure, T: EmanationType, I: Linear<T>> {
     emanation: &'a Emanation<T>,
-    index: ArrayIndex<T>,
+    index: I,
     prefix: String,
     values: &'a [S],
 }
-impl<S: Structure, T: EmanationType> ValueMapping<S> for CreateArrayField<'_, S, T> {
+impl<S: Structure, T: EmanationType, I: Linear<T>> ValueMapping<S>
+    for CreateArrayField<'_, S, T, I>
+{
     type M = EField<__, T>;
     fn map<Z: Selector<S>>(&mut self, name: &'static str) -> EField<Z::Result, T> {
         let field_name = self.prefix.clone() + name;
@@ -103,7 +105,7 @@ impl<S: Structure, T: EmanationType> ValueMapping<S> for CreateArrayField<'_, S,
         *self
             .emanation
             .create_field(&field_name)
-            .bind_array(self.index, buffer)
+            .bind_array(self.index.reduce(), buffer)
     }
 }
 

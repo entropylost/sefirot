@@ -11,8 +11,12 @@ use crate::prelude::*;
 
 pub mod kernel;
 
+/// A trait for types that can be used to generate new [`Element`]s within a kernel,
+/// given an index of type `I` (see [`Emanation::get`]).
 pub trait IndexEmanation<I> {
     type T: EmanationType;
+    /// Bind the fields necessary to make the [`Element`] valid.
+    /// For example, [`ArrayIndex`] binds the `EField<u32, T>`'s value to the index.
     fn bind_fields(&self, index: I, element: &Element<Self::T>);
 }
 impl<I, X> IndexEmanation<I> for &X
@@ -37,6 +41,7 @@ impl<T: EmanationType> Emanation<T> {
     }
 }
 
+/// A trait for simple [`Domain`]s generated from a single 3-dimensional dispatch call.
 pub trait IndexDomain: IndexEmanation<Self::I> {
     type I;
     type A;
@@ -79,6 +84,9 @@ where
     }
 }
 
+/// A trait representing a space across which computations may be performed by calling kernels.
+/// This is intentionally very generic, and does not provide any guarantees on how many dispatch calls are generated.
+/// For most purposes, [`IndexDomain`] is a conveinent way to implement this trait if only a single dispatch call is necessary.
 pub trait Domain: Send + Sync {
     type T: EmanationType;
     type A;

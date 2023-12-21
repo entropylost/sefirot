@@ -97,10 +97,10 @@ impl<V: IoTexel> IntoTex2d<V> for Tex2dView<V> {
 }
 
 impl<V: Value, T: EmanationType> Reference<'_, EField<V, T>> {
-    pub fn bind_array(self, index: impl LinearIndex<T>, values: impl IntoBuffer<V>) -> Self {
+    pub fn bind_array(self, index: impl Linear<T>, values: impl IntoBuffer<V>) -> Self {
         let (buffer, handle) = values.into_buffer(self.device(), index.size());
         let accessor = BufferAccessor {
-            index: index.as_index(),
+            index: index.reduce(),
             buffer,
             handle,
             atomic: Mutex::new(None),
@@ -115,13 +115,13 @@ impl<V: Value, T: EmanationType> Reference<'_, EField<V, T>> {
                 .map(|a| a.buffer.clone())
         })
     }
-    pub fn bind_tex2d(self, index: ArrayIndex2d<T>, values: impl IntoTex2d<V>) -> Self
+    pub fn bind_tex2d(self, index: impl Planar<T>, values: impl IntoTex2d<V>) -> Self
     where
         V: IoTexel,
     {
         let (texture, handle) = values.into_tex2d(self.device(), index.size().x, index.size().y);
         let accessor = Tex2dAccessor {
-            index,
+            index: index.reduce(),
             texture,
             handle,
         };
@@ -130,7 +130,7 @@ impl<V: Value, T: EmanationType> Reference<'_, EField<V, T>> {
 }
 
 pub struct BufferAccessor<V: Value, T: EmanationType> {
-    pub index: ArrayIndex<T>,
+    pub index: ReducedIndex<T>,
     pub buffer: BufferView<V>,
     /// Used to prevent the buffer from being dropped.
     pub handle: Option<Buffer<V>>,
@@ -191,7 +191,7 @@ impl<V: Value, T: EmanationType> Accessor<T> for BufferAccessor<V, T> {
 }
 
 pub struct AtomicBufferAccessor<V: Value, T: EmanationType> {
-    pub index: ArrayIndex<T>,
+    pub index: ReducedIndex<T>,
     pub buffer: BufferView<V>,
 }
 impl<V: Value, T: EmanationType> Accessor<T> for AtomicBufferAccessor<V, T> {
@@ -226,7 +226,7 @@ impl<V: Value, T: EmanationType> Accessor<T> for AtomicBufferAccessor<V, T> {
 }
 
 pub struct Tex2dAccessor<V: IoTexel, T: EmanationType> {
-    pub index: ArrayIndex2d<T>,
+    pub index: ReducedIndex2d<T>,
     pub texture: Tex2dView<V>,
     /// Used to prevent the buffer from being dropped.
     pub handle: Option<Tex2d<V>>,

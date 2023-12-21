@@ -121,12 +121,12 @@ impl<V: Value, T: EmanationType> Reference<'_, Field<Slice<Expr<V>>, T>> {
     #[tracked]
     pub fn bind_array_slices(
         self,
-        index: impl LinearIndex<T>,
+        index: impl Linear<T>,
         slice_size: u32,
         check_bounds: bool,
         values: impl IntoBuffer<V>,
     ) -> Self {
-        let index = index.as_index();
+        let index = index.reduce();
         let (buffer, handle) = values.into_buffer(self.device(), index.size() * slice_size);
         self.bind_fn(move |el| {
             let _handle = &handle;
@@ -142,7 +142,7 @@ impl<V: Value, T: EmanationType> Reference<'_, Field<Slice<Expr<V>>, T>> {
     #[tracked]
     pub fn bind_tex2d_slices(
         self,
-        index: impl LinearIndex<T>,
+        index: impl Linear<T>,
         slice_size: u32,
         check_bounds: bool,
         storage: PixelStorage,
@@ -150,7 +150,7 @@ impl<V: Value, T: EmanationType> Reference<'_, Field<Slice<Expr<V>>, T>> {
     where
         V: IoTexel,
     {
-        let index = index.as_index();
+        let index = index.reduce();
         let texture = self
             .device()
             .create_tex2d(storage, index.size(), slice_size, 1);
@@ -167,7 +167,7 @@ impl<V: Value, T: EmanationType> Reference<'_, Field<Slice<Expr<V>>, T>> {
     #[tracked]
     pub fn bind_tex3d_slices(
         self,
-        index: impl PlanarIndex<T>,
+        index: impl Planar<T>,
         slice_size: u32,
         check_bounds: bool,
         storage: PixelStorage,
@@ -175,7 +175,7 @@ impl<V: Value, T: EmanationType> Reference<'_, Field<Slice<Expr<V>>, T>> {
     where
         V: IoTexel,
     {
-        let index = index.as_index();
+        let index = index.reduce();
         let texture =
             self.device()
                 .create_tex3d(storage, index.size().x, index.size().y, slice_size, 1);

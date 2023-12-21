@@ -1,14 +1,18 @@
-use super::array::ArrayIndex;
+use crate::domain::IndexEmanation;
+
 use super::*;
 
-pub struct IndexMapAccessor<T: EmanationType, S: EmanationType> {
-    map: EField<u32, T>,
-    index: ArrayIndex<S>,
+pub struct IndexMapAccessor<T: EmanationType, S: EmanationType, I: Any, E: IndexEmanation<I, T = S>>
+{
+    map: Field<I, T>,
+    index: E,
     // TODO: This should be weak, as otherwise a cyclic chain will prevent dropping.
     emanation: Emanation<S>,
 }
 
-impl<T: EmanationType, S: EmanationType> Accessor<T> for IndexMapAccessor<T, S> {
+impl<T: EmanationType, S: EmanationType, I: Any, E: IndexEmanation<I, T = S> + 'static> Accessor<T>
+    for IndexMapAccessor<T, S, I, E>
+{
     type V = Element<S>;
     type C = ();
 
@@ -40,16 +44,16 @@ impl<T: EmanationType, S: EmanationType> Accessor<T> for IndexMapAccessor<T, S> 
 impl<T: EmanationType> Emanation<T> {
     /// Creates a [`Field`] containing an [`Element`] of another [`Emanation`],
     /// using a pre-existing `Field` containing an integer that is used to
-    /// index into the other `Emanation` with the provided [`LinearIndex`].
-    pub fn map_index<S: EmanationType>(
+    /// index into the other `Emanation` with the provided index.
+    pub fn map_index<S: EmanationType, I: Any>(
         &self,
         other: &Emanation<S>,
-        map: EField<u32, T>,
-        index: impl LinearIndex<S>,
+        map: Field<I, T>,
+        index: impl IndexEmanation<I, T = S> + 'static + Send + Sync,
     ) -> Reference<'_, Field<Element<S>, T>> {
         let accessor = IndexMapAccessor {
             map,
-            index: index.as_index(),
+            index,
             emanation: other.clone(),
         };
         self.create_field(&format!(

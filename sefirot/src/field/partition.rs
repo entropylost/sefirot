@@ -143,7 +143,7 @@ impl<I: PartitionIndex, T: EmanationType, P: EmanationType> Deref
         &self.partition_ref
     }
 }
-impl<I: PartitionIndex, T: EmanationType, P: EmanationType> LinearIndex<T>
+impl<I: PartitionIndex, T: EmanationType, P: EmanationType> Linear<T>
     for ArrayPartitionDomain<I, T, P>
 {
     fn size(&self) -> u32 {
