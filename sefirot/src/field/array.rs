@@ -97,7 +97,7 @@ impl<V: IoTexel> IntoTex2d<V> for Tex2dView<V> {
 }
 
 impl<V: Value, T: EmanationType> Reference<'_, EField<V, T>> {
-    pub fn bind_array(self, index: impl Linear<T>, values: impl IntoBuffer<V>) -> Self {
+    pub fn bind_array(self, index: impl LinearIndex<T>, values: impl IntoBuffer<V>) -> Self {
         let (buffer, handle) = values.into_buffer(self.device(), index.size());
         let accessor = BufferAccessor {
             index: index.reduce(),
@@ -115,7 +115,7 @@ impl<V: Value, T: EmanationType> Reference<'_, EField<V, T>> {
                 .map(|a| a.buffer.clone())
         })
     }
-    pub fn bind_tex2d(self, index: impl Planar<T>, values: impl IntoTex2d<V>) -> Self
+    pub fn bind_tex2d(self, index: impl PlanarIndex<T>, values: impl IntoTex2d<V>) -> Self
     where
         V: IoTexel,
     {

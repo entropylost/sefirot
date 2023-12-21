@@ -22,7 +22,7 @@ pub mod prelude {
     pub use crate::domain::{Domain, DomainExt};
     pub use crate::element::Element;
     pub use crate::emanation::{Emanation, EmanationType};
-    pub use crate::field::array::{Linear, Planar};
+    pub use crate::field::array::{LinearIndex, PlanarIndex};
     pub use crate::field::{EField, Field};
     pub use luisa::prelude::*;
     pub use luisa_compute as luisa;
