@@ -40,16 +40,16 @@ impl<T: EmanationType, S: EmanationType> Accessor<T> for IndexMapAccessor<T, S> 
 impl<T: EmanationType> Emanation<T> {
     /// Creates a [`Field`] containing an [`Element`] of another [`Emanation`],
     /// using a pre-existing `Field` containing an integer that is used to
-    /// index into the other `Emanation` with the provided [`ArrayIndex`].
+    /// index into the other `Emanation` with the provided [`LinearIndex`].
     pub fn map_index<S: EmanationType>(
         &self,
         other: &Emanation<S>,
         map: EField<u32, T>,
-        index: ArrayIndex<S>,
+        index: impl LinearIndex<S>,
     ) -> Reference<'_, Field<Element<S>, T>> {
         let accessor = IndexMapAccessor {
             map,
-            index,
+            index: index.as_index(),
             emanation: other.clone(),
         };
         self.create_field(&format!(

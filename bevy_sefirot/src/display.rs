@@ -2,6 +2,7 @@ use super::prelude::*;
 use bevy::prelude::*;
 use bevy::winit::WinitWindows;
 use luisa::lang::types::vector::{Vec2, Vec4};
+use sefirot::field::array::ArrayIndex2d;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Display;

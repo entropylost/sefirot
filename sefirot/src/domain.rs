@@ -15,6 +15,15 @@ pub trait IndexEmanation<I> {
     type T: EmanationType;
     fn bind_fields(&self, index: I, element: &Element<Self::T>);
 }
+impl<I, X> IndexEmanation<I> for &X
+where
+    X: IndexEmanation<I>,
+{
+    type T = X::T;
+    fn bind_fields(&self, index: I, element: &Element<Self::T>) {
+        (*self).bind_fields(index, element);
+    }
+}
 impl<T: EmanationType> Emanation<T> {
     pub fn get<I, Idx: IndexEmanation<I, T = T>>(
         &self,
@@ -34,6 +43,22 @@ pub trait IndexDomain: IndexEmanation<Self::I> {
     fn get_index(&self) -> Self::I;
     fn dispatch_size(&self, args: Self::A) -> [u32; 3];
     fn before_dispatch(&self, _args: &Self::A) {}
+}
+impl<X> IndexDomain for &X
+where
+    X: IndexDomain,
+{
+    type I = X::I;
+    type A = X::A;
+    fn get_index(&self) -> Self::I {
+        (*self).get_index()
+    }
+    fn dispatch_size(&self, args: Self::A) -> [u32; 3] {
+        (*self).dispatch_size(args)
+    }
+    fn before_dispatch(&self, args: &Self::A) {
+        (*self).before_dispatch(args)
+    }
 }
 
 impl<X> Domain for X

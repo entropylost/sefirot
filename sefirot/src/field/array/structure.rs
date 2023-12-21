@@ -41,7 +41,7 @@ impl<T: EmanationType> Emanation<T> {
         prefix: &str,
         values: impl IntoSlice<'a, S>,
     ) -> S::Map<EField<__, T>> {
-        let values = values.into_slice(index.size);
+        let values = values.into_slice(index.size());
         S::apply(CreateArrayField {
             emanation: self,
             index,
@@ -64,7 +64,7 @@ impl<T: EmanationType> Emanation<T> {
         prefix: &str,
         values: impl IntoBuffer<S>,
     ) -> (EField<S, T>, S::Map<EField<__, T>>) {
-        let (buffer, handle) = values.into_buffer(&self.device, index.size);
+        let (buffer, handle) = values.into_buffer(&self.device, index.size());
 
         let prefix = prefix.to_string();
         let struct_field = *self.create_field(&(prefix.clone() + "struct"));

@@ -1,6 +1,6 @@
 use luisa::lang::types::vector::{Vec2, Vec3};
 
-use super::array::{ArrayIndex, ArrayIndex2d, IntoBuffer};
+use super::array::IntoBuffer;
 use super::*;
 
 #[derive(Debug, Clone)]
@@ -121,12 +121,13 @@ impl<V: Value, T: EmanationType> Reference<'_, Field<Slice<Expr<V>>, T>> {
     #[tracked]
     pub fn bind_array_slices(
         self,
-        index: ArrayIndex<T>,
+        index: impl LinearIndex<T>,
         slice_size: u32,
         check_bounds: bool,
         values: impl IntoBuffer<V>,
     ) -> Self {
-        let (buffer, handle) = values.into_buffer(self.device(), index.size * slice_size);
+        let index = index.as_index();
+        let (buffer, handle) = values.into_buffer(self.device(), index.size() * slice_size);
         self.bind_fn(move |el| {
             let _handle = &handle;
             let buffer = buffer.clone();
@@ -141,7 +142,7 @@ impl<V: Value, T: EmanationType> Reference<'_, Field<Slice<Expr<V>>, T>> {
     #[tracked]
     pub fn bind_tex2d_slices(
         self,
-        index: ArrayIndex<T>,
+        index: impl LinearIndex<T>,
         slice_size: u32,
         check_bounds: bool,
         storage: PixelStorage,
@@ -149,9 +150,10 @@ impl<V: Value, T: EmanationType> Reference<'_, Field<Slice<Expr<V>>, T>> {
     where
         V: IoTexel,
     {
+        let index = index.as_index();
         let texture = self
             .device()
-            .create_tex2d(storage, index.size, slice_size, 1);
+            .create_tex2d(storage, index.size(), slice_size, 1);
         self.bind_fn(move |el| {
             let texture = texture.view(0);
             let index = index[[el]];
@@ -165,7 +167,7 @@ impl<V: Value, T: EmanationType> Reference<'_, Field<Slice<Expr<V>>, T>> {
     #[tracked]
     pub fn bind_tex3d_slices(
         self,
-        index: ArrayIndex2d<T>,
+        index: impl PlanarIndex<T>,
         slice_size: u32,
         check_bounds: bool,
         storage: PixelStorage,
@@ -173,9 +175,10 @@ impl<V: Value, T: EmanationType> Reference<'_, Field<Slice<Expr<V>>, T>> {
     where
         V: IoTexel,
     {
+        let index = index.as_index();
         let texture =
             self.device()
-                .create_tex3d(storage, index.size.x, index.size.y, slice_size, 1);
+                .create_tex3d(storage, index.size().x, index.size().y, slice_size, 1);
         self.bind_fn(move |el| {
             let texture = texture.view(0);
             let index = index[[el]];

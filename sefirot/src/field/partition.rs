@@ -57,7 +57,7 @@ impl<I: PartitionIndex, T: EmanationType, P: EmanationType> IndexEmanation<Expr<
         element.bind(self.partition, self.partition_index.clone());
         element.bind(self.partition_ref, ValueAccessor(index));
         element.bind(
-            self.index.field,
+            *self.index,
             FnAccessor::new(move |el| {
                 el.get(partition_map)
                     .unwrap()
@@ -111,7 +111,7 @@ impl<I: PartitionIndex, T: EmanationType, P: EmanationType> IndexEmanation<Expr<
         );
         element.bind(self.partition_ref, ValueAccessor(index));
         element.bind(
-            self.index.field,
+            *self.index,
             FnAccessor::new(move |el| {
                 el.get(partition_map)
                     .unwrap()
@@ -131,11 +131,23 @@ impl<I: PartitionIndex, T: EmanationType, P: EmanationType> IndexDomain
         dispatch_id().x
     }
     fn dispatch_size(&self, _: ()) -> [u32; 3] {
-        [
-            self.sizes.blocking_lock()[I::to(self.partition_index) as usize],
-            1,
-            1,
-        ]
+        [self.size(), 1, 1]
+    }
+}
+impl<I: PartitionIndex, T: EmanationType, P: EmanationType> Deref
+    for ArrayPartitionDomain<I, T, P>
+{
+    type Target = EField<u32, T>;
+    fn deref(&self) -> &Self::Target {
+        // TODO: This isn't safe really.
+        &self.partition_ref
+    }
+}
+impl<I: PartitionIndex, T: EmanationType, P: EmanationType> LinearIndex<T>
+    for ArrayPartitionDomain<I, T, P>
+{
+    fn size(&self) -> u32 {
+        self.sizes.blocking_lock()[I::to(self.partition_index) as usize]
     }
 }
 // TODO: Add support for other-Domain partitions using `IndexEmanation`.
@@ -247,7 +259,7 @@ impl<T: EmanationType> Emanation<T> {
         } = partition_fields;
         // TODO: Instead of having fixed partition sizes, first do a size scan,
         // then running-sum and do the partitions directly inline basically like a sort.
-        let max_partition_size = max_partition_size.unwrap_or(index.size);
+        let max_partition_size = max_partition_size.unwrap_or(index.size());
         let partition_name = self.on(partition).name();
         let partition_ref = *self
             .create_field(&(partition_name.clone() + "-ref"))
@@ -292,7 +304,7 @@ impl<T: EmanationType> Emanation<T> {
             partition_map,
             partition_lists,
             partition_size,
-            partition_size_host: Arc::new(Mutex::new(vec![0; partition_index.size as usize])),
+            partition_size_host: Arc::new(Mutex::new(vec![0; partition_index.size() as usize])),
             update_lists_kernel,
             zero_lists_kernel,
         }
