@@ -386,22 +386,26 @@ impl<'a> ComputeGraph<'a> {
     }
 }
 
-pub trait CopyToExt<T: Value + Send> {
-    fn cp(&self, dst: &Arc<tokio::sync::Mutex<Vec<T>>>) -> NodeConfigs<'static>;
+pub trait CopyExt<T: Value + Send> {
+    fn copy_to_shared(&self, dst: &Arc<tokio::sync::Mutex<Vec<T>>>) -> NodeConfigs<'static>;
+    fn copy_from_shared(&self, src: &Arc<tokio::sync::Mutex<Vec<T>>>) -> NodeConfigs<'static>;
+    fn copy_from_owned(&self, src: Vec<T>) -> NodeConfigs<'static> {
+        let src = Arc::new(tokio::sync::Mutex::new(src));
+        self.copy_from_shared(&src)
+    }
 }
-impl<T: Value + Send> CopyToExt<T> for BufferView<T> {
-    fn cp(&self, dst: &Arc<tokio::sync::Mutex<Vec<T>>>) -> NodeConfigs<'static> {
+impl<T: Value + Send> CopyExt<T> for BufferView<T> {
+    fn copy_to_shared(&self, dst: &Arc<tokio::sync::Mutex<Vec<T>>>) -> NodeConfigs<'static> {
         let src = self.clone();
         let mut guard = dst.clone().blocking_lock_owned();
         let dst = unsafe { std::mem::transmute::<&mut [T], &'static mut [T]>(&mut *guard) };
-        NodeConfigs::Single {
-            config: SingleConfig {
-                command: Some(src.copy_to_async(dst)),
-                release: Some(Exclusive::new(Box::new(guard))),
-                ..Default::default()
-            },
-            constraints: Vec::new(),
-        }
+        src.copy_to_async(dst).release(guard)
+    }
+    fn copy_from_shared(&self, src: &Arc<tokio::sync::Mutex<Vec<T>>>) -> NodeConfigs<'static> {
+        let dst = self.clone();
+        let mut guard = src.clone().blocking_lock_owned();
+        let src = unsafe { std::mem::transmute::<&mut [T], &'static mut [T]>(&mut *guard) };
+        dst.copy_from_async(src).release(guard)
     }
 }
 
@@ -506,6 +510,34 @@ pub trait AsNodes<'a>: Sized {
         };
         *debug_name = Some(name.as_ref().to_string());
         cfg
+    }
+    fn release(self, release: impl Any + Send) -> NodeConfigs<'a> {
+        let mut cfg = self.into_node_configs();
+        let NodeConfigs::Single {
+            config: SingleConfig {
+                release: r @ None, ..
+            },
+            ..
+        } = &mut cfg
+        else {
+            panic!("Cannot release a tuple node.");
+        };
+        *r = Some(Exclusive::new(Box::new(release)));
+        cfg
+    }
+    fn release_fn(self, release: impl FnOnce() + Send + 'static) -> NodeConfigs<'a> {
+        struct FnRelease<F: FnOnce() + Send + 'static>(Option<F>);
+        impl<F: FnOnce() + Send + 'static> Drop for FnRelease<F> {
+            fn drop(&mut self) {
+                self.0.take().unwrap()();
+            }
+        }
+        self.release(FnRelease(Some(release)))
+    }
+    fn execute(self, device: &Device) {
+        let mut graph = ComputeGraph::new(device);
+        graph.add(self);
+        graph.execute();
     }
 }
 impl<'a> AsNodes<'a> for NodeConfigs<'a> {

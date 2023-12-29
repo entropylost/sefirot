@@ -1,5 +1,5 @@
 use crate::domain::{IndexDomain, IndexEmanation};
-use crate::graph::{AsNodes, CopyToExt, NodeConfigs};
+use crate::graph::{AsNodes, CopyExt, NodeConfigs};
 
 use super::array::ArrayIndex;
 use super::constant::ConstantAccessor;
@@ -236,7 +236,7 @@ impl<'a: 'b, 'b, T: EmanationType, P: EmanationType, I: PartitionIndex>
                 .on(self.partition_size)
                 .buffer()
                 .unwrap()
-                .cp(&self.partition_size_host),
+                .copy_to_shared(&self.partition_size_host),
         )
             .into_node_configs()
             .chain()
