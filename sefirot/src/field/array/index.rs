@@ -74,6 +74,14 @@ pub struct ArrayIndex<T: EmanationType> {
     field: EField<u32, T>,
     size: u32,
 }
+impl<T: EmanationType> ArrayIndex<T> {
+    pub fn shrink(&self, size: u32) -> ArrayIndex<T> {
+        ArrayIndex {
+            field: self.field,
+            size: self.size.min(size),
+        }
+    }
+}
 impl<T: EmanationType> Deref for ArrayIndex<T> {
     type Target = EField<u32, T>;
     fn deref(&self) -> &Self::Target {
@@ -108,6 +116,14 @@ impl<T: EmanationType> LinearIndex<T> for ArrayIndex<T> {
 pub struct ArrayIndex2d<T: EmanationType> {
     field: EField<Vec2<u32>, T>,
     size: Vec2<u32>,
+}
+impl<T: EmanationType> ArrayIndex2d<T> {
+    pub fn shrink(&self, size: Vec2<u32>) -> ArrayIndex2d<T> {
+        ArrayIndex2d {
+            field: self.field,
+            size: Vec2::new(self.size.x.min(size.x), self.size.y.min(size.y)),
+        }
+    }
 }
 impl<T: EmanationType> Deref for ArrayIndex2d<T> {
     type Target = EField<Vec2<u32>, T>;
