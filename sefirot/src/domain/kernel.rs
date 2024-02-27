@@ -38,7 +38,7 @@ impl<T: EmanationType> Emanation<T> {
         self.build_kernel_with_options_and_domain_args(options, domain, f)
     }
 
-    pub fn build_kernel_with_domain_args<F: KernelSignature, A>(
+    pub fn build_kernel_with_domain_args<F: KernelSignature, A: 'static>(
         &self,
         domain: impl AsBoxedDomain<T = T, A = A>,
         f: F::Function<'_, T>,
@@ -53,7 +53,7 @@ impl<T: EmanationType> Emanation<T> {
         )
     }
 
-    pub fn build_kernel_with_options_and_domain_args<F: KernelSignature, A>(
+    pub fn build_kernel_with_options_and_domain_args<F: KernelSignature, A: 'static>(
         &self,
         options: KernelBuildOptions,
         domain: impl AsBoxedDomain<T = T, A = A>,
@@ -99,7 +99,7 @@ macro_rules! impl_kernel {
                 self.dispatch_with_domain_args(())
             }
         }
-        impl<T: EmanationType, A> Kernel<T, fn(), A> {
+        impl<T: EmanationType, A: 'static> Kernel<T, fn(), A> {
             pub fn dispatch_blocking_with_domain_args(&self, domain_args: A) {
                 let mut graph = ComputeGraph::new(&self.device);
                 graph.add(self.dispatch_with_domain_args(domain_args));
@@ -132,7 +132,7 @@ macro_rules! impl_kernel {
                 self.dispatch_with_domain_args((), $S0 $(, $Sn)*)
             }
         }
-        impl<T: EmanationType, A, $T0: KernelArg + 'static $(, $Tn: KernelArg + 'static)*> Kernel<T, fn($T0 $(, $Tn)*), A> {
+        impl<T: EmanationType, A: 'static, $T0: KernelArg + 'static $(, $Tn: KernelArg + 'static)*> Kernel<T, fn($T0 $(, $Tn)*), A> {
             #[allow(non_snake_case)]
             #[allow(unused_variables)]
             #[allow(clippy::too_many_arguments)]

@@ -121,7 +121,7 @@ impl<V: Value, T: EmanationType> Reference<'_, Field<Slice<Expr<V>>, T>> {
     #[tracked]
     pub fn bind_array_slices(
         self,
-        index: impl LinearIndex<T>,
+        index: &impl LinearIndex<T>,
         slice_size: u32,
         check_bounds: bool,
         values: impl IntoBuffer<V>,
@@ -142,7 +142,7 @@ impl<V: Value, T: EmanationType> Reference<'_, Field<Slice<Expr<V>>, T>> {
     #[tracked]
     pub fn bind_tex2d_slices(
         self,
-        index: impl LinearIndex<T>,
+        index: &impl LinearIndex<T>,
         slice_size: u32,
         check_bounds: bool,
         storage: PixelStorage,

@@ -42,33 +42,16 @@ impl<T: EmanationType> Emanation<T> {
 }
 
 /// A trait for simple [`Domain`]s generated from a single 3-dimensional dispatch call.
-pub trait IndexDomain: IndexEmanation<Self::I> {
+pub trait IndexDomain: IndexEmanation<Self::I> + 'static + Send + Sync {
     type I;
     type A;
     fn get_index(&self) -> Self::I;
     fn dispatch_size(&self, args: Self::A) -> [u32; 3];
     fn before_dispatch(&self, _args: &Self::A) {}
 }
-impl<X> IndexDomain for &X
-where
-    X: IndexDomain,
-{
-    type I = X::I;
-    type A = X::A;
-    fn get_index(&self) -> Self::I {
-        (*self).get_index()
-    }
-    fn dispatch_size(&self, args: Self::A) -> [u32; 3] {
-        (*self).dispatch_size(args)
-    }
-    fn before_dispatch(&self, args: &Self::A) {
-        (*self).before_dispatch(args)
-    }
-}
-
 impl<X> Domain for X
 where
-    X: IndexDomain + Send + Sync,
+    X: IndexDomain,
 {
     type T = X::T;
     type A = X::A;
@@ -87,7 +70,7 @@ where
 /// A trait representing a space across which computations may be performed by calling kernels.
 /// This is intentionally very generic, and does not provide any guarantees on how many dispatch calls are generated.
 /// For most purposes, [`IndexDomain`] is a conveinent way to implement this trait if only a single dispatch call is necessary.
-pub trait Domain: Send + Sync {
+pub trait Domain: Send + Sync + 'static {
     type T: EmanationType;
     type A;
     fn before_record(&self, element: &Element<Self::T>);
@@ -106,7 +89,10 @@ impl<T: EmanationType, A> AsBoxedDomain for Box<dyn Domain<T = T, A = A>> {
         self
     }
 }
-impl<T: EmanationType, A, D: Domain<T = T, A = A> + 'static> AsBoxedDomain for D {
+impl<T: EmanationType, A, D> AsBoxedDomain for D
+where
+    D: Domain<T = T, A = A>,
+{
     type T = T;
     type A = A;
     fn into_boxed_domain(self) -> Box<dyn Domain<T = T, A = A>> {
@@ -121,7 +107,7 @@ pub struct DispatchArgs<'a> {
 }
 
 pub trait DomainExt: Domain + Sized {
-    fn map<B, F: Fn(B) -> Self::A + Send + Sync>(self, f: F) -> MappedDomain<Self, B, F> {
+    fn map<B, F: Fn(B) -> Self::A + Send + Sync + 'static>(self, f: F) -> MappedDomain<Self, B, F> {
         MappedDomain {
             domain: self,
             f,
@@ -136,7 +122,9 @@ pub struct MappedDomain<D: Domain, B, F: Fn(B) -> D::A + Send + Sync> {
     f: F,
     _marker: PhantomData<fn(B)>,
 }
-impl<D: Domain, B, F: Fn(B) -> D::A + Send + Sync> Domain for MappedDomain<D, B, F> {
+impl<D: Domain, B: 'static, F: Fn(B) -> D::A + Send + Sync + 'static> Domain
+    for MappedDomain<D, B, F>
+{
     type T = D::T;
     type A = B;
     fn before_record(&self, element: &Element<Self::T>) {

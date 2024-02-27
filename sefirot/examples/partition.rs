@@ -82,7 +82,7 @@ fn main() {
         position,
         velocity,
         material: material_id,
-    } = particles.create_soa_fields(index, "particle-", &particle_data);
+    } = particles.create_soa_fields(&index, "particle-", &particle_data);
 
     let materials = Emanation::<Material>::new(&device);
 
@@ -94,9 +94,9 @@ fn main() {
     );
 
     let material_parts = particles.partition(
-        index,
+        &index,
         &materials,
-        material_index,
+        &material_index,
         PartitionFields {
             const_partition: *particles.create_field(""),
             partition: material_id,

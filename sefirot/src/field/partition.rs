@@ -1,7 +1,7 @@
 use crate::domain::{IndexDomain, IndexEmanation};
 use crate::graph::{AsNodes, CopyExt, NodeConfigs};
 
-use super::array::ArrayIndex;
+use super::array::ReducedIndex;
 use super::constant::ConstantAccessor;
 use super::slice::Slice;
 use super::*;
@@ -38,7 +38,7 @@ pub struct PartitionFields<I: PartitionIndex, T: EmanationType, P: EmanationType
 
 #[derive(Debug, Clone)]
 pub struct DynArrayPartitionDomain<I: PartitionIndex, T: EmanationType, P: EmanationType> {
-    index: ArrayIndex<T>,
+    index: ReducedIndex<T>,
     partition: EField<I, T>,
     partition_ref: EField<u32, T>,
     partition_map: Field<Element<P>, T>,
@@ -86,7 +86,7 @@ impl<I: PartitionIndex, T: EmanationType, P: EmanationType> IndexDomain
 
 #[derive(Debug, Clone)]
 pub struct ArrayPartitionDomain<I: PartitionIndex, T: EmanationType, P: EmanationType> {
-    index: ArrayIndex<T>,
+    index: ReducedIndex<T>,
     const_partition: Field<I, T>,
     partition: EField<I, T>,
     partition_ref: EField<u32, T>,
@@ -156,7 +156,7 @@ impl<I: PartitionIndex, T: EmanationType, P: EmanationType> LinearIndex<T>
     derive(bevy_ecs::prelude::Resource, bevy_ecs::prelude::Component)
 )]
 pub struct ArrayPartition<T: EmanationType, P: EmanationType, I: PartitionIndex> {
-    index: ArrayIndex<T>,
+    index: ReducedIndex<T>,
     const_partition: Field<I, T>,
     partition: EField<I, T>,
     partition_ref: EField<u32, T>,
@@ -246,9 +246,12 @@ impl<T: EmanationType> Emanation<T> {
     #[allow(clippy::double_parens)]
     pub fn partition<I: PartitionIndex, P: EmanationType>(
         &self,
-        index: ArrayIndex<T>,
+        index: &(impl LinearIndex<T> + Domain<T = T, A = ()> + Clone),
         partitions: &Emanation<P>,
-        partition_index: ArrayIndex<P>,
+        partition_index: &(impl LinearIndex<P>
+              + IndexEmanation<Expr<u32>, T = P>
+              + Domain<T = P, A = ()>
+              + Clone),
         partition_fields: PartitionFields<I, T, P>,
         max_partition_size: Option<u32>,
     ) -> ArrayPartition<T, P, I> {
@@ -275,13 +278,13 @@ impl<T: EmanationType> Emanation<T> {
 
         let update_lists_kernel = self
             .build_kernel::<fn()>(
-                index,
+                index.clone(),
                 track!(&|el| {
                     if I::to_expr(partition[[el]]) == I::to(I::null()) {
                         return;
                     }
                     let pt =
-                        &partitions.get(&el.context, &partition_index, I::to_expr(partition[[el]]));
+                        &partitions.get(&el.context, partition_index, I::to_expr(partition[[el]]));
                     let this_ref = partition_size_atomic[[pt]].fetch_add(1);
                     partition_ref[[el]] = this_ref;
                     partition_lists[[partition_map[[el]]]].write(this_ref, index[[el]]);
@@ -290,14 +293,14 @@ impl<T: EmanationType> Emanation<T> {
             .with_name(format!("update-lists-{}", partition_name));
         let zero_lists_kernel = partitions
             .build_kernel::<fn()>(
-                partition_index,
+                partition_index.clone(),
                 track!(&|el| {
                     partition_size[[el]] = 0.expr();
                 }),
             )
             .with_name(format!("zero-lists-{}", partition_name));
         ArrayPartition {
-            index,
+            index: index.reduce(),
             const_partition,
             partition,
             partition_ref,

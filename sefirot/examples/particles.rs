@@ -54,7 +54,7 @@ fn main() {
     }
     let index = particles.create_index(particle_data.len() as u32);
     let ParticleMapped { position, velocity } =
-        particles.create_aos_fields(index, "particle-", &particle_data);
+        particles.create_aos_fields(&index, "particle-", &particle_data);
 
     let update_kernel = particles.build_kernel::<fn(f32)>(
         index,

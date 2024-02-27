@@ -1,3 +1,7 @@
+use std::sync::atomic::{AtomicU32, Ordering};
+
+use crate::domain::AsBoxedDomain;
+
 use super::*;
 
 pub trait LinearIndex<T: EmanationType>: Deref<Target = EField<u32, T>> + Send + Sync {
@@ -210,5 +214,65 @@ impl<T: EmanationType> Emanation<T> {
             field: *self.create_field("index2d"),
             size,
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ResizableIndex<T: EmanationType> {
+    field: EField<u32, T>,
+    size: Arc<AtomicU32>,
+    capacity: u32,
+}
+impl<T: EmanationType> From<ArrayIndex<T>> for ResizableIndex<T> {
+    fn from(index: ArrayIndex<T>) -> ResizableIndex<T> {
+        ResizableIndex {
+            field: index.field,
+            size: Arc::new(AtomicU32::new(index.size)),
+            capacity: index.size,
+        }
+    }
+}
+impl<T: EmanationType> Deref for ResizableIndex<T> {
+    type Target = EField<u32, T>;
+    fn deref(&self) -> &Self::Target {
+        &self.field
+    }
+}
+impl<T: EmanationType> LinearIndex<T> for ResizableIndex<T> {
+    fn size(&self) -> u32 {
+        self.size.load(Ordering::Relaxed)
+    }
+}
+impl<T: EmanationType> IndexEmanation<Expr<u32>> for ResizableIndex<T> {
+    type T = T;
+    fn bind_fields(&self, idx: Expr<u32>, element: &Element<T>) {
+        element.bind(self.field, ValueAccessor(idx));
+    }
+}
+impl<T: EmanationType> IndexDomain for ResizableIndex<T> {
+    type I = Expr<u32>;
+    type A = ();
+    fn get_index(&self) -> Self::I {
+        dispatch_id().x
+    }
+    fn dispatch_size(&self, _: ()) -> [u32; 3] {
+        [self.size.load(Ordering::Relaxed), 1, 1]
+    }
+}
+impl<T: EmanationType> ResizableIndex<T> {
+    pub fn resize(&self, size: u32) {
+        debug_assert!(size <= self.capacity);
+        self.size.store(size, Ordering::Relaxed);
+    }
+    pub fn capacity(&self) -> u32 {
+        self.capacity
+    }
+}
+// TODO: Figure out how to generalize this.
+impl<T: EmanationType> AsBoxedDomain for &ResizableIndex<T> {
+    type T = T;
+    type A = ();
+    fn into_boxed_domain(self) -> Box<dyn Domain<T = Self::T, A = Self::A>> {
+        Box::new(self.clone())
     }
 }

@@ -37,7 +37,7 @@ impl<T: EmanationType> Emanation<T> {
     // TODO: Change to use the `IntoBuffer`.
     pub fn create_soa_fields<'a, S: Structure>(
         &self,
-        index: impl LinearIndex<T>,
+        index: &impl LinearIndex<T>,
         prefix: &str,
         values: impl IntoSlice<'a, S>,
     ) -> S::Map<EField<__, T>> {
@@ -51,7 +51,7 @@ impl<T: EmanationType> Emanation<T> {
     }
     pub fn create_aos_fields<S: Structure>(
         &self,
-        index: impl LinearIndex<T>,
+        index: &impl LinearIndex<T>,
         prefix: &str,
         values: impl IntoBuffer<S>,
     ) -> S::Map<EField<__, T>> {
@@ -60,7 +60,7 @@ impl<T: EmanationType> Emanation<T> {
     }
     pub fn create_aos_fields_with_struct_field<S: Structure>(
         &self,
-        index: impl LinearIndex<T>,
+        index: &impl LinearIndex<T>,
         prefix: &str,
         values: impl IntoBuffer<S>,
     ) -> (EField<S, T>, S::Map<EField<__, T>>) {
@@ -88,7 +88,7 @@ impl<T: EmanationType> Emanation<T> {
 
 struct CreateArrayField<'a, S: Structure, T: EmanationType, I: LinearIndex<T>> {
     emanation: &'a Emanation<T>,
-    index: I,
+    index: &'a I,
     prefix: String,
     values: &'a [S],
 }
@@ -105,7 +105,7 @@ impl<S: Structure, T: EmanationType, I: LinearIndex<T>> ValueMapping<S>
         *self
             .emanation
             .create_field(&field_name)
-            .bind_array(self.index.reduce(), buffer)
+            .bind_array(&self.index.reduce(), buffer)
     }
 }
 
