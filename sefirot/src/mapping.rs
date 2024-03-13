@@ -4,6 +4,10 @@ use std::marker::PhantomData;
 use crate::field::AccessLevel;
 use crate::internal_prelude::*;
 
+pub mod buffer;
+pub mod cache;
+pub mod index;
+
 pub trait Mapping<X: Access, I>:
     MappingLoopback<X, I, Chain = Self> + Send + Sync + 'static
 {
@@ -79,6 +83,14 @@ pub(crate) trait DynMapping: Send + Sync + 'static {
 pub(crate) struct MappingBinding<X: Access, T: EmanationType, M: Mapping<X, T::Index>> {
     pub(crate) mapping: M,
     pub(crate) _marker: PhantomData<fn() -> (X, T)>,
+}
+impl<X: Access, T: EmanationType, M: Mapping<X, T::Index>> MappingBinding<X, T, M> {
+    pub(crate) fn new(mapping: M) -> Self {
+        Self {
+            mapping,
+            _marker: PhantomData,
+        }
+    }
 }
 impl<X: Access, T: EmanationType, M: Mapping<X, T::Index>> DynMapping for MappingBinding<X, T, M> {
     fn access_dyn(

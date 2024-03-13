@@ -1,12 +1,10 @@
 use std::any::Any;
 use std::collections::HashMap;
-use std::sync::{Arc, Exclusive};
+use std::sync::Arc;
 
-use static_assertions::assert_impl_all;
-
-use crate::field::Bindings;
 use crate::internal_prelude::*;
 use crate::kernel::KernelContext;
+use crate::mapping::{DynMapping, MappingBinding};
 
 pub struct Element<I: Clone + 'static> {
     pub index: I,
@@ -25,26 +23,32 @@ impl<I: Clone + 'static> Element<I> {
 }
 
 pub struct Context {
-    pub bindings: Bindings,
-    pub cache: HashMap<FieldHandle, Exclusive<Box<dyn Any + Send>>>,
-    pub release: Vec<Exclusive<Box<dyn Send>>>,
+    pub(crate) bindings: HashMap<FieldHandle, Box<dyn DynMapping>>,
+    pub cache: HashMap<FieldHandle, Box<dyn Any>>,
     pub kernel: Arc<KernelContext>,
+    release: Vec<Box<dyn Any>>,
 }
 impl Context {
     pub fn new(kernel: Arc<KernelContext>) -> Self {
         Self {
             release: Vec::new(),
-            bindings: Bindings(HashMap::new()),
+            bindings: HashMap::new(),
             cache: HashMap::new(),
             kernel,
         }
     }
-    pub fn release(&mut self, object: impl Send + 'static) {
-        self.release.push(Exclusive::new(Box::new(object)));
+    pub fn release(&mut self, object: impl Any) {
+        self.release.push(Box::new(object));
     }
-    pub fn cache(&mut self) -> &mut HashMap<FieldHandle, Exclusive<Box<dyn Any + Send>>> {
-        &mut self.cache
+    pub fn bind_local<X: Access, T: EmanationType>(
+        &mut self,
+        field: Field<X, T>,
+        mapping: impl Mapping<X, T::Index> + 'static,
+    ) {
+        let old = self.bindings.insert(
+            field.handle,
+            Box::new(MappingBinding::<X, T, _>::new(mapping)),
+        );
+        assert!(old.is_none(), "Field already bound");
     }
 }
-
-assert_impl_all!(Context: Send, Sync);

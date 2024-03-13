@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::ops::Deref;
@@ -17,9 +16,14 @@ pub type EField<V, T> = Field<Expr<V>, T>;
 pub type VField<V, T> = Field<Var<V>, T>;
 pub type AField<V, T> = Field<AtomicRef<V>, T>;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, UniqueId)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, UniqueId)]
 pub struct FieldHandle {
     id: u64,
+}
+impl Debug for FieldHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "F{}", self.id)
+    }
 }
 
 /// A single property of an [`Emanation`]. Note that by default, a `Field` has no actual data associated with it.
@@ -45,13 +49,88 @@ impl<X: Access, T: EmanationType> Clone for Field<X, T> {
     }
 }
 impl<X: Access, T: EmanationType> Copy for Field<X, T> {}
-
-pub struct RawField {
-    name: String,
-    binding: Option<Box<dyn DynMapping>>,
+impl<X: Access<Deref = AllowDeref>, T: EmanationType> Deref for Field<X, T> {
+    type Target = Field<X::Downcast, T>;
+    fn deref(&self) -> &Self::Target {
+        unsafe { &*(self as *const _ as *const Field<X::Downcast, T>) }
+    }
+}
+impl<X: Access, T: EmanationType> Debug for Field<X, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct(&format!(
+            "Field({})",
+            FIELDS
+                .get(&self.handle)
+                .map_or_else(|| "dropped".to_string(), |x| x.name.clone())
+        ))
+        .field("handle", &self.handle)
+        .field("emanation", &self.emanation)
+        .finish()
+    }
 }
 
-pub(crate) struct Bindings(pub(crate) HashMap<FieldHandle, Box<dyn DynMapping>>);
+impl<X: Access, T: EmanationType> Field<X, T> {
+    pub fn at_opt(&self, index: &T::Index, ctx: &mut Context) -> Option<X> {
+        if let Some(mapping) = ctx.bindings.remove(&self.handle) {
+            let value = mapping.access_dyn(X::level(), index, ctx, self.handle);
+            let value = *value.downcast().unwrap();
+            ctx.bindings.insert(self.handle, mapping);
+            Some(value)
+        } else if let Some(mapping) = FIELDS
+            .get(&self.handle)
+            .expect("Field dropped")
+            .binding
+            .as_ref()
+        {
+            let value = mapping.access_dyn(X::level(), index, ctx, self.handle);
+            let value = *value.downcast().unwrap();
+            Some(value)
+        } else {
+            None
+        }
+    }
+    pub fn at(&self, el: &mut Element<T::Index>) -> X {
+        self.at_opt(&el.index, &mut el.context).unwrap()
+    }
+    pub fn bind(&self, mapping: impl Mapping<X, T::Index>) {
+        *FIELDS
+            .get_mut(&self.handle)
+            .expect("Field dropped")
+            .binding
+            .as_mut()
+            .unwrap() = Box::new(MappingBinding::<X, T, _>::new(mapping));
+    }
+    pub fn emanation(&self) -> EmanationId {
+        self.emanation
+    }
+    pub fn name(&self) -> String {
+        FIELDS
+            .get(&self.handle)
+            .expect("Field dropped")
+            .name
+            .clone()
+    }
+}
+impl<V: Value, T: EmanationType> Field<Expr<V>, T> {
+    pub fn get(&self, el: &mut Element<T::Index>) -> Expr<V> {
+        self.at(el)
+    }
+}
+impl<V: Value, T: EmanationType> Field<Var<V>, T> {
+    pub fn get_mut(&self, el: &mut Element<T::Index>) -> Var<V> {
+        self.at(el)
+    }
+}
+impl<V: Value, T: EmanationType> Field<AtomicRef<V>, T> {
+    pub fn get_atomic(&self, el: &mut Element<T::Index>) -> AtomicRef<V> {
+        self.at(el)
+    }
+}
+
+pub struct RawField {
+    pub(crate) name: String,
+    pub(crate) binding: Option<Box<dyn DynMapping>>,
+}
 
 pub trait Access: 'static {
     type Downcast: Access;
@@ -107,63 +186,5 @@ impl Access for Paradox {
     type Deref = BlockDeref;
     fn level() -> AccessLevel {
         AccessLevel(0)
-    }
-}
-
-impl<X: Access<Deref = AllowDeref>, T: EmanationType> Deref for Field<X, T> {
-    type Target = Field<X::Downcast, T>;
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*(self as *const _ as *const Field<X::Downcast, T>) }
-    }
-}
-
-impl<X: Access, T: EmanationType> Field<X, T> {
-    pub fn at_opt(&self, index: &T::Index, ctx: &mut Context) -> Option<X> {
-        if let Some(mapping) = ctx.bindings.0.remove(&self.handle) {
-            let value = mapping.access_dyn(X::level(), index, ctx, self.handle);
-            let value = *value.downcast().unwrap();
-            ctx.bindings.0.insert(self.handle, mapping);
-            Some(value)
-        } else if let Some(mapping) = FIELDS
-            .get(&self.handle)
-            .expect("Field dropped")
-            .binding
-            .as_ref()
-        {
-            let value = mapping.access_dyn(X::level(), index, ctx, self.handle);
-            let value = *value.downcast().unwrap();
-            Some(value)
-        } else {
-            None
-        }
-    }
-    pub fn at(&self, el: &mut Element<T::Index>) -> X {
-        self.at_opt(&el.index, &mut el.context).unwrap()
-    }
-    pub fn bind(&self, mapping: impl Mapping<X, T::Index>) {
-        *FIELDS
-            .get_mut(&self.handle)
-            .expect("Field dropped")
-            .binding
-            .as_mut()
-            .unwrap() = Box::new(MappingBinding::<X, T, _> {
-            mapping,
-            _marker: PhantomData,
-        });
-    }
-}
-impl<V: Value, T: EmanationType> Field<Expr<V>, T> {
-    pub fn get(&self, el: &mut Element<T::Index>) -> Expr<V> {
-        self.at(el)
-    }
-}
-impl<V: Value, T: EmanationType> Field<Var<V>, T> {
-    pub fn get_mut(&self, el: &mut Element<T::Index>) -> Var<V> {
-        self.at(el)
-    }
-}
-impl<V: Value, T: EmanationType> Field<AtomicRef<V>, T> {
-    pub fn get_atomic(&self, el: &mut Element<T::Index>) -> AtomicRef<V> {
-        self.at(el)
     }
 }

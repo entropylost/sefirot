@@ -6,13 +6,17 @@ use std::sync::Exclusive;
 use id_newtype::UniqueId;
 use pretty_type_name::pretty_type_name;
 
-use crate::field::{Access, FieldHandle, FIELDS};
-use crate::prelude::*;
-use crate::utils::Paradox;
+use crate::field::{RawField, FIELDS};
+use crate::internal_prelude::*;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, UniqueId)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, UniqueId)]
 pub struct EmanationId {
     id: u64,
+}
+impl Debug for EmanationId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "E{}", self.id)
+    }
 }
 
 pub trait EmanationType: Sync + Send + Debug + Copy + 'static {
@@ -34,9 +38,42 @@ impl<T: EmanationType> Drop for Emanation<T> {
         }
     }
 }
+impl<T: EmanationType> Debug for Emanation<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        struct FieldsWrapper<'a>(&'a HashSet<FieldHandle>);
+        impl<'a> Debug for FieldsWrapper<'a> {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.debug_map()
+                    .entries(self.0.iter().map(|x| {
+                        (
+                            x,
+                            FIELDS
+                                .get(x)
+                                .map_or_else(|| "dropped".to_string(), |x| x.name.clone()),
+                        )
+                    }))
+                    .finish()
+            }
+        }
+        f.debug_struct(&format!("Emanation<{}>", pretty_type_name::<T>()))
+            .field("id", &self.id)
+            .field("fields", &FieldsWrapper(&self.fields))
+            .finish()
+    }
+}
 impl<T: EmanationType> Emanation<T> {
-    pub fn create_field<X: Access>(&self) -> Field<X, T> {
+    pub fn id(&self) -> EmanationId {
+        self.id
+    }
+    pub fn create_field<X: Access>(&self, name: impl AsRef<str>) -> Field<X, T> {
         let handle = FieldHandle::unique();
+        FIELDS.insert(
+            handle,
+            RawField {
+                name: name.as_ref().to_string(),
+                binding: None,
+            },
+        );
         let emanation = self.id;
         Field {
             handle,

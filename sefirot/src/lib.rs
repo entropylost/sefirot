@@ -24,7 +24,7 @@ mod internal_prelude {
 
     pub use crate::element::{Context, Element};
     pub use crate::emanation::{Emanation, EmanationId, EmanationType};
-    pub use crate::field::{Access, FieldHandle};
+    pub use crate::field::{Access, Field, FieldHandle};
     pub use crate::mapping::Mapping;
     pub use crate::utils::Paradox;
 }
