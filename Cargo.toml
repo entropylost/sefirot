@@ -1,5 +1,11 @@
 [workspace]
-members = ["sefirot", "sefirot_macro", "bevy_sefirot_macro", "bevy_sefirot"]
+members = [
+    "sefirot",
+    "sefirot_macro",
+    "bevy_sefirot_macro",
+    "bevy_sefirot",
+    "id_newtype",
+]
 resolver = "2"
 
 [profile.dev.package."*"]

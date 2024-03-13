@@ -1,139 +1,81 @@
-use std::any::Any;
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::ops::Deref;
-use std::sync::atomic::AtomicU64;
-use std::sync::Arc;
+use std::sync::Exclusive;
 
-use generational_arena::{Arena, Index};
-use parking_lot::RwLock;
+use dashmap::DashMap;
+use id_newtype::UniqueId;
+use once_cell::sync::Lazy;
+use pretty_type_name::pretty_type_name;
 
-use crate::field::DynAccessor;
+use crate::field::{Access, Bindings, FieldHandle, RawField};
 use crate::prelude::*;
+use crate::utils::Paradox;
 
-static NEXT_EMANATION_ID: AtomicU64 = AtomicU64::new(0);
+// TODO: Find a way of doing this that won't have contention issues.
+// TODO: Store fields globally instead? THen make Emanation contain device directly.
+pub static EMANATIONS: Lazy<DashMap<EmanationHandle, RawEmanation>> = Lazy::new(DashMap::new);
 
-// States what the original ID is; eg: Particles for example.
-pub trait EmanationType: Sync + Send + Debug + Copy + 'static {}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct RawFieldHandle(pub(crate) Index);
-#[derive(Clone)]
-pub(crate) struct RawField<T: EmanationType> {
-    pub(crate) name: String,
-    pub(crate) ty_name: String,
-    pub(crate) accessor: Option<Arc<dyn DynAccessor<T> + Send + Sync>>,
-}
-impl<T: EmanationType> Debug for RawField<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct(&format!("RawField<{}>", self.ty_name))
-            .field("name", &self.name)
-            .field(
-                "accessor",
-                &self.accessor.as_ref().map(|x| x.self_type_name()),
-            )
-            .finish()
-    }
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, UniqueId)]
+pub struct EmanationHandle {
+    id: u64,
 }
 
-/// A structure representing a single format or space of data,
-/// which might have a number of [`Field`]s associated with it.
-#[cfg_attr(
-    feature = "bevy",
-    derive(bevy_ecs::prelude::Resource, bevy_ecs::prelude::Component)
-)]
-#[derive(Clone)]
-pub struct Emanation<T: EmanationType> {
-    pub(crate) id: u64,
-    pub(crate) fields: Arc<RwLock<Arena<RawField<T>>>>,
+pub trait EmanationType: Sync + Send + Debug + Copy + 'static {
+    type Index: Clone + 'static;
+}
+
+pub struct RawEmanation {
+    // TODO: Name?
+    pub(crate) bindings: Bindings,
+    pub(crate) fields: HashMap<FieldHandle, RawField>,
+    pub(crate) release: Vec<Exclusive<Box<dyn Send>>>,
     pub(crate) device: Device,
 }
-impl<T: EmanationType> Debug for Emanation<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut st = f.debug_struct(&format!("Emanation<{}>", std::any::type_name::<T>()));
-        for (_, f) in self.fields.read().iter() {
-            st.field(
-                &f.name,
-                &format!(
-                    "Field<{}>({})",
-                    f.ty_name,
-                    &f.accessor
-                        .as_ref()
-                        .map(|x| x.self_type_name())
-                        .unwrap_or_else(|| "None".to_string())
-                ),
-            );
-        }
-        st.finish()
+
+// TODO: Debug impl.
+pub struct Emanation<T: EmanationType> {
+    pub(crate) id: EmanationHandle,
+    pub(crate) _marker: PhantomData<T>,
+}
+impl<T: EmanationType> Drop for Emanation<T> {
+    fn drop(&mut self) {
+        EMANATIONS.remove(&self.id);
     }
 }
 impl<T: EmanationType> Emanation<T> {
-    pub fn new(device: &Device) -> Self {
-        Self {
-            id: NEXT_EMANATION_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
-            fields: Arc::new(RwLock::new(Arena::new())),
-            device: device.clone(),
-        }
-    }
-
-    pub fn create_field<V: Any>(&self, name: &str) -> Reference<'_, Field<V, T>> {
-        let raw = RawFieldHandle(self.fields.write().insert(RawField {
-            name: name.to_string(),
-            ty_name: std::any::type_name::<V>().to_string(),
-            accessor: None,
-        }));
-        self.on(Field {
-            raw,
-            emanation_id: self.id,
+    pub fn create_field<X: Access>(&self) -> Field<X, T> {
+        let handle = FieldHandle::unique();
+        let emanation = self.id;
+        Field {
+            handle,
+            emanation,
             _marker: PhantomData,
-        })
-    }
-
-    pub fn on<V: CanReference<T = T>>(&self, value: V) -> Reference<V> {
-        Reference {
-            emanation: self,
-            value,
         }
     }
-
-    pub fn device(&self) -> &Device {
-        &self.device
+    /// Adds an object to be dropped when this emanation is dropped.
+    pub fn release(&self, object: impl Send + 'static) {
+        let mut map = EMANATIONS.get_mut(&self.id).unwrap();
+        map.release.push(Exclusive::new(Box::new(object)));
     }
 }
 
-/// A reference of an object within an [`Emanation`].
-/// Used for [`Field`]-like things which are handles
-/// and have no way of accessing data without the corrosponding [`Emanation`].
-#[derive(Debug, Clone, Copy)]
-pub struct Reference<'a, V: CanReference> {
-    pub emanation: &'a Emanation<V::T>,
-    pub value: V,
+pub struct Auto<I: Clone + 'static> {
+    _marker: PhantomData<fn() -> I>,
+    _paradox: Paradox,
 }
-impl<V: CanReference> Deref for Reference<'_, V> {
-    type Target = V;
-    fn deref(&self) -> &Self::Target {
-        &self.value
+impl<I: Clone + 'static> Clone for Auto<I> {
+    fn clone(&self) -> Self {
+        #[allow(clippy::uninhabited_references)]
+        *self
     }
 }
-impl<'a, V: CanReference> Reference<'a, V> {
-    pub fn device(self) -> &'a Device {
-        &self.emanation.device
+impl<I: Clone + 'static> Copy for Auto<I> {}
+impl<I: Clone + 'static> Debug for Auto<I> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Auto<{}>", pretty_type_name::<I>())
     }
 }
-
-pub trait CanReference: Copy {
-    type T: EmanationType;
-}
-
-#[allow(dead_code)]
-mod tests {
-    use static_assertions::assert_impl_all;
-
-    use super::*;
-
-    #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-    struct Ty;
-    impl EmanationType for Ty {}
-
-    assert_impl_all!(Emanation<Ty>: Send, Sync);
+impl<I: Clone + 'static> EmanationType for Auto<I> {
+    type Index = I;
 }

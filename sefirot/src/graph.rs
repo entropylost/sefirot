@@ -3,15 +3,16 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::{Arc, Exclusive};
 
+use parking_lot::Mutex;
 use petgraph::algo::toposort;
 use petgraph::dot::Dot;
 use petgraph::graphmap::DiGraphMap;
 use petgraph::Direction;
 use static_assertions::assert_impl_all;
 
-use crate::prelude::*;
-
 use self::tag::{DynTag, Tag, TagMap};
+use crate::prelude::*;
+use crate::utils::FnRelease;
 
 pub mod tag;
 
@@ -75,7 +76,7 @@ pub struct ComputeGraph<'a> {
     dependency: DiGraphMap<NodeHandle, ()>,
     device: Device,
     // Resources to be released after the graph is executed.
-    release: Vec<Exclusive<Box<dyn Any + Send>>>,
+    release: Vec<Exclusive<Box<dyn Send>>>,
 }
 assert_impl_all!(ComputeGraph: Send, Sync);
 impl Debug for ComputeGraph<'_> {
@@ -387,23 +388,23 @@ impl<'a> ComputeGraph<'a> {
 }
 
 pub trait CopyExt<T: Value + Send> {
-    fn copy_to_shared(&self, dst: &Arc<tokio::sync::Mutex<Vec<T>>>) -> NodeConfigs<'static>;
-    fn copy_from_shared(&self, src: &Arc<tokio::sync::Mutex<Vec<T>>>) -> NodeConfigs<'static>;
+    fn copy_to_shared(&self, dst: &Arc<Mutex<Vec<T>>>) -> NodeConfigs<'static>;
+    fn copy_from_shared(&self, src: &Arc<Mutex<Vec<T>>>) -> NodeConfigs<'static>;
     fn copy_from_owned(&self, src: Vec<T>) -> NodeConfigs<'static> {
-        let src = Arc::new(tokio::sync::Mutex::new(src));
+        let src = Arc::new(Mutex::new(src));
         self.copy_from_shared(&src)
     }
 }
 impl<T: Value + Send> CopyExt<T> for BufferView<T> {
-    fn copy_to_shared(&self, dst: &Arc<tokio::sync::Mutex<Vec<T>>>) -> NodeConfigs<'static> {
+    fn copy_to_shared(&self, dst: &Arc<Mutex<Vec<T>>>) -> NodeConfigs<'static> {
         let src = self.clone();
-        let mut guard = dst.clone().blocking_lock_owned();
+        let mut guard = dst.clone().lock_arc();
         let dst = unsafe { std::mem::transmute::<&mut [T], &'static mut [T]>(&mut *guard) };
         src.copy_to_async(dst).release(guard)
     }
-    fn copy_from_shared(&self, src: &Arc<tokio::sync::Mutex<Vec<T>>>) -> NodeConfigs<'static> {
+    fn copy_from_shared(&self, src: &Arc<Mutex<Vec<T>>>) -> NodeConfigs<'static> {
         let dst = self.clone();
-        let mut guard = src.clone().blocking_lock_owned();
+        let mut guard = src.clone().lock_arc();
         let src = unsafe { std::mem::transmute::<&mut [T], &'static mut [T]>(&mut *guard) };
         dst.copy_from_async(src).release(guard)
     }
@@ -422,7 +423,7 @@ pub struct SingleConfig<'a> {
     pub tag: Option<DynTag>,
     pub debug_name: Option<String>,
     pub command: Option<Command<'a, 'a>>,
-    pub release: Option<Exclusive<Box<dyn Any + Send>>>,
+    pub release: Option<Exclusive<Box<dyn Send>>>,
 }
 
 pub enum NodeConfigs<'a> {
@@ -511,7 +512,7 @@ pub trait AsNodes<'a>: Sized {
         *debug_name = Some(name.as_ref().to_string());
         cfg
     }
-    fn release(self, release: impl Any + Send) -> NodeConfigs<'a> {
+    fn release(self, release: impl Send + 'static) -> NodeConfigs<'a> {
         let mut cfg = self.into_node_configs();
         let NodeConfigs::Single {
             config: SingleConfig {
@@ -526,13 +527,7 @@ pub trait AsNodes<'a>: Sized {
         cfg
     }
     fn release_fn(self, release: impl FnOnce() + Send + 'static) -> NodeConfigs<'a> {
-        struct FnRelease<F: FnOnce() + Send + 'static>(Option<F>);
-        impl<F: FnOnce() + Send + 'static> Drop for FnRelease<F> {
-            fn drop(&mut self) {
-                self.0.take().unwrap()();
-            }
-        }
-        self.release(FnRelease(Some(release)))
+        self.release(FnRelease::new(release))
     }
     fn execute(self, device: &Device) {
         let mut graph = ComputeGraph::new(device);

@@ -1,156 +1,50 @@
 use std::any::Any;
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Exclusive};
 
-use parking_lot::Mutex;
 use static_assertions::assert_impl_all;
 
-use luisa_compute::runtime::{AsKernelArg, KernelArg, KernelArgEncoder, KernelBuilder};
+use crate::field::Bindings;
+use crate::internal_prelude::*;
+use crate::kernel::KernelContext;
 
-use crate::emanation::RawFieldHandle;
-use crate::field::{Accessor, DynAccessor, ReadError, WriteError};
-use crate::prelude::*;
-
-#[derive(Clone)]
-pub struct KernelContext {
-    pub(crate) context: Arc<Context>,
-    pub(crate) builder: Arc<Mutex<KernelBuilder>>,
+pub struct Element<I: Clone + 'static> {
+    pub index: I,
+    pub context: Context,
 }
-impl KernelContext {
-    pub fn bind<V: Value>(&self, access: impl Fn() -> V + Send + 'static) -> Expr<V> {
-        let mut builder = self.builder.lock();
-        self.context.bindings.lock().push(Box::new(move |encoder| {
-            encoder.uniform(access());
-        }));
-        builder.uniform::<V>()
+impl<I: Clone + 'static> Element<I> {
+    pub fn index(&self) -> I {
+        self.index.clone()
+    }
+    pub fn context(&self) -> &Context {
+        &self.context
+    }
+    pub fn context_mut(&mut self) -> &mut Context {
+        &mut self.context
     }
 }
 
 pub struct Context {
-    // TODO: Make this use domains. (Also track which Emanation is being accessed)
-    accessed_fields: Mutex<HashSet<RawFieldHandle>>,
-    mutated_fields: Mutex<HashSet<RawFieldHandle>>,
-    bindings: Mutex<Vec<Box<dyn Fn(&mut KernelArgEncoder) + Send>>>,
-}
-assert_impl_all!(Context: Send, Sync);
-impl KernelArg for Context {
-    type Parameter = ();
-    fn encode(&self, encoder: &mut KernelArgEncoder) {
-        for binding in self.bindings.lock().iter() {
-            binding(encoder);
-        }
-    }
-}
-impl AsKernelArg for Context {
-    type Output = Self;
-}
-impl Default for Context {
-    fn default() -> Self {
-        Self::new()
-    }
+    pub release: Vec<Exclusive<Box<dyn Send>>>,
+    pub bindings: Bindings,
+    pub cache: HashMap<FieldHandle, Exclusive<Box<dyn Any + Send>>>,
+    pub kernel: Arc<KernelContext>,
 }
 impl Context {
-    pub fn new() -> Self {
+    pub fn new(kernel: KernelContext) -> Self {
         Self {
-            accessed_fields: Mutex::new(HashSet::new()),
-            mutated_fields: Mutex::new(HashSet::new()),
-            bindings: Mutex::new(Vec::new()),
+            release: Vec::new(),
+            bindings: Bindings(HashMap::new()),
+            cache: HashMap::new(),
+            kernel: Arc::new(kernel),
         }
+    }
+    pub fn release(&mut self, object: impl Send + 'static) {
+        self.release.push(Exclusive::new(Box::new(object)));
+    }
+    pub fn cache(&mut self) -> &mut HashMap<FieldHandle, Exclusive<Box<dyn Any + Send>>> {
+        &mut self.cache
     }
 }
 
-pub struct Element<T: EmanationType> {
-    pub emanation: Emanation<T>,
-    pub(crate) overridden_accessors: Mutex<HashMap<RawFieldHandle, Arc<dyn DynAccessor<T>>>>,
-    pub context: KernelContext,
-    pub cache: Mutex<HashMap<RawFieldHandle, Box<dyn Any>>>,
-    pub unsaved_fields: Mutex<HashSet<RawFieldHandle>>,
-    #[cfg(feature = "check-recursive-access")]
-    pub(crate) locked_fields: Mutex<HashSet<RawFieldHandle>>,
-}
-
-impl<T: EmanationType> Element<T> {
-    pub(crate) fn new(emanation: Emanation<T>, context: KernelContext) -> Self {
-        Self {
-            emanation,
-            overridden_accessors: Mutex::new(HashMap::new()),
-            context,
-            cache: Mutex::new(HashMap::new()),
-            unsaved_fields: Mutex::new(HashSet::new()),
-            #[cfg(feature = "check-recursive-access")]
-            locked_fields: Mutex::new(HashSet::new()),
-        }
-    }
-
-    fn get_accessor(&self, field: RawFieldHandle) -> Arc<dyn DynAccessor<T>> {
-        if let Some(accessor) = self.overridden_accessors.lock().get(&field) {
-            return accessor.clone();
-        }
-        self.emanation.fields.read()[field.0]
-            .accessor
-            .as_ref()
-            .unwrap()
-            .clone()
-    }
-
-    pub fn bind<V: Any>(&self, field: Field<V, T>, accessor: impl Accessor<T, V = V>) {
-        self.overridden_accessors
-            .lock()
-            .insert(field.raw, Arc::new(accessor));
-    }
-
-    pub fn get<V: Any>(&self, field: Field<V, T>) -> Result<V, ReadError> {
-        let field = field.raw;
-        #[cfg(feature = "check-recursive-access")]
-        if !self.locked_fields.lock().insert(field) {
-            use pretty_type_name::pretty_type_name;
-            panic!(
-                "Recursive Access to Field<{}, {}> {}",
-                pretty_type_name::<V>(),
-                pretty_type_name::<T>(),
-                self.emanation.fields.read()[field.0].name,
-            );
-        }
-        self.context.context.accessed_fields.lock().insert(field);
-
-        let accessor = self.get_accessor(field);
-        let res = *accessor.get(self, field)?.downcast::<V>().unwrap();
-        #[cfg(feature = "check-recursive-access")]
-        self.locked_fields.lock().remove(&field);
-        Ok(res)
-    }
-
-    pub fn set<V: Any>(&self, field: Field<V, T>, value: &V) -> Result<(), WriteError> {
-        let field = field.raw;
-        self.context.context.mutated_fields.lock().insert(field);
-
-        let accessor = self.get_accessor(field);
-        accessor.set(self, field, value)?;
-
-        self.unsaved_fields.lock().insert(field);
-        Ok(())
-    }
-
-    pub fn save(&self) {
-        let unsaved_fields = self.unsaved_fields.lock().drain().collect::<Vec<_>>();
-        for field in unsaved_fields {
-            self.get_accessor(field).save(self, field);
-        }
-    }
-
-    pub fn has(&self, field: RawFieldHandle) -> bool {
-        self.overridden_accessors.lock().contains_key(&field)
-            || self
-                .emanation
-                .fields
-                .read()
-                .get(field.0)
-                .and_then(|x| x.accessor.as_ref())
-                .is_some()
-    }
-}
-impl<T: EmanationType> Drop for Element<T> {
-    fn drop(&mut self) {
-        self.save();
-    }
-}
+assert_impl_all!(Context: Send, Sync);

@@ -1,13 +1,35 @@
-use luisa::runtime::{AsKernelArg, KernelArg, KernelParameter};
+use std::sync::Arc;
 
-use super::*;
+use luisa::runtime::{AsKernelArg, KernelArg, KernelArgEncoder, KernelBuilder, KernelParameter};
+use parking_lot::Mutex;
+
+use crate::domain::Domain;
+use crate::internal_prelude::*;
+
+pub struct KernelBindings {
+    bindings: Mutex<Vec<Box<dyn Fn(&mut KernelArgEncoder) + Send>>>,
+}
+
+impl KernelArg for KernelBindings {
+    type Parameter = ();
+    fn encode(&self, encoder: &mut KernelArgEncoder) {
+        for binding in self.bindings.lock().iter() {
+            binding(encoder);
+        }
+    }
+}
+
+pub struct KernelContext {
+    bindings: KernelBindings,
+    builder: Mutex<KernelBuilder>,
+}
 
 pub type LuisaKernel<S> = luisa::runtime::Kernel<<S as KernelSignature>::LuisaSignature>;
 
 pub struct Kernel<T: EmanationType, S: KernelSignature, A = ()> {
     pub(crate) domain: Box<dyn Domain<T = T, A = A>>,
     pub(crate) raw: LuisaKernel<S>,
-    pub(crate) context: Arc<Context>,
+    pub(crate) context: Arc<KernelContext>,
     pub(crate) debug_name: Option<String>,
     pub(crate) device: Device,
 }
@@ -24,7 +46,7 @@ impl<T: EmanationType, S: KernelSignature, A> Kernel<T, S, A> {
 impl<T: EmanationType> Emanation<T> {
     pub fn build_kernel<F: KernelSignature>(
         &self,
-        domain: impl AsBoxedDomain<T = T, A = ()>,
+        domain: impl Domain<T = T, A = ()>,
         f: F::Function<'_, T>,
     ) -> Kernel<T, F, ()> {
         self.build_kernel_with_domain_args(domain, f)
@@ -32,7 +54,7 @@ impl<T: EmanationType> Emanation<T> {
     pub fn build_kernel_with_options<F: KernelSignature>(
         &self,
         options: KernelBuildOptions,
-        domain: impl AsBoxedDomain<T = T, A = ()>,
+        domain: impl Domain<T = T, A = ()>,
         f: F::Function<'_, T>,
     ) -> Kernel<T, F, ()> {
         self.build_kernel_with_options_and_domain_args(options, domain, f)
@@ -40,7 +62,7 @@ impl<T: EmanationType> Emanation<T> {
 
     pub fn build_kernel_with_domain_args<F: KernelSignature, A: 'static>(
         &self,
-        domain: impl AsBoxedDomain<T = T, A = A>,
+        domain: impl Domain<T = T, A = A>,
         f: F::Function<'_, T>,
     ) -> Kernel<T, F, A> {
         self.build_kernel_with_options_and_domain_args(
@@ -56,11 +78,11 @@ impl<T: EmanationType> Emanation<T> {
     pub fn build_kernel_with_options_and_domain_args<F: KernelSignature, A: 'static>(
         &self,
         options: KernelBuildOptions,
-        domain: impl AsBoxedDomain<T = T, A = A>,
+        domain: impl Domain<T = T, A = A>,
         f: F::Function<'_, T>,
     ) -> Kernel<T, F, A> {
         let domain = domain.into_boxed_domain();
-        let context = Arc::new(Context::new());
+        let context = Arc::new(KernelContext::new());
         let mut builder = KernelBuilder::new(Some(self.device.clone()), true);
         let kernel = builder.build_kernel(|builder| {
             take_mut::take(builder, |builder| {
@@ -164,7 +186,7 @@ macro_rules! impl_kernel {
 impl_kernel!(T0:S0, T1:S1, T2:S2, T3:S3, T4:S4, T5:S5, T6:S6, T7:S7, T8:S8, T9:S9, T10:S10, T11:S11, T12:S12, T13:S13, T14:S14);
 
 pub trait KernelSignature: Sized {
-    // Adds `Context` to the end of the signature.
+    // Adds `KernelContext` to the end of the signature.
     type LuisaSignature: luisa::runtime::KernelSignature;
     type Function<'a, T: EmanationType>: KernelFunction<T, Self>;
 }
@@ -172,13 +194,13 @@ pub trait KernelSignature: Sized {
 macro_rules! impl_kernel_signature {
     () => {
         impl KernelSignature for fn() {
-            type LuisaSignature = fn(Context);
+            type LuisaSignature = fn(KernelContext);
             type Function<'a, T: EmanationType> = &'a dyn Fn(Element<T>);
         }
     };
     ($T0:ident $(,$Tn:ident)*) => {
         impl<$T0: KernelArg + 'static $(,$Tn: KernelArg + 'static)*> KernelSignature for fn($T0 $(,$Tn)*) {
-            type LuisaSignature = fn($T0, $($Tn,)* Context);
+            type LuisaSignature = fn($T0, $($Tn,)* KernelContext);
             type Function<'a, T: EmanationType> = &'a dyn Fn(Element<T>, <$T0 as KernelArg>::Parameter $(,<$Tn as KernelArg>::Parameter)*);
         }
         impl_kernel_signature!($($Tn),*);

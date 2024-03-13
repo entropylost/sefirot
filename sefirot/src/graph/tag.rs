@@ -1,14 +1,11 @@
 use std::any::TypeId;
-use std::hash::{BuildHasher, Hash, Hasher};
-
-use ahash::random_state::RandomState;
-use ahash::AHasher;
+use std::hash::{BuildHasher, DefaultHasher, Hash, Hasher, RandomState};
 
 use super::*;
 
 pub trait Tag: Debug + Eq + Hash + Copy + Clone + Send + Sync + 'static {}
 
-pub struct DynTag<H: Hasher + 'static = AHasher> {
+pub struct DynTag<H: Hasher + 'static = DefaultHasher> {
     tag: Box<dyn SafeTag<H>>,
 }
 impl<H: Hasher + 'static> DynTag<H> {
@@ -44,7 +41,7 @@ impl<H: Hasher + 'static> Clone for DynTag<H> {
     }
 }
 
-pub trait SafeTag<H: Hasher + 'static = AHasher>: Debug + Send + Sync + 'static {
+pub trait SafeTag<H: Hasher + 'static = DefaultHasher>: Debug + Send + Sync + 'static {
     fn hash(&self, hasher: &mut H) -> u64;
     fn type_id(&self) -> TypeId;
     fn as_any(&self) -> &dyn Any;
