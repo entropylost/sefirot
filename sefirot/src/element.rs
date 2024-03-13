@@ -25,18 +25,18 @@ impl<I: Clone + 'static> Element<I> {
 }
 
 pub struct Context {
-    pub release: Vec<Exclusive<Box<dyn Send>>>,
     pub bindings: Bindings,
     pub cache: HashMap<FieldHandle, Exclusive<Box<dyn Any + Send>>>,
+    pub release: Vec<Exclusive<Box<dyn Send>>>,
     pub kernel: Arc<KernelContext>,
 }
 impl Context {
-    pub fn new(kernel: KernelContext) -> Self {
+    pub fn new(kernel: Arc<KernelContext>) -> Self {
         Self {
             release: Vec::new(),
             bindings: Bindings(HashMap::new()),
             cache: HashMap::new(),
-            kernel: Arc::new(kernel),
+            kernel,
         }
     }
     pub fn release(&mut self, object: impl Send + 'static) {

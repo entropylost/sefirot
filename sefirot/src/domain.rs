@@ -10,7 +10,7 @@ use crate::kernel::KernelContext;
 pub trait Domain: Send + Sync + 'static {
     type A: 'static;
     type T: EmanationType;
-    fn before_record(&self, element: &Element<Self::T>);
+    fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<Self::T>;
     fn dispatch_async(&self, domain_args: Self::A, args: DispatchArgs) -> NodeConfigs<'static>;
     fn into_boxed(self) -> Box<dyn Domain<A = Self::A, T = Self::T>>
     where
@@ -23,8 +23,8 @@ pub trait Domain: Send + Sync + 'static {
 impl<A: 'static, T: EmanationType> Domain for Box<dyn Domain<A = A, T = T>> {
     type A = A;
     type T = T;
-    fn before_record(&self, element: &Element<T>) {
-        self.as_ref().before_record(element);
+    fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<Self::T> {
+        self.as_ref().get_element(kernel_context)
     }
     fn dispatch_async(&self, domain_args: A, args: DispatchArgs) -> NodeConfigs<'static> {
         self.as_ref().dispatch_async(domain_args, args)
@@ -38,7 +38,6 @@ impl<A: 'static, T: EmanationType> Domain for Box<dyn Domain<A = A, T = T>> {
 }
 
 pub struct DispatchArgs<'a> {
-    pub context: Arc<KernelContext>,
     pub call_kernel_async: &'a dyn Fn([u32; 3]) -> Command<'static, 'static>,
     pub debug_name: Option<String>,
 }

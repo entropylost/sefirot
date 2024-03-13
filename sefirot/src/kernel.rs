@@ -3,11 +3,18 @@ use std::sync::Arc;
 use luisa::runtime::{AsKernelArg, KernelArg, KernelArgEncoder, KernelBuilder, KernelParameter};
 use parking_lot::Mutex;
 
-use crate::domain::Domain;
+use crate::domain::{DispatchArgs, Domain};
+use crate::graph::{ComputeGraph, NodeConfigs};
 use crate::internal_prelude::*;
 
+#[derive(Default)]
 pub struct KernelBindings {
     bindings: Mutex<Vec<Box<dyn Fn(&mut KernelArgEncoder) + Send>>>,
+}
+impl KernelBindings {
+    pub fn new() -> Self {
+        Self::default()
+    }
 }
 
 impl KernelArg for KernelBindings {
@@ -17,6 +24,9 @@ impl KernelArg for KernelBindings {
             binding(encoder);
         }
     }
+}
+impl AsKernelArg for KernelBindings {
+    type Output = Self;
 }
 
 pub struct KernelContext {
@@ -29,7 +39,7 @@ pub type LuisaKernel<S> = luisa::runtime::Kernel<<S as KernelSignature>::LuisaSi
 pub struct Kernel<T: EmanationType, S: KernelSignature, A = ()> {
     pub(crate) domain: Box<dyn Domain<T = T, A = A>>,
     pub(crate) raw: LuisaKernel<S>,
-    pub(crate) context: Arc<KernelContext>,
+    pub(crate) bindings: KernelBindings,
     pub(crate) debug_name: Option<String>,
     pub(crate) device: Device,
 }
@@ -81,21 +91,24 @@ impl<T: EmanationType> Emanation<T> {
         domain: impl Domain<T = T, A = A>,
         f: F::Function<'_, T>,
     ) -> Kernel<T, F, A> {
-        let domain = domain.into_boxed_domain();
-        let context = Arc::new(KernelContext::new());
+        let domain = domain.into_boxed();
+        let mut bindings = None;
         let mut builder = KernelBuilder::new(Some(self.device.clone()), true);
         let kernel = builder.build_kernel(|builder| {
             take_mut::take(builder, |builder| {
-                let context = KernelContext {
-                    context: context.clone(),
-                    builder: Arc::new(Mutex::new(builder)),
-                };
-                let builder = context.builder.clone();
+                let kernel_context = Arc::new(KernelContext {
+                    bindings: KernelBindings::new(),
+                    builder: Mutex::new(builder),
+                });
 
-                let element = Element::new(self.clone(), context);
-                domain.before_record(&element);
+                let element = domain.get_element(kernel_context.clone());
+
                 f.execute(element);
-                Arc::into_inner(builder).unwrap().into_inner()
+
+                let kernel_context = Arc::into_inner(kernel_context).unwrap();
+
+                bindings = Some(kernel_context.bindings);
+                kernel_context.builder.into_inner()
             });
         });
         // TODO: Fix the name - F is generally boring. Perhaps with `CoerceUnsized`?
@@ -104,7 +117,7 @@ impl<T: EmanationType> Emanation<T> {
             raw: self
                 .device
                 .compile_kernel_def_with_options(&kernel, options),
-            context,
+            bindings: bindings.unwrap(),
             debug_name: None,
             device: self.device.clone(),
         }
@@ -129,9 +142,8 @@ macro_rules! impl_kernel {
             }
             pub fn dispatch_with_domain_args(&self, domain_args: A) -> NodeConfigs<'static> {
                 let args = DispatchArgs {
-                    context: self.context.clone(),
                     call_kernel_async: &|dispatch_size| {
-                        self.raw.dispatch_async(dispatch_size, &*self.context)
+                        self.raw.dispatch_async(dispatch_size, &self.bindings)
                     },
                     debug_name: self.debug_name.clone(),
                 };
@@ -170,9 +182,8 @@ macro_rules! impl_kernel {
             pub fn dispatch_with_domain_args<$S0: AsKernelArg<Output = $T0> $(, $Sn: AsKernelArg<Output = $Tn>)*>
                 (&self, domain_args: A, $S0: &$S0 $(, $Sn: &$Sn)*) -> NodeConfigs<'static> {
                 let args = DispatchArgs {
-                    context: self.context.clone(),
                     call_kernel_async: &|dispatch_size| {
-                        self.raw.dispatch_async(dispatch_size, $S0, $($Sn,)* &*self.context)
+                        self.raw.dispatch_async(dispatch_size, $S0, $($Sn,)* &self.bindings)
                     },
                     debug_name: self.debug_name.clone(),
                 };
@@ -194,13 +205,13 @@ pub trait KernelSignature: Sized {
 macro_rules! impl_kernel_signature {
     () => {
         impl KernelSignature for fn() {
-            type LuisaSignature = fn(KernelContext);
+            type LuisaSignature = fn(KernelBindings);
             type Function<'a, T: EmanationType> = &'a dyn Fn(Element<T>);
         }
     };
     ($T0:ident $(,$Tn:ident)*) => {
         impl<$T0: KernelArg + 'static $(,$Tn: KernelArg + 'static)*> KernelSignature for fn($T0 $(,$Tn)*) {
-            type LuisaSignature = fn($T0, $($Tn,)* KernelContext);
+            type LuisaSignature = fn($T0, $($Tn,)* KernelBindings);
             type Function<'a, T: EmanationType> = &'a dyn Fn(Element<T>, <$T0 as KernelArg>::Parameter $(,<$Tn as KernelArg>::Parameter)*);
         }
         impl_kernel_signature!($($Tn),*);
@@ -228,7 +239,7 @@ macro_rules! impl_kernel_function {
             #[allow(non_snake_case)]
             #[allow(unused_variables)]
             fn execute(&self, el: Element<T>) {
-                let mut builder = el.context.builder.lock();
+                let mut builder = el.context.kernel.builder.lock();
                 let $T0 = <$T0::Parameter as KernelParameter>::def_param(&mut builder);
                 $(let $Tn = <$Tn::Parameter as KernelParameter>::def_param(&mut builder);)*
                 drop(builder);

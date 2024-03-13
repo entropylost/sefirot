@@ -23,7 +23,7 @@ mod internal_prelude {
     pub use luisa_compute as luisa;
 
     pub use crate::element::{Context, Element};
-    pub use crate::emanation::{Emanation, EmanationHandle, EmanationType};
+    pub use crate::emanation::{Emanation, EmanationId, EmanationType};
     pub use crate::field::{Access, FieldHandle};
     pub use crate::mapping::Mapping;
     pub use crate::utils::Paradox;

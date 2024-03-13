@@ -3,14 +3,19 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::ops::Deref;
 
+use dashmap::DashMap;
 use id_newtype::UniqueId;
 use luisa::lang::types::AtomicRef;
+use once_cell::sync::Lazy;
 
-use crate::emanation::EMANATIONS;
 use crate::internal_prelude::*;
 use crate::mapping::MappingBinding;
 
+pub(crate) static FIELDS: Lazy<DashMap<FieldHandle, RawField>> = Lazy::new(DashMap::new);
+
 pub type EField<V, T> = Field<Expr<V>, T>;
+pub type VField<V, T> = Field<Var<V>, T>;
+pub type AField<V, T> = Field<AtomicRef<V>, T>;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, UniqueId)]
 pub struct FieldHandle {
@@ -25,7 +30,7 @@ pub struct FieldHandle {
 #[repr(C)]
 pub struct Field<X: Access, T: EmanationType> {
     pub(crate) handle: FieldHandle,
-    pub(crate) emanation: EmanationHandle,
+    pub(crate) emanation: EmanationId,
     pub(crate) _marker: PhantomData<(T, fn() -> X)>,
 }
 impl<X: Access, T: EmanationType> PartialEq for Field<X, T> {
@@ -43,6 +48,7 @@ impl<X: Access, T: EmanationType> Copy for Field<X, T> {}
 
 pub struct RawField {
     name: String,
+    binding: Option<Box<dyn DynMapping>>,
 }
 
 pub(crate) struct Bindings(pub(crate) HashMap<FieldHandle, Box<dyn DynMapping>>);
@@ -118,14 +124,15 @@ impl<X: Access, T: EmanationType> Field<X, T> {
             let value = *value.downcast().unwrap();
             ctx.bindings.0.insert(self.handle, mapping);
             Some(value)
-        } else if let Some(emanation) = EMANATIONS.get(&self.emanation) {
-            if let Some(mapping) = emanation.bindings.0.get(&self.handle) {
-                let value = mapping.access_dyn(X::level(), index, ctx, self.handle);
-                let value = *value.downcast().unwrap();
-                Some(value)
-            } else {
-                None
-            }
+        } else if let Some(mapping) = FIELDS
+            .get(&self.handle)
+            .expect("Field dropped")
+            .binding
+            .as_ref()
+        {
+            let value = mapping.access_dyn(X::level(), index, ctx, self.handle);
+            let value = *value.downcast().unwrap();
+            Some(value)
         } else {
             None
         }
@@ -134,18 +141,15 @@ impl<X: Access, T: EmanationType> Field<X, T> {
         self.at_opt(&el.index, &mut el.context).unwrap()
     }
     pub fn bind(&self, mapping: impl Mapping<X, T::Index>) {
-        EMANATIONS
-            .get_mut(&self.emanation)
-            .unwrap()
-            .bindings
-            .0
-            .insert(
-                self.handle,
-                Box::new(MappingBinding::<X, T, _> {
-                    mapping,
-                    _marker: PhantomData,
-                }),
-            );
+        *FIELDS
+            .get_mut(&self.handle)
+            .expect("Field dropped")
+            .binding
+            .as_mut()
+            .unwrap() = Box::new(MappingBinding::<X, T, _> {
+            mapping,
+            _marker: PhantomData,
+        });
     }
 }
 impl<V: Value, T: EmanationType> Field<Expr<V>, T> {
