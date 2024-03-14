@@ -6,6 +6,7 @@ use crate::internal_prelude::*;
 
 pub mod buffer;
 pub mod cache;
+pub mod function;
 pub mod index;
 
 mod list {
