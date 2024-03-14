@@ -37,7 +37,7 @@ pub struct KernelContext {
 pub type LuisaKernel<S> = luisa::runtime::Kernel<<S as KernelSignature>::LuisaSignature>;
 
 pub struct Kernel<T: EmanationType, S: KernelSignature, A = ()> {
-    pub(crate) domain: Box<dyn Domain<T = T, A = A>>,
+    pub(crate) domain: Box<dyn Domain<I = T::Index, A = A>>,
     pub(crate) raw: LuisaKernel<S>,
     pub(crate) bindings: KernelBindings,
     pub(crate) debug_name: Option<String>,
@@ -56,7 +56,7 @@ impl<T: EmanationType, S: KernelSignature, A> Kernel<T, S, A> {
 impl<T: EmanationType> Emanation<T> {
     pub fn build_kernel<F: KernelSignature>(
         &self,
-        domain: impl Domain<T = T, A = ()>,
+        domain: impl Domain<I = T::Index, A = ()>,
         f: F::Function<'_, T>,
     ) -> Kernel<T, F, ()> {
         self.build_kernel_with_domain_args(domain, f)
@@ -64,7 +64,7 @@ impl<T: EmanationType> Emanation<T> {
     pub fn build_kernel_with_options<F: KernelSignature>(
         &self,
         options: KernelBuildOptions,
-        domain: impl Domain<T = T, A = ()>,
+        domain: impl Domain<I = T::Index, A = ()>,
         f: F::Function<'_, T>,
     ) -> Kernel<T, F, ()> {
         self.build_kernel_with_options_and_domain_args(options, domain, f)
@@ -72,7 +72,7 @@ impl<T: EmanationType> Emanation<T> {
 
     pub fn build_kernel_with_domain_args<F: KernelSignature, A: 'static>(
         &self,
-        domain: impl Domain<T = T, A = A>,
+        domain: impl Domain<I = T::Index, A = A>,
         f: F::Function<'_, T>,
     ) -> Kernel<T, F, A> {
         self.build_kernel_with_options_and_domain_args(
@@ -88,7 +88,7 @@ impl<T: EmanationType> Emanation<T> {
     pub fn build_kernel_with_options_and_domain_args<F: KernelSignature, A: 'static>(
         &self,
         options: KernelBuildOptions,
-        domain: impl Domain<T = T, A = A>,
+        domain: impl Domain<I = T::Index, A = A>,
         f: F::Function<'_, T>,
     ) -> Kernel<T, F, A> {
         let domain = domain.into_boxed();
@@ -206,13 +206,13 @@ macro_rules! impl_kernel_signature {
     () => {
         impl KernelSignature for fn() {
             type LuisaSignature = fn(KernelBindings);
-            type Function<'a, T: EmanationType> = &'a dyn Fn(Element<T>);
+            type Function<'a, T: EmanationType> = &'a dyn Fn(Element<T::Index>);
         }
     };
     ($T0:ident $(,$Tn:ident)*) => {
         impl<$T0: KernelArg + 'static $(,$Tn: KernelArg + 'static)*> KernelSignature for fn($T0 $(,$Tn)*) {
             type LuisaSignature = fn($T0, $($Tn,)* KernelBindings);
-            type Function<'a, T: EmanationType> = &'a dyn Fn(Element<T>, <$T0 as KernelArg>::Parameter $(,<$Tn as KernelArg>::Parameter)*);
+            type Function<'a, T: EmanationType> = &'a dyn Fn(Element<T::Index>, <$T0 as KernelArg>::Parameter $(,<$Tn as KernelArg>::Parameter)*);
         }
         impl_kernel_signature!($($Tn),*);
     };
@@ -221,24 +221,24 @@ macro_rules! impl_kernel_signature {
 impl_kernel_signature!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14);
 
 pub trait KernelFunction<T: EmanationType, S: KernelSignature> {
-    fn execute(&self, el: Element<T>);
+    fn execute(&self, el: Element<T::Index>);
 }
 
 macro_rules! impl_kernel_function {
     () => {
-        impl<T: EmanationType> KernelFunction<T, fn()> for &dyn Fn(Element<T>) {
-            fn execute(&self, el: Element<T>) {
+        impl<T: EmanationType> KernelFunction<T, fn()> for &dyn Fn(Element<T::Index>) {
+            fn execute(&self, el: Element<T::Index>) {
                 self(el);
             }
         }
     };
     ($T0:ident $(,$Tn:ident)*) => {
         impl<T: EmanationType, $T0: KernelArg + 'static $(,$Tn: KernelArg + 'static)*> KernelFunction<T, fn($T0 $(,$Tn)*)> for
-            &dyn Fn(Element<T>, $T0::Parameter $(,$Tn::Parameter)*)
+            &dyn Fn(Element<T::Index>, $T0::Parameter $(,$Tn::Parameter)*)
         {
             #[allow(non_snake_case)]
             #[allow(unused_variables)]
-            fn execute(&self, el: Element<T>) {
+            fn execute(&self, el: Element<T::Index>) {
                 let mut builder = el.context.kernel.builder.lock();
                 let $T0 = <$T0::Parameter as KernelParameter>::def_param(&mut builder);
                 $(let $Tn = <$Tn::Parameter as KernelParameter>::def_param(&mut builder);)*

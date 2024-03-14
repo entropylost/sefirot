@@ -9,10 +9,10 @@ use crate::kernel::KernelContext;
 /// For most purposes, [`IndexDomain`] is a conveinent way to implement this trait if only a single dispatch call is necessary.
 pub trait Domain: Send + Sync + 'static {
     type A: 'static;
-    type T: EmanationType;
-    fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<Self::T>;
+    type I: 'static + Clone;
+    fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<Self::I>;
     fn dispatch_async(&self, domain_args: Self::A, args: DispatchArgs) -> NodeConfigs<'static>;
-    fn into_boxed(self) -> Box<dyn Domain<A = Self::A, T = Self::T>>
+    fn into_boxed(self) -> Box<dyn Domain<A = Self::A, I = Self::I>>
     where
         Self: Sized,
     {
@@ -20,16 +20,21 @@ pub trait Domain: Send + Sync + 'static {
     }
 }
 
-impl<A: 'static, T: EmanationType> Domain for Box<dyn Domain<A = A, T = T>> {
+pub trait AsEntireDomain {
+    type Entire: Domain;
+    fn entire_domain(&self) -> Self::Entire;
+}
+
+impl<A: 'static, I: 'static + Clone> Domain for Box<dyn Domain<A = A, I = I>> {
     type A = A;
-    type T = T;
-    fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<Self::T> {
+    type I = I;
+    fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<I> {
         self.as_ref().get_element(kernel_context)
     }
     fn dispatch_async(&self, domain_args: A, args: DispatchArgs) -> NodeConfigs<'static> {
         self.as_ref().dispatch_async(domain_args, args)
     }
-    fn into_boxed(self) -> Box<dyn Domain<A = Self::A, T = Self::T>>
+    fn into_boxed(self) -> Box<dyn Domain<A = A, I = I>>
     where
         Self: Sized,
     {
@@ -38,6 +43,12 @@ impl<A: 'static, T: EmanationType> Domain for Box<dyn Domain<A = A, T = T>> {
 }
 
 pub struct DispatchArgs<'a> {
-    pub call_kernel_async: &'a dyn Fn([u32; 3]) -> Command<'static, 'static>,
-    pub debug_name: Option<String>,
+    pub(crate) call_kernel_async: &'a dyn Fn([u32; 3]) -> Command<'static, 'static>,
+    // TODO: Why is this here?
+    pub(crate) debug_name: Option<String>,
+}
+impl DispatchArgs<'_> {
+    pub fn dispatch(&self, dispatch_size: [u32; 3]) -> Command<'static, 'static> {
+        (self.call_kernel_async)(dispatch_size)
+    }
 }

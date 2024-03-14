@@ -1,8 +1,54 @@
+use std::sync::Arc;
+
 use luisa::lang::types::vector::{Vec2, Vec3};
 use luisa::lang::types::AtomicRef;
 
 use super::cache::{SimpleExprMapping, VarCacheMapping};
+use crate::domain::{AsEntireDomain, DispatchArgs, Domain};
+use crate::graph::{AsNodes, NodeConfigs};
 use crate::internal_prelude::*;
+use crate::kernel::KernelContext;
+
+pub struct StaticDomain<const N: usize>(pub [u32; N]);
+impl Domain for StaticDomain<1> {
+    type A = ();
+    type I = Expr<u32>;
+    fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<Self::I> {
+        Element {
+            index: dispatch_id().x,
+            context: Context::new(kernel_context),
+        }
+    }
+    fn dispatch_async(&self, _domain_args: (), args: DispatchArgs) -> NodeConfigs<'static> {
+        args.dispatch([self.0[0], 1, 1]).into_node_configs()
+    }
+}
+impl Domain for StaticDomain<2> {
+    type A = ();
+    type I = Expr<Vec2<u32>>;
+    fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<Self::I> {
+        Element {
+            index: dispatch_id().xy(),
+            context: Context::new(kernel_context),
+        }
+    }
+    fn dispatch_async(&self, _domain_args: (), args: DispatchArgs) -> NodeConfigs<'static> {
+        args.dispatch([self.0[0], self.0[1], 1]).into_node_configs()
+    }
+}
+impl Domain for StaticDomain<3> {
+    type A = ();
+    type I = Expr<Vec3<u32>>;
+    fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<Self::I> {
+        Element {
+            index: dispatch_id(),
+            context: Context::new(kernel_context),
+        }
+    }
+    fn dispatch_async(&self, _domain_args: (), args: DispatchArgs) -> NodeConfigs<'static> {
+        args.dispatch(self.0).into_node_configs()
+    }
+}
 
 pub struct BufferMapping<V: Value> {
     buffer: BufferView<V>,
@@ -39,6 +85,12 @@ impl<V: Value> BufferMapping<V> {
     #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> usize {
         self.buffer.len()
+    }
+}
+impl<V: Value> AsEntireDomain for BufferMapping<V> {
+    type Entire = StaticDomain<1>;
+    fn entire_domain(&self) -> Self::Entire {
+        StaticDomain([self.len() as u32])
     }
 }
 impl<V: Value> SimpleExprMapping<V, Expr<u32>> for BufferMapping<V> {
@@ -88,6 +140,12 @@ impl<V: IoTexel> Tex2dMapping<V> {
         [size[0], size[1]]
     }
 }
+impl<V: IoTexel> AsEntireDomain for Tex2dMapping<V> {
+    type Entire = StaticDomain<2>;
+    fn entire_domain(&self) -> Self::Entire {
+        StaticDomain(self.size())
+    }
+}
 impl<V: IoTexel> SimpleExprMapping<V, Expr<Vec2<u32>>> for Tex2dMapping<V> {
     fn get_expr(
         &self,
@@ -131,6 +189,12 @@ impl<V: IoTexel> Tex3dMapping<V> {
     pub fn size(&self) -> [u32; 3] {
         let size = self.texture.size();
         [size[0], size[1], size[2]]
+    }
+}
+impl<V: IoTexel> AsEntireDomain for Tex3dMapping<V> {
+    type Entire = StaticDomain<3>;
+    fn entire_domain(&self) -> Self::Entire {
+        StaticDomain(self.size())
     }
 }
 impl<V: IoTexel> SimpleExprMapping<V, Expr<Vec3<u32>>> for Tex3dMapping<V> {
