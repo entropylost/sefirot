@@ -49,7 +49,10 @@ impl<X: Access, T: EmanationType> Clone for Field<X, T> {
     }
 }
 impl<X: Access, T: EmanationType> Copy for Field<X, T> {}
-impl<X: Access<Deref = AllowDeref>, T: EmanationType> Deref for Field<X, T> {
+impl<X: Access, T: EmanationType> Deref for Field<X, T>
+where
+    X::Downcast: Access,
+{
     type Target = Field<X::Downcast, T>;
     fn deref(&self) -> &Self::Target {
         unsafe { &*(self as *const _ as *const Field<X::Downcast, T>) }
@@ -132,59 +135,62 @@ pub struct RawField {
     pub(crate) binding: Option<Box<dyn DynMapping>>,
 }
 
-pub trait Access: 'static {
-    type Downcast: Access;
-    /// A marker to prevent an infinite-deref loop in [`Field`] due to the [`Paradox`] implementation.
-    /// When implementing this trait, always use [`AllowDeref`] as the type.
-    type Deref: AccessDerefType;
+pub struct AccessCons<X: Access, L: AccessList>(PhantomData<fn() -> (X, L)>);
+pub struct AccessNil;
+pub trait AccessList {
+    type Head;
+    type Tail: AccessList;
+}
 
-    /// The level of the access, used for dynamic dispatch.
-    /// Do not implement this manually.
+impl AccessList for AccessNil {
+    type Head = Paradox;
+    type Tail = AccessNil;
+}
+impl<X: Access, L: AccessList> AccessList for AccessCons<X, L> {
+    type Head = X;
+    type Tail = L;
+}
+
+pub trait ListAccess {
+    type List: AccessList;
+    fn level() -> AccessLevel;
+}
+
+pub trait Access: ListAccess + 'static {
+    type Downcast: ListAccess;
+}
+
+impl ListAccess for Paradox {
+    type List = AccessNil;
     fn level() -> AccessLevel {
-        AccessLevel(Self::Downcast::level().0 + 1)
+        AccessLevel(0)
+    }
+}
+impl<X: Access> ListAccess for X {
+    type List = AccessCons<X, <X::Downcast as ListAccess>::List>;
+    fn level() -> AccessLevel {
+        AccessLevel(X::Downcast::level().0 + 1)
     }
 }
 
 impl<V: Value> Access for Expr<V> {
     type Downcast = Paradox;
-    type Deref = AllowDeref;
 }
 impl<V: Value> Access for Var<V> {
     type Downcast = Expr<V>;
-    type Deref = AllowDeref;
 }
 impl<V: Value> Access for AtomicRef<V> {
     type Downcast = Var<V>;
-    type Deref = AllowDeref;
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Static<T: 'static>(pub T);
 impl<T: 'static> Access for Static<T> {
     type Downcast = Paradox;
-    type Deref = AllowDeref;
 }
-
-mod access_deref {
-    pub trait AccessDerefType {}
-    pub enum AllowDeref {}
-    pub enum BlockDeref {}
-    impl AccessDerefType for AllowDeref {}
-    impl AccessDerefType for BlockDeref {}
-}
-pub use access_deref::AllowDeref;
-use access_deref::{AccessDerefType, BlockDeref};
 
 use crate::mapping::DynMapping;
 
 #[repr(transparent)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AccessLevel(pub(crate) u8);
-
-impl Access for Paradox {
-    type Downcast = Paradox;
-    type Deref = BlockDeref;
-    fn level() -> AccessLevel {
-        AccessLevel(0)
-    }
-}

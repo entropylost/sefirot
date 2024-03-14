@@ -6,8 +6,10 @@ pub struct VarCache<V: Value> {
     pub changed: bool,
 }
 
+pub struct CachedMapping<M>(pub M);
+
 /// A helper trait to implement [`Mapping`] using getters and setters and a cache for the variable.
-pub trait CachedMapping<V: Value, I>: Send + Sync + 'static {
+pub trait CachedMappingT<V: Value, I: 'static>: Send + Sync + 'static {
     fn get_expr(&self, index: &I, ctx: &mut Context, binding: FieldHandle) -> Expr<V>;
     fn set_expr(&self, index: &I, value: Expr<V>, ctx: &mut Context, binding: FieldHandle);
     fn get_cache<'a>(
@@ -30,19 +32,19 @@ pub trait CachedMapping<V: Value, I>: Send + Sync + 'static {
         ctx.cache.get_mut(&binding).unwrap().downcast_mut().unwrap()
     }
 }
-impl<X, V: Value, I> Mapping<Expr<V>, I> for X
+impl<X, V: Value, I: 'static> Mapping<Expr<V>, I> for CachedMapping<X>
 where
-    X: CachedMapping<V, I>,
+    X: CachedMappingT<V, I>,
 {
     fn access(&self, index: &I, ctx: &mut Context, binding: FieldHandle) -> Expr<V> {
-        self.get_expr(index, ctx, binding)
+        self.0.get_expr(index, ctx, binding)
     }
 }
-impl<X, V: Value, I> Mapping<Var<V>, I> for X
+impl<X, V: Value, I: 'static> Mapping<Var<V>, I> for CachedMapping<X>
 where
-    X: CachedMapping<V, I>,
+    X: CachedMappingT<V, I>,
 {
     fn access(&self, index: &I, ctx: &mut Context, binding: FieldHandle) -> Var<V> {
-        self.get_expr(index, ctx, binding).var()
+        self.0.get_expr(index, ctx, binding).var()
     }
 }

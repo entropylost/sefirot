@@ -5,6 +5,7 @@ members = [
     "bevy_sefirot_macro",
     "bevy_sefirot",
     "id_newtype",
+    "sefirot_proto",
 ]
 resolver = "2"
 

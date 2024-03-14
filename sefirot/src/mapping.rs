@@ -1,74 +1,59 @@
 use std::any::Any;
 use std::marker::PhantomData;
 
-use crate::field::AccessLevel;
+use crate::field::{AccessCons, AccessLevel, AccessList, AccessNil, ListAccess};
 use crate::internal_prelude::*;
 
 pub mod buffer;
 pub mod cache;
 pub mod index;
 
-pub trait Mapping<X: Access, I>:
-    MappingLoopback<X, I, Chain = Self> + Send + Sync + 'static
-{
-    fn access(&self, index: &I, ctx: &mut Context, binding: FieldHandle) -> X;
-}
-
-impl<X, I> Mapping<Paradox, I> for X
-where
-    X: Send + Sync + 'static,
-{
-    fn access(&self, _index: &I, _ctx: &mut Context, _binding: FieldHandle) -> Paradox {
-        unreachable!("Paradox")
-    }
-}
-
-mod loopback {
-
-    use super::*;
-    use crate::field::AccessLevel;
-    pub trait MappingLoopback<X: Access, I> {
-        type Chain: Mapping<X::Downcast, I>;
-        fn access_loopback(
-            &self,
-            level: AccessLevel,
-            index: &I,
-            ctx: &mut Context,
-            binding: FieldHandle,
-        ) -> Box<dyn Any>;
-    }
-    impl<M, X: Access, I> MappingLoopback<X, I> for M
-    where
-        M: Mapping<X::Downcast, I>,
-    {
-        type Chain = M;
-        fn access_loopback(
-            &self,
-            level: AccessLevel,
-            index: &I,
-            ctx: &mut Context,
-            binding: FieldHandle,
-        ) -> Box<dyn Any> {
-            access_dyn::<X::Downcast, I, M>(self, level, index, ctx, binding)
-        }
-    }
-
-    pub(crate) fn access_dyn<X: Access, I, M: Mapping<X, I>>(
-        mapping: &M,
+pub trait ListMapping<L: AccessList, I: 'static> {
+    fn access_dyn(
+        &self,
         level: AccessLevel,
-        index: &I,
+        index: &dyn Any,
+        ctx: &mut Context,
+        binding: FieldHandle,
+    ) -> Box<dyn Any>;
+}
+impl<I: 'static, T> ListMapping<AccessNil, I> for T {
+    fn access_dyn(
+        &self,
+        _level: AccessLevel,
+        _index: &dyn Any,
+        _ctx: &mut Context,
+        _binding: FieldHandle,
+    ) -> Box<dyn Any> {
+        unreachable!("Paradox");
+    }
+}
+impl<X: Access, L: AccessList, I: 'static, T> ListMapping<AccessCons<X, L>, I> for T
+where
+    T: Mapping<X, I> + ListMapping<L, I>,
+{
+    fn access_dyn(
+        &self,
+        level: AccessLevel,
+        index: &dyn Any,
         ctx: &mut Context,
         binding: FieldHandle,
     ) -> Box<dyn Any> {
         if level == X::level() {
-            let value = mapping.access(index, ctx, binding);
+            let index = index.downcast_ref().unwrap();
+            let value = self.access(index, ctx, binding);
             Box::new(value)
         } else {
-            M::access_loopback(mapping, AccessLevel(level.0 - 1), index, ctx, binding)
+            <T as ListMapping<L, I>>::access_dyn(self, level, index, ctx, binding)
         }
     }
 }
-use loopback::MappingLoopback;
+
+pub trait Mapping<X: Access, I: 'static>:
+    ListMapping<<X as ListAccess>::List, I> + Send + Sync + 'static
+{
+    fn access(&self, index: &I, ctx: &mut Context, binding: FieldHandle) -> X;
+}
 
 pub(crate) trait DynMapping: Send + Sync + 'static {
     fn access_dyn(
@@ -101,10 +86,10 @@ impl<X: Access, T: EmanationType, M: Mapping<X, T::Index>> DynMapping for Mappin
         binding: FieldHandle,
     ) -> Box<dyn Any> {
         debug_assert!(level <= X::level());
-        loopback::access_dyn::<X, T::Index, M>(
+        <M as ListMapping<<X as ListAccess>::List, T::Index>>::access_dyn(
             &self.mapping,
             level,
-            index.downcast_ref().unwrap(),
+            index,
             ctx,
             binding,
         )
