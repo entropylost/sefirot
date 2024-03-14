@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::marker::PhantomData;
-use std::sync::Exclusive;
 
 use id_newtype::UniqueId;
 use pretty_type_name::pretty_type_name;
@@ -28,7 +27,6 @@ pub struct Emanation<T: EmanationType> {
     pub(crate) device: Device,
     pub(crate) id: EmanationId,
     pub(crate) fields: HashSet<FieldHandle>,
-    pub(crate) release: Vec<Exclusive<Box<dyn Send>>>,
     pub(crate) _marker: PhantomData<T>,
 }
 impl<T: EmanationType> Drop for Emanation<T> {
@@ -80,10 +78,6 @@ impl<T: EmanationType> Emanation<T> {
             emanation,
             _marker: PhantomData,
         }
-    }
-    /// Adds an object to be dropped when this emanation is dropped.
-    pub fn release(&mut self, object: impl Send + 'static) {
-        self.release.push(Exclusive::new(Box::new(object)));
     }
 }
 

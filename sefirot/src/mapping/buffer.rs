@@ -1,7 +1,7 @@
 use luisa::lang::types::vector::{Vec2, Vec3};
 use luisa::lang::types::AtomicRef;
 
-use super::cache::{CachedMapping, CachedMappingT};
+use super::cache::{CachedMapping, SimpleExprMapping};
 use crate::internal_prelude::*;
 
 pub trait IntoBuffer<V: Value> {
@@ -51,7 +51,7 @@ pub struct BufferMapping<V: Value> {
     pub buffer: BufferView<V>,
     pub handle: Option<Buffer<V>>,
 }
-impl<V: Value> CachedMappingT<V, Expr<u32>> for BufferMapping<V> {
+impl<V: Value> SimpleExprMapping<V, Expr<u32>> for BufferMapping<V> {
     fn get_expr(&self, index: &Expr<u32>, _ctx: &mut Context, _binding: FieldHandle) -> Expr<V> {
         self.buffer.read(*index)
     }
@@ -75,7 +75,7 @@ pub struct Tex2dMapping<V: IoTexel> {
     pub texture: Tex2d<V>,
     pub handle: Option<Tex2d<V>>,
 }
-impl<V: IoTexel> CachedMappingT<V, Expr<Vec2<u32>>> for Tex2dMapping<V> {
+impl<V: IoTexel> SimpleExprMapping<V, Expr<Vec2<u32>>> for Tex2dMapping<V> {
     fn get_expr(
         &self,
         index: &Expr<Vec2<u32>>,
@@ -99,7 +99,7 @@ pub struct Tex3dMapping<V: IoTexel> {
     pub texture: Tex3d<V>,
     pub handle: Option<Tex3d<V>>,
 }
-impl<V: IoTexel> CachedMappingT<V, Expr<Vec3<u32>>> for Tex3dMapping<V> {
+impl<V: IoTexel> SimpleExprMapping<V, Expr<Vec3<u32>>> for Tex3dMapping<V> {
     fn get_expr(
         &self,
         index: &Expr<Vec3<u32>>,

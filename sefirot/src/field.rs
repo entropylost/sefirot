@@ -8,7 +8,12 @@ use luisa::lang::types::AtomicRef;
 use once_cell::sync::Lazy;
 
 use crate::internal_prelude::*;
-use crate::mapping::MappingBinding;
+use crate::mapping::{DynMapping, MappingBinding};
+
+pub mod access;
+pub use access::Access;
+
+use self::access::AccessLevel;
 
 pub(crate) static FIELDS: Lazy<DashMap<FieldHandle, RawField>> = Lazy::new(DashMap::new);
 
@@ -74,23 +79,19 @@ impl<X: Access, T: EmanationType> Debug for Field<X, T> {
 
 impl<X: Access, T: EmanationType> Field<X, T> {
     pub fn at_opt(&self, index: &T::Index, ctx: &mut Context) -> Option<X> {
-        if let Some(mapping) = ctx.bindings.remove(&self.handle) {
-            let value = mapping.access_dyn(X::level(), index, ctx, self.handle);
-            let value = *value.downcast().unwrap();
-            ctx.bindings.insert(self.handle, mapping);
-            Some(value)
-        } else if let Some(mapping) = FIELDS
-            .get(&self.handle)
-            .expect("Field dropped")
-            .binding
-            .as_ref()
-        {
-            let value = mapping.access_dyn(X::level(), index, ctx, self.handle);
-            let value = *value.downcast().unwrap();
-            Some(value)
-        } else {
-            None
-        }
+        ctx.access_levels
+            .entry(self.handle)
+            .and_modify(|lvl| *lvl = AccessLevel(lvl.0.max(X::level().0)))
+            .or_insert(X::level());
+        ctx.on_mapping_opt(self.handle, |ctx, mapping| {
+            if let Some(mapping) = mapping {
+                let value = mapping.access_dyn(X::level(), index, ctx, self.handle);
+                let value = *value.downcast().unwrap();
+                Some(value)
+            } else {
+                None
+            }
+        })
     }
     pub fn at(&self, el: &mut Element<T::Index>) -> X {
         self.at_opt(&el.index, &mut el.context).unwrap()
@@ -131,56 +132,8 @@ impl<V: Value, T: EmanationType> Field<AtomicRef<V>, T> {
 }
 
 pub struct RawField {
-    pub(crate) name: String,
+    pub name: String,
     pub(crate) binding: Option<Box<dyn DynMapping>>,
-}
-
-pub struct AccessCons<X: Access, L: AccessList>(PhantomData<fn() -> (X, L)>);
-pub struct AccessNil;
-pub trait AccessList {
-    type Head;
-    type Tail: AccessList;
-}
-
-impl AccessList for AccessNil {
-    type Head = Paradox;
-    type Tail = AccessNil;
-}
-impl<X: Access, L: AccessList> AccessList for AccessCons<X, L> {
-    type Head = X;
-    type Tail = L;
-}
-
-pub trait ListAccess {
-    type List: AccessList;
-    fn level() -> AccessLevel;
-}
-
-pub trait Access: ListAccess + 'static {
-    type Downcast: ListAccess;
-}
-
-impl ListAccess for Paradox {
-    type List = AccessNil;
-    fn level() -> AccessLevel {
-        AccessLevel(0)
-    }
-}
-impl<X: Access> ListAccess for X {
-    type List = AccessCons<X, <X::Downcast as ListAccess>::List>;
-    fn level() -> AccessLevel {
-        AccessLevel(X::Downcast::level().0 + 1)
-    }
-}
-
-impl<V: Value> Access for Expr<V> {
-    type Downcast = Paradox;
-}
-impl<V: Value> Access for Var<V> {
-    type Downcast = Expr<V>;
-}
-impl<V: Value> Access for AtomicRef<V> {
-    type Downcast = Var<V>;
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -188,9 +141,3 @@ pub struct Static<T: 'static>(pub T);
 impl<T: 'static> Access for Static<T> {
     type Downcast = Paradox;
 }
-
-use crate::mapping::DynMapping;
-
-#[repr(transparent)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct AccessLevel(pub(crate) u8);

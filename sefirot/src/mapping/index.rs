@@ -1,7 +1,7 @@
 use super::*;
 
 pub struct IndexMap<I: Access, M, T: EmanationType> {
-    pub index_field: Field<I, T>,
+    pub index: Field<I, T>,
     pub mapping: M,
 }
 impl<
@@ -16,13 +16,18 @@ where
     IndexMap<I, M, T>: ListMapping<L, T::Index>,
 {
     fn access(&self, index: &T::Index, ctx: &mut Context, binding: FieldHandle) -> X {
-        let index = self.index_field.at_opt(index, ctx).unwrap();
+        let index = self.index.at_opt(index, ctx).unwrap();
         self.mapping.access(&index, ctx, binding)
+    }
+    fn save(&self, ctx: &mut Context, binding: FieldHandle) {
+        self.mapping.save(ctx, binding);
     }
 }
 
+#[allow(dead_code)]
 mod test {
     use luisa::lang::types::vector::Vec2;
+    use luisa::lang::types::AtomicRef;
 
     use self::buffer::BufferMapping;
     use self::cache::CachedMapping;
@@ -33,7 +38,7 @@ mod test {
     fn foo() {
         test_mapping::<
             IndexMap<Expr<u32>, CachedMapping<BufferMapping<u32>>, E>,
-            Expr<u32>,
+            AtomicRef<u32>,
             Expr<Vec2<u32>>,
         >(());
     }

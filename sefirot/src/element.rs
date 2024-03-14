@@ -2,6 +2,8 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::field::access::AccessLevel;
+use crate::field::FIELDS;
 use crate::internal_prelude::*;
 use crate::kernel::KernelContext;
 use crate::mapping::{DynMapping, MappingBinding};
@@ -26,19 +28,16 @@ pub struct Context {
     pub(crate) bindings: HashMap<FieldHandle, Box<dyn DynMapping>>,
     pub cache: HashMap<FieldHandle, Box<dyn Any>>,
     pub kernel: Arc<KernelContext>,
-    release: Vec<Box<dyn Any>>,
+    pub(crate) access_levels: HashMap<FieldHandle, AccessLevel>,
 }
 impl Context {
     pub fn new(kernel: Arc<KernelContext>) -> Self {
         Self {
-            release: Vec::new(),
             bindings: HashMap::new(),
             cache: HashMap::new(),
+            access_levels: HashMap::new(),
             kernel,
         }
-    }
-    pub fn release(&mut self, object: impl Any) {
-        self.release.push(Box::new(object));
     }
     pub fn bind_local<X: Access, T: EmanationType>(
         &mut self,
@@ -50,5 +49,45 @@ impl Context {
             Box::new(MappingBinding::<X, T, _>::new(mapping)),
         );
         assert!(old.is_none(), "Field already bound");
+    }
+    pub fn on_mapping_opt<R>(
+        &mut self,
+        handle: FieldHandle,
+        f: impl FnOnce(&mut Self, Option<&dyn DynMapping>) -> R,
+    ) -> R {
+        if let Some(mapping) = self.bindings.remove(&handle) {
+            let result = f(self, Some(&*mapping));
+            self.bindings.insert(handle, mapping);
+            result
+        } else if let Some(field) = FIELDS.get(&handle) {
+            if let Some(mapping) = &field.binding {
+                f(self, Some(&**mapping))
+            } else {
+                f(self, None)
+            }
+        } else {
+            f(self, None)
+        }
+    }
+    pub fn on_mapping<R>(
+        &mut self,
+        handle: FieldHandle,
+        f: impl FnOnce(&mut Self, &dyn DynMapping) -> R,
+    ) -> R {
+        self.on_mapping_opt(handle, |ctx, mapping| {
+            f(ctx, mapping.expect("Field not bound"))
+        })
+    }
+}
+impl Drop for Context {
+    fn drop(&mut self) {
+        let access_levels = std::mem::take(&mut self.access_levels);
+        for (field, access) in access_levels.iter() {
+            self.on_mapping(*field, |ctx, mapping| {
+                for i in (1..=access.0).rev() {
+                    mapping.save_dyn(AccessLevel(i), ctx, *field);
+                }
+            });
+        }
     }
 }
