@@ -67,9 +67,9 @@ impl GridDomain {
     pub fn new(start: [i32; 2], size: [u32; 2]) -> Self {
         let (index, handle) = Field::create_bind(
             "grid-index",
-            CachedFnMapping::<Expr<Vec2<u32>>, Expr<Vec2<i32>>, _>::new(
-                move |index, _ctx| track!(crate = "sefirot::luisa" => (index - Vec2::from(start)).cast_u32()),
-            ),
+            CachedFnMapping::<Expr<Vec2<u32>>, Expr<Vec2<i32>>, _>::new(move |index, _ctx| {
+                track!((index - Vec2::from(start)).cast_u32())
+            }),
         );
         Self {
             index,

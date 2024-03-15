@@ -140,12 +140,9 @@ impl<X: Access, I: FieldIndex> Field<X, I> {
             .unwrap()
     }
     pub fn bind(&self, mapping: impl Mapping<X, I>) -> Self {
-        *FIELDS
-            .get_mut(&self.handle)
-            .expect("Field dropped")
-            .binding
-            .as_mut()
-            .unwrap() = Box::new(MappingBinding::<X, I, _>::new(mapping));
+        let binding = &mut FIELDS.get_mut(&self.handle).expect("Field dropped").binding;
+        debug_assert!(binding.is_none());
+        *binding = Some(Box::new(MappingBinding::<X, I, _>::new(mapping)));
         *self
     }
     pub fn name(&self) -> String {

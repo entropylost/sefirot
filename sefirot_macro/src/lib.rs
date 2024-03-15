@@ -15,7 +15,7 @@ pub fn tracked(_attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn track(input: TokenStream) -> TokenStream {
     let input = proc_macro2::TokenStream::from(input);
     let res = quote! {
-        ::sefirot::luisa::prelude::tracked!(crate = "::sefirot::luisa" => #input)
+        ::sefirot::luisa::prelude::track!(crate = "::sefirot::luisa" => #input)
     };
     res.into()
 }
