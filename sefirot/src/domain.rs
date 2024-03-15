@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use dyn_clone::DynClone;
+
 use crate::graph::NodeConfigs;
 use crate::internal_prelude::*;
 use crate::kernel::KernelContext;
@@ -16,7 +18,7 @@ pub trait IndexDomain: Domain {
 /// A trait representing a space across which computations may be performed by calling kernels.
 /// This is intentionally very generic, and does not provide any guarantees on how many dispatch calls are generated.
 /// For most purposes, [`IndexDomain`] is a conveinent way to implement this trait if only a single dispatch call is necessary.
-pub trait Domain: Send + Sync + 'static {
+pub trait Domain: DynClone + Send + Sync + 'static {
     type A: 'static;
     type I: FieldIndex;
     fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<Self::I>;
@@ -28,6 +30,7 @@ pub trait Domain: Send + Sync + 'static {
         Box::new(self)
     }
 }
+dyn_clone::clone_trait_object!(<A: 'static, I: FieldIndex> Domain<A = A, I = I>);
 
 pub trait AsEntireDomain {
     type Entire: Domain;

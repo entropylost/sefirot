@@ -9,7 +9,9 @@ use crate::graph::{AsNodes, NodeConfigs};
 use crate::internal_prelude::*;
 use crate::kernel::KernelContext;
 
+#[derive(Clone, Copy)]
 pub struct StaticDomain<const N: usize>(pub [u32; N]);
+
 impl Domain for StaticDomain<1> {
     type A = ();
     type I = Expr<u32>;
