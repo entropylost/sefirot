@@ -36,6 +36,7 @@ pub struct KernelContext {
 
 pub type LuisaKernel<S> = luisa::runtime::Kernel<<S as KernelSignature>::LuisaSignature>;
 
+// TODO: Find a way of passing the domain into the kernel.
 pub struct Kernel<T: EmanationType, S: KernelSignature, A = ()> {
     pub(crate) domain: Box<dyn Domain<I = T::Index, A = A>>,
     pub(crate) raw: LuisaKernel<S>,

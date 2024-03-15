@@ -4,6 +4,15 @@ use crate::graph::NodeConfigs;
 use crate::internal_prelude::*;
 use crate::kernel::KernelContext;
 
+pub trait IndexDomain: Domain {
+    fn get_index(&self, index: &Self::I, kernel_context: Arc<KernelContext>) -> Element<Self::I>;
+    fn get_index_fallable(
+        &self,
+        index: &Self::I,
+        kernel_context: Arc<KernelContext>,
+    ) -> (Element<Self::I>, Expr<bool>);
+}
+
 /// A trait representing a space across which computations may be performed by calling kernels.
 /// This is intentionally very generic, and does not provide any guarantees on how many dispatch calls are generated.
 /// For most purposes, [`IndexDomain`] is a conveinent way to implement this trait if only a single dispatch call is necessary.
@@ -42,6 +51,7 @@ impl<A: 'static, I: 'static + Clone> Domain for Box<dyn Domain<A = A, I = I>> {
     }
 }
 
+// TODO: Change; indirect dispatch may be necessary.
 pub struct DispatchArgs<'a> {
     pub(crate) call_kernel_async: &'a dyn Fn([u32; 3]) -> Command<'static, 'static>,
     // TODO: Why is this here?
@@ -50,5 +60,8 @@ pub struct DispatchArgs<'a> {
 impl DispatchArgs<'_> {
     pub fn dispatch(&self, dispatch_size: [u32; 3]) -> Command<'static, 'static> {
         (self.call_kernel_async)(dispatch_size)
+    }
+    pub fn debug_name(&self) -> Option<&str> {
+        self.debug_name.as_deref()
     }
 }

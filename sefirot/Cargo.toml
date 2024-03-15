@@ -8,7 +8,6 @@ generational-arena = "0.2.9"
 parking_lot = { version = "0.12.1", features = ["send_guard", "arc_lock"] }
 petgraph = "0.6.4"
 pretty-type-name = "1.0.1"
-sefirot_macro = { path = "../sefirot_macro" }
 smallvec = "1.11.1"
 static_assertions = "1.1.0"
 take_mut = "0.2.2"
@@ -31,7 +30,7 @@ default-features = false
 optional = true
 
 [features]
-bevy = ["dep:bevy_ecs", "sefirot_macro/bevy"]
+bevy = ["dep:bevy_ecs"]
 partition = []
 check-recursive-access = []
 debug = ["dep:tracing"]

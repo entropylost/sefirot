@@ -16,7 +16,7 @@ pub mod utils;
 #[cfg(feature = "bevy")]
 #[doc(hidden)]
 pub use bevy_ecs as _bevy_ecs;
-pub use {luisa_compute as luisa, sefirot_macro as macros};
+pub use luisa_compute as luisa;
 
 mod internal_prelude {
     pub use luisa::prelude::*;
@@ -32,7 +32,6 @@ mod internal_prelude {
 pub mod prelude {
     pub use luisa::prelude::*;
     pub use luisa_compute as luisa;
-    pub use sefirot_macro::{track, tracked, Structure, Tag};
 
     pub use crate::domain::Domain;
     pub use crate::element::Element;

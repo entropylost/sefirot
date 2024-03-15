@@ -1,0 +1,7 @@
+[package]
+name = "sefirot_grid"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sefirot = { path = "../sefirot" }
