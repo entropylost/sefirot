@@ -8,6 +8,7 @@ use crate::kernel::KernelContext;
 
 pub trait IndexDomain: Domain {
     fn get_index(&self, index: &Self::I, kernel_context: Arc<KernelContext>) -> Element<Self::I>;
+    // Returns true if the index is within the domain.
     fn get_index_fallable(
         &self,
         index: &Self::I,
@@ -31,11 +32,6 @@ pub trait Domain: DynClone + Send + Sync + 'static {
     }
 }
 dyn_clone::clone_trait_object!(<A: 'static, I: FieldIndex> Domain<A = A, I = I>);
-
-pub trait AsEntireDomain {
-    type Entire: Domain;
-    fn entire_domain(&self) -> Self::Entire;
-}
 
 impl<A: 'static, I: FieldIndex> Domain for Box<dyn Domain<A = A, I = I>> {
     type A = A;

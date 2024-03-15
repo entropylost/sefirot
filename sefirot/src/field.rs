@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use std::hash::Hash;
 use std::marker::PhantomData;
 use std::ops::Deref;
 
@@ -6,6 +7,7 @@ use dashmap::DashMap;
 use id_newtype::UniqueId;
 use luisa::lang::types::AtomicRef;
 use once_cell::sync::Lazy;
+use pretty_type_name::pretty_type_name;
 
 use crate::internal_prelude::*;
 use crate::mapping::{DynMapping, MappingBinding};
@@ -16,29 +18,47 @@ pub use access::Access;
 pub mod set;
 
 use self::access::AccessLevel;
-use self::set::FieldSetId;
 
-pub(crate) static FIELDS: Lazy<DashMap<FieldHandle, RawField>> = Lazy::new(DashMap::new);
+pub(crate) static FIELDS: Lazy<DashMap<FieldId, RawField>> = Lazy::new(DashMap::new);
 
-pub type EField<V, T> = Field<Expr<V>, T>;
-pub type VField<V, T> = Field<Var<V>, T>;
-pub type AField<V, T> = Field<AtomicRef<V>, T>;
+pub type EField<V, I> = Field<Expr<V>, Expr<I>>;
+pub type VField<V, I> = Field<Var<V>, Expr<I>>;
+pub type AField<V, I> = Field<AtomicRef<V>, Expr<I>>;
 
 pub trait FieldIndex: Clone + 'static {}
 impl<T: Clone + 'static> FieldIndex for T {}
 
+#[derive(PartialEq, Eq, Hash)]
+pub struct FieldHandle(FieldId);
+impl Debug for FieldHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "RF{}", self.id)
+    }
+}
+impl Deref for FieldHandle {
+    type Target = FieldId;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl Drop for FieldHandle {
+    fn drop(&mut self) {
+        FIELDS.remove(&self.0);
+    }
+}
+
 #[derive(Copy, Clone, PartialEq, Eq, Hash, UniqueId)]
-pub struct FieldHandle {
+pub struct FieldId {
     id: u64,
 }
-impl Debug for FieldHandle {
+impl Debug for FieldId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "F{}", self.id)
     }
 }
-impl FieldHandle {
-    fn field_desc(&self) -> Option<String> {
-        if let Some(raw) = FIELDS.get(self) {
+impl FieldId {
+    pub fn field_desc(self) -> Option<String> {
+        if let Some(raw) = FIELDS.get(&self) {
             Some(format!(
                 "Field<{}, {}>({})",
                 raw.access_type_name, raw.index_type_name, raw.name
@@ -46,6 +66,21 @@ impl FieldHandle {
         } else {
             None
         }
+    }
+    pub fn at_opt<X: Access, I: FieldIndex>(self, index: &I, ctx: &mut Context) -> Option<X> {
+        ctx.access_levels
+            .entry(self)
+            .and_modify(|lvl| *lvl = AccessLevel(lvl.0.max(X::level().0)))
+            .or_insert(X::level());
+        ctx.on_mapping_opt(self, |ctx, mapping| {
+            if let Some(mapping) = mapping {
+                let value = mapping.access_dyn(X::level(), index, ctx, self);
+                let value = *value.downcast().unwrap();
+                Some(value)
+            } else {
+                None
+            }
+        })
     }
 }
 
@@ -56,8 +91,7 @@ impl FieldHandle {
 )]
 #[repr(C)]
 pub struct Field<X: Access, I: FieldIndex> {
-    pub(crate) handle: FieldHandle,
-    pub(crate) set: FieldSetId,
+    pub(crate) handle: FieldId,
     pub(crate) _marker: PhantomData<fn() -> (I, X)>,
 }
 impl<X: Access, I: FieldIndex> PartialEq for Field<X, I> {
@@ -90,29 +124,20 @@ impl<X: Access, T: FieldIndex> Debug for Field<X, T> {
                 .unwrap_or_else(|| "Field[dropped]".to_string()),
         )
         .field("handle", &self.handle)
-        .field("set", &self.set)
         .finish()
+    }
+}
+impl<X: Access, T: FieldIndex> Hash for Field<X, T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.handle.hash(state);
     }
 }
 
 impl<X: Access, I: FieldIndex> Field<X, I> {
-    pub fn at_opt(&self, index: &I, ctx: &mut Context) -> Option<X> {
-        ctx.access_levels
-            .entry(self.handle)
-            .and_modify(|lvl| *lvl = AccessLevel(lvl.0.max(X::level().0)))
-            .or_insert(X::level());
-        ctx.on_mapping_opt(self.handle, |ctx, mapping| {
-            if let Some(mapping) = mapping {
-                let value = mapping.access_dyn(X::level(), index, ctx, self.handle);
-                let value = *value.downcast().unwrap();
-                Some(value)
-            } else {
-                None
-            }
-        })
-    }
     pub fn at(&self, el: &mut Element<I>) -> X {
-        self.at_opt(&el.index, &mut el.context).unwrap()
+        self.handle
+            .at_opt::<X, I>(&el.index, &mut el.context)
+            .unwrap()
     }
     pub fn bind(&self, mapping: impl Mapping<X, I>) -> Self {
         *FIELDS
@@ -123,15 +148,40 @@ impl<X: Access, I: FieldIndex> Field<X, I> {
             .unwrap() = Box::new(MappingBinding::<X, I, _>::new(mapping));
         *self
     }
-    pub fn set(&self) -> FieldSetId {
-        self.set
-    }
     pub fn name(&self) -> String {
         FIELDS
             .get(&self.handle)
             .expect("Field dropped")
             .name
             .clone()
+    }
+    pub fn handle(&self) -> FieldId {
+        self.handle
+    }
+    /// Creates a new field with the given name, returning the field and a root handle, which will drop the field when dropped.
+    pub fn create(name: impl AsRef<str>) -> (Self, FieldHandle) {
+        let handle = FieldId::unique();
+        FIELDS.insert(
+            handle,
+            RawField {
+                name: name.as_ref().to_string(),
+                access_type_name: pretty_type_name::<X>(),
+                index_type_name: pretty_type_name::<I>(),
+                binding: None,
+            },
+        );
+        (
+            Field {
+                handle,
+                _marker: PhantomData,
+            },
+            FieldHandle(handle),
+        )
+    }
+    pub fn create_bind(name: impl AsRef<str>, mapping: impl Mapping<X, I>) -> (Self, FieldHandle) {
+        let (field, handle) = Self::create(name);
+        field.bind(mapping);
+        (field, handle)
     }
 }
 impl<V: Value, I: FieldIndex> Field<Expr<V>, I> {

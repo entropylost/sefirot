@@ -1,16 +1,52 @@
+use std::ops::Deref;
 use std::sync::Arc;
 
 use luisa::lang::types::vector::{Vec2, Vec3};
 use luisa::lang::types::AtomicRef;
 
-use super::cache::{SimpleExprMapping, VarCacheMapping};
-use crate::domain::{AsEntireDomain, DispatchArgs, Domain};
+use super::cache::SimpleExprMapping;
+use crate::domain::{DispatchArgs, Domain, IndexDomain};
 use crate::graph::{AsNodes, NodeConfigs};
 use crate::internal_prelude::*;
 use crate::kernel::KernelContext;
+use crate::mapping::cache::impl_cache_mapping;
 
-#[derive(Clone, Copy)]
+// TODO: Consider swapping this, so you first create domain and then bind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct StaticDomain<const N: usize>(pub [u32; N]);
+impl StaticDomain<1> {
+    pub fn new(size: u32) -> Self {
+        Self([size])
+    }
+    pub fn map_buffer<V: Value>(
+        &self,
+        buffer: impl IntoHandled<H = HandledBuffer<V>>,
+    ) -> BufferMapping<V> {
+        BufferMapping(buffer.into_handled())
+    }
+}
+impl StaticDomain<2> {
+    pub fn new(width: u32, height: u32) -> Self {
+        Self([width, height])
+    }
+    pub fn map_tex2d<V: IoTexel>(
+        &self,
+        texture: impl IntoHandled<H = HandledTex2d<V>>,
+    ) -> Tex2dMapping<V> {
+        Tex2dMapping(texture.into_handled())
+    }
+}
+impl StaticDomain<3> {
+    pub fn new(width: u32, height: u32, depth: u32) -> Self {
+        Self([width, height, depth])
+    }
+    pub fn map_tex3d<V: IoTexel>(
+        &self,
+        texture: impl IntoHandled<H = HandledTex3d<V>>,
+    ) -> Tex3dMapping<V> {
+        Tex3dMapping(texture.into_handled())
+    }
+}
 
 impl Domain for StaticDomain<1> {
     type A = ();
@@ -51,170 +87,197 @@ impl Domain for StaticDomain<3> {
         args.dispatch(self.0).into_node_configs()
     }
 }
-
-pub struct BufferMapping<V: Value> {
-    buffer: BufferView<V>,
-    handle: Option<Buffer<V>>,
-}
-impl<V: Value> BufferMapping<V> {
-    pub fn from_buffer(buffer: Buffer<V>) -> Self {
-        let view = buffer.view(..);
-        Self {
-            buffer: view,
-            handle: Some(buffer),
+impl IndexDomain for StaticDomain<1> {
+    fn get_index(&self, index: &Self::I, kernel_context: Arc<KernelContext>) -> Element<Self::I> {
+        Element {
+            index: *index,
+            context: Context::new(kernel_context),
         }
     }
-    pub fn from_view(view: BufferView<V>) -> Self {
-        Self {
-            buffer: view,
+    #[tracked]
+    fn get_index_fallable(
+        &self,
+        index: &Self::I,
+        kernel_context: Arc<KernelContext>,
+    ) -> (Element<Self::I>, Expr<bool>) {
+        (self.get_index(index, kernel_context), index < self.0[0])
+    }
+}
+impl IndexDomain for StaticDomain<2> {
+    fn get_index(&self, index: &Self::I, kernel_context: Arc<KernelContext>) -> Element<Self::I> {
+        Element {
+            index: *index,
+            context: Context::new(kernel_context),
+        }
+    }
+    #[tracked]
+    fn get_index_fallable(
+        &self,
+        index: &Self::I,
+        kernel_context: Arc<KernelContext>,
+    ) -> (Element<Self::I>, Expr<bool>) {
+        (
+            self.get_index(index, kernel_context),
+            (index < Vec2::from(self.0)).all(),
+        )
+    }
+}
+impl IndexDomain for StaticDomain<3> {
+    fn get_index(&self, index: &Self::I, kernel_context: Arc<KernelContext>) -> Element<Self::I> {
+        Element {
+            index: *index,
+            context: Context::new(kernel_context),
+        }
+    }
+    #[tracked]
+    fn get_index_fallable(
+        &self,
+        index: &Self::I,
+        kernel_context: Arc<KernelContext>,
+    ) -> (Element<Self::I>, Expr<bool>) {
+        (
+            self.get_index(index, kernel_context),
+            (index < Vec3::from(self.0)).all(),
+        )
+    }
+}
+
+pub struct HandledBuffer<V: Value> {
+    pub buffer: BufferView<V>,
+    pub handle: Option<Buffer<V>>,
+}
+impl<V: Value> Deref for HandledBuffer<V> {
+    type Target = BufferView<V>;
+    fn deref(&self) -> &Self::Target {
+        &self.buffer
+    }
+}
+pub struct HandledTex2d<V: IoTexel> {
+    pub texture: Tex2dView<V>,
+    pub handle: Option<Tex2d<V>>,
+}
+impl<V: IoTexel> Deref for HandledTex2d<V> {
+    type Target = Tex2dView<V>;
+    fn deref(&self) -> &Self::Target {
+        &self.texture
+    }
+}
+pub struct HandledTex3d<V: IoTexel> {
+    pub texture: Tex3dView<V>,
+    pub handle: Option<Tex3d<V>>,
+}
+impl<V: IoTexel> Deref for HandledTex3d<V> {
+    type Target = Tex3dView<V>;
+    fn deref(&self) -> &Self::Target {
+        &self.texture
+    }
+}
+
+pub trait IntoHandled {
+    type H;
+    fn into_handled(self) -> Self::H;
+}
+impl<V: Value> IntoHandled for BufferView<V> {
+    type H = HandledBuffer<V>;
+    fn into_handled(self) -> Self::H {
+        HandledBuffer {
+            buffer: self,
             handle: None,
         }
     }
-    pub fn from_slice(device: &Device, data: &[V]) -> Self {
-        let buffer = device.create_buffer_from_slice(data);
-        Self::from_buffer(buffer)
-    }
-    pub fn from_size(device: &Device, size: usize) -> Self {
-        let buffer = device.create_buffer(size);
-        Self::from_buffer(buffer)
-    }
-    pub fn view(&self) -> &BufferView<V> {
-        &self.buffer
-    }
-    pub fn buffer(&self) -> &Option<Buffer<V>> {
-        &self.handle
-    }
-    #[allow(clippy::len_without_is_empty)]
-    pub fn len(&self) -> usize {
-        self.buffer.len()
+}
+impl<V: Value> IntoHandled for Buffer<V> {
+    type H = HandledBuffer<V>;
+    fn into_handled(self) -> Self::H {
+        HandledBuffer {
+            buffer: self.view(..),
+            handle: Some(self),
+        }
     }
 }
-impl<V: Value> AsEntireDomain for BufferMapping<V> {
-    type Entire = StaticDomain<1>;
-    fn entire_domain(&self) -> Self::Entire {
-        StaticDomain([self.len() as u32])
+impl<V: IoTexel> IntoHandled for Tex2dView<V> {
+    type H = HandledTex2d<V>;
+    fn into_handled(self) -> Self::H {
+        HandledTex2d {
+            texture: self,
+            handle: None,
+        }
     }
 }
+impl<V: IoTexel> IntoHandled for Tex2d<V> {
+    type H = HandledTex2d<V>;
+    fn into_handled(self) -> Self::H {
+        HandledTex2d {
+            texture: self.view(0),
+            handle: Some(self),
+        }
+    }
+}
+impl<V: IoTexel> IntoHandled for Tex3dView<V> {
+    type H = HandledTex3d<V>;
+    fn into_handled(self) -> Self::H {
+        HandledTex3d {
+            texture: self,
+            handle: None,
+        }
+    }
+}
+impl<V: IoTexel> IntoHandled for Tex3d<V> {
+    type H = HandledTex3d<V>;
+    fn into_handled(self) -> Self::H {
+        HandledTex3d {
+            texture: self.view(0),
+            handle: Some(self),
+        }
+    }
+}
+
+pub struct BufferMapping<V: Value>(pub HandledBuffer<V>);
 impl<V: Value> SimpleExprMapping<V, Expr<u32>> for BufferMapping<V> {
-    fn get_expr(&self, index: &Expr<u32>, _ctx: &mut Context, _binding: FieldHandle) -> Expr<V> {
-        self.buffer.read(*index)
+    fn get_expr(&self, index: &Expr<u32>, _ctx: &mut Context, _binding: FieldId) -> Expr<V> {
+        self.0.read(*index)
     }
-    fn set_expr(
-        &self,
-        index: &Expr<u32>,
-        value: Expr<V>,
-        _ctx: &mut Context,
-        _binding: FieldHandle,
-    ) {
-        self.buffer.write(*index, value);
+    fn set_expr(&self, index: &Expr<u32>, value: Expr<V>, _ctx: &mut Context, _binding: FieldId) {
+        self.0.write(*index, value);
     }
 }
-// TODO: Figure out how to make this work without needing same-crate impl.
-// Perhaps offer a separate InternalCacheMapping?
-impl<V: Value> Mapping<AtomicRef<V>, Expr<u32>> for VarCacheMapping<BufferMapping<V>> {
-    fn access(&self, index: &Expr<u32>, _ctx: &mut Context, _binding: FieldHandle) -> AtomicRef<V> {
-        self.0.buffer.atomic_ref(*index)
+impl_cache_mapping!([V: Value] Mapping[V, Expr<u32>] for BufferMapping<V>);
+impl<V: Value> Mapping<AtomicRef<V>, Expr<u32>> for BufferMapping<V> {
+    fn access(&self, index: &Expr<u32>, _ctx: &mut Context, _binding: FieldId) -> AtomicRef<V> {
+        self.0.atomic_ref(*index)
     }
 }
 
-pub struct Tex2dMapping<V: IoTexel> {
-    texture: Tex2dView<V>,
-    _handle: Option<Tex2d<V>>,
-}
-// TODO: Non-zero layers are not supported.
-impl<V: IoTexel> Tex2dMapping<V> {
-    pub fn from_texture(texture: Tex2d<V>) -> Self {
-        let view = texture.view(0);
-        Self {
-            texture: view,
-            _handle: Some(texture),
-        }
-    }
-    // View must be on level 0.
-    pub fn from_view(view: Tex2dView<V>) -> Self {
-        Self {
-            texture: view,
-            _handle: None,
-        }
-    }
-    pub fn size(&self) -> [u32; 2] {
-        let size = self.texture.size();
-        [size[0], size[1]]
-    }
-}
-impl<V: IoTexel> AsEntireDomain for Tex2dMapping<V> {
-    type Entire = StaticDomain<2>;
-    fn entire_domain(&self) -> Self::Entire {
-        StaticDomain(self.size())
-    }
-}
+pub struct Tex2dMapping<V: IoTexel>(pub HandledTex2d<V>);
 impl<V: IoTexel> SimpleExprMapping<V, Expr<Vec2<u32>>> for Tex2dMapping<V> {
-    fn get_expr(
-        &self,
-        index: &Expr<Vec2<u32>>,
-        _ctx: &mut Context,
-        _binding: FieldHandle,
-    ) -> Expr<V> {
-        self.texture.read(*index)
+    fn get_expr(&self, index: &Expr<Vec2<u32>>, _ctx: &mut Context, _binding: FieldId) -> Expr<V> {
+        self.0.read(*index)
     }
     fn set_expr(
         &self,
         index: &Expr<Vec2<u32>>,
         value: Expr<V>,
         _ctx: &mut Context,
-        _binding: FieldHandle,
+        _binding: FieldId,
     ) {
-        self.texture.write(*index, value);
+        self.0.write(*index, value);
     }
 }
+impl_cache_mapping!([V: IoTexel] Mapping[V, Expr<Vec2<u32>>] for Tex2dMapping<V>);
 
-pub struct Tex3dMapping<V: IoTexel> {
-    texture: Tex3dView<V>,
-    _handle: Option<Tex3d<V>>,
-}
-// TODO: Non-zero layers are not supported.
-impl<V: IoTexel> Tex3dMapping<V> {
-    pub fn from_texture(texture: Tex3d<V>) -> Self {
-        let view = texture.view(0);
-        Self {
-            texture: view,
-            _handle: Some(texture),
-        }
-    }
-    // View must be on level 0.
-    pub fn from_view(view: Tex3dView<V>) -> Self {
-        Self {
-            texture: view,
-            _handle: None,
-        }
-    }
-    pub fn size(&self) -> [u32; 3] {
-        let size = self.texture.size();
-        [size[0], size[1], size[2]]
-    }
-}
-impl<V: IoTexel> AsEntireDomain for Tex3dMapping<V> {
-    type Entire = StaticDomain<3>;
-    fn entire_domain(&self) -> Self::Entire {
-        StaticDomain(self.size())
-    }
-}
+pub struct Tex3dMapping<V: IoTexel>(pub HandledTex3d<V>);
 impl<V: IoTexel> SimpleExprMapping<V, Expr<Vec3<u32>>> for Tex3dMapping<V> {
-    fn get_expr(
-        &self,
-        index: &Expr<Vec3<u32>>,
-        _ctx: &mut Context,
-        _binding: FieldHandle,
-    ) -> Expr<V> {
-        self.texture.read(*index)
+    fn get_expr(&self, index: &Expr<Vec3<u32>>, _ctx: &mut Context, _binding: FieldId) -> Expr<V> {
+        self.0.read(*index)
     }
     fn set_expr(
         &self,
         index: &Expr<Vec3<u32>>,
         value: Expr<V>,
         _ctx: &mut Context,
-        _binding: FieldHandle,
+        _binding: FieldId,
     ) {
-        self.texture.write(*index, value);
+        self.0.write(*index, value);
     }
 }
+impl_cache_mapping!([V: IoTexel] Mapping[V, Expr<Vec3<u32>>] for Tex3dMapping<V>);

@@ -14,7 +14,7 @@ fn kernel_impl(f: ItemFn, init_vis: Visibility) -> TokenStream {
     else {
         panic!("Function must return a `Kernel`.");
     };
-    let (emanation_ty, kernel_sig, domain_args_sig) = {
+    let (index_type, kernel_sig, domain_args_sig) = {
         let Type::Path(path) = &*kernel_type else {
             panic!("Function must return a `Kernel`.");
         };
@@ -30,7 +30,7 @@ fn kernel_impl(f: ItemFn, init_vis: Visibility) -> TokenStream {
         if args.len() != 2 && args.len() != 3 {
             panic!("Function must return a `Kernel`.");
         }
-        let GenericArgument::Type(emanation_ty) = &args[0] else {
+        let GenericArgument::Type(index_type) = &args[0] else {
             panic!("Function must return a `Kernel`.");
         };
         let GenericArgument::Type(kernel_sig) = &args[1] else {
@@ -44,28 +44,38 @@ fn kernel_impl(f: ItemFn, init_vis: Visibility) -> TokenStream {
         } else {
             parse_quote!(())
         };
-        (emanation_ty.clone(), kernel_sig.clone(), domain_args_sig)
+        (index_type.clone(), kernel_sig.clone(), domain_args_sig)
     };
     let kernel_name = sig.ident;
 
     let mut last_stmt = block.stmts.pop().unwrap();
-    if let Stmt::Expr(
-        Expr::MethodCall(ExprMethodCall {
-            method, turbofish, ..
-        }),
-        None,
-    ) = &mut last_stmt
-    {
-        if method == "build_kernel" && turbofish.is_none() {
-            *turbofish = Some(parse_quote!(::<#kernel_sig, #domain_args_sig>));
-            *method = Ident::new("build_kernel_with_domain_args", method.span());
+    if let Stmt::Expr(Expr::Call(ExprCall { func, .. }), None) = &mut last_stmt {
+        if let Expr::Path(ExprPath {
+            path:
+                Path {
+                    leading_colon: None,
+                    segments,
+                },
+            qself: None,
+            ..
+        }) = &mut **func
+        {
+            if segments.len() == 2
+                && ["build", "build_with_options"].contains(&&*segments[1].ident.to_string())
+                && segments[0].ident == "Kernel"
+                && segments[0].arguments == PathArguments::None
+            {
+                segments[0].arguments = PathArguments::AngleBracketed(
+                    parse_quote!(::<#index_type, #kernel_sig, #domain_args_sig>),
+                );
+                last_stmt = Stmt::Expr(
+                    parse_quote! {
+                        #last_stmt.with_name(stringify!(#kernel_name))
+                    },
+                    None,
+                );
+            }
         }
-        last_stmt = Stmt::Expr(
-            parse_quote! {
-                #last_stmt.with_name(stringify!(#kernel_name))
-            },
-            None,
-        );
     }
     block.stmts.push(parse_quote! {
         #kernel_name.init(#last_stmt);
@@ -75,7 +85,7 @@ fn kernel_impl(f: ItemFn, init_vis: Visibility) -> TokenStream {
 
     quote_spanned! {span=>
         #[allow(non_upper_case_globals)]
-        #vis static #kernel_name: #bevy_sefirot_path::KernelCell<#emanation_ty, #kernel_sig, #domain_args_sig> =
+        #vis static #kernel_name: #bevy_sefirot_path::KernelCell<#index_type, #kernel_sig, #domain_args_sig> =
             #bevy_sefirot_path::KernelCell::default();
         #(#attrs)*
         #[forbid(dead_code)]
@@ -100,7 +110,7 @@ pub fn kernel(
 fn test_kernel() {
     let f = parse_quote! {
         fn clear_display_kernel(particles: Res<Emanation<Particles>>, device: LuisaDevice, domain: Res<ArrayIndex>) -> Kernel<Particles, fn(Tex2d<Vec4<f32>>, Vec4<f32>)> {
-            particles.build_kernel(domain, |el, display, clear_color| {
+            Kernel::build(domain, |el, display, clear_color| {
                 display.write(dispatch_id().xy(), clear_color);
             })
         }

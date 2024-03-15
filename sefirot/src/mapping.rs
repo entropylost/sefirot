@@ -18,23 +18,24 @@ mod list {
             level: AccessLevel,
             index: &dyn Any,
             ctx: &mut Context,
-            binding: FieldHandle,
+            binding: FieldId,
         ) -> Box<dyn Any>;
-        fn save_dyn(&self, level: AccessLevel, ctx: &mut Context, binding: FieldHandle);
+        fn save_dyn(&self, level: AccessLevel, ctx: &mut Context, binding: FieldId);
     }
 }
 use list::ListMapping;
+use luisa::lang::types::AtomicRef;
 impl<I: 'static, T> ListMapping<AccessNil, I> for T {
     fn access_dyn(
         &self,
         _level: AccessLevel,
         _index: &dyn Any,
         _ctx: &mut Context,
-        _binding: FieldHandle,
+        _binding: FieldId,
     ) -> Box<dyn Any> {
         unreachable!("Paradox");
     }
-    fn save_dyn(&self, _level: AccessLevel, _ctx: &mut Context, _binding: FieldHandle) {}
+    fn save_dyn(&self, _level: AccessLevel, _ctx: &mut Context, _binding: FieldId) {}
 }
 impl<X: Access, L: AccessList, I: 'static, T> ListMapping<AccessCons<X, L>, I> for T
 where
@@ -45,7 +46,7 @@ where
         level: AccessLevel,
         index: &dyn Any,
         ctx: &mut Context,
-        binding: FieldHandle,
+        binding: FieldId,
     ) -> Box<dyn Any> {
         if level == X::level() {
             let index = index.downcast_ref().unwrap();
@@ -55,7 +56,7 @@ where
             <T as ListMapping<L, I>>::access_dyn(self, level, index, ctx, binding)
         }
     }
-    fn save_dyn(&self, level: AccessLevel, ctx: &mut Context, binding: FieldHandle) {
+    fn save_dyn(&self, level: AccessLevel, ctx: &mut Context, binding: FieldId) {
         if level == X::level() {
             self.save(ctx, binding);
         } else {
@@ -67,9 +68,15 @@ where
 pub trait Mapping<X: Access, I: 'static>:
     ListMapping<<X as ListAccess>::List, I> + Send + Sync + 'static
 {
-    fn access(&self, index: &I, ctx: &mut Context, binding: FieldHandle) -> X;
-    fn save(&self, _ctx: &mut Context, _binding: FieldHandle) {}
+    fn access(&self, index: &I, ctx: &mut Context, binding: FieldId) -> X;
+    fn save(&self, _ctx: &mut Context, _binding: FieldId) {}
 }
+pub trait EMapping<V: Value, I: Value>: Mapping<Expr<V>, Expr<I>> {}
+pub trait VMapping<V: Value, I: Value>: Mapping<Var<V>, Expr<I>> {}
+pub trait AMapping<V: Value, I: Value>: Mapping<AtomicRef<V>, Expr<I>> {}
+impl<V: Value, I: Value, X> EMapping<V, I> for X where X: Mapping<Expr<V>, Expr<I>> {}
+impl<V: Value, I: Value, X> VMapping<V, I> for X where X: Mapping<Var<V>, Expr<I>> {}
+impl<V: Value, I: Value, X> AMapping<V, I> for X where X: Mapping<AtomicRef<V>, Expr<I>> {}
 
 mod private {
     use super::*;
@@ -83,9 +90,9 @@ pub trait DynMapping: Send + Sync + 'static + private::Sealed {
         level: AccessLevel,
         index: &dyn Any,
         ctx: &mut Context,
-        binding: FieldHandle,
+        binding: FieldId,
     ) -> Box<dyn Any>;
-    fn save_dyn(&self, level: AccessLevel, ctx: &mut Context, binding: FieldHandle);
+    fn save_dyn(&self, level: AccessLevel, ctx: &mut Context, binding: FieldId);
 }
 
 pub(crate) struct MappingBinding<X: Access, I: FieldIndex, M: Mapping<X, I>> {
@@ -106,7 +113,7 @@ impl<X: Access, I: FieldIndex, M: Mapping<X, I>> DynMapping for MappingBinding<X
         level: AccessLevel,
         index: &dyn Any,
         ctx: &mut Context,
-        binding: FieldHandle,
+        binding: FieldId,
     ) -> Box<dyn Any> {
         debug_assert!(level <= X::level());
         <M as ListMapping<<X as ListAccess>::List, I>>::access_dyn(
@@ -117,7 +124,7 @@ impl<X: Access, I: FieldIndex, M: Mapping<X, I>> DynMapping for MappingBinding<X
             binding,
         )
     }
-    fn save_dyn(&self, level: AccessLevel, ctx: &mut Context, binding: FieldHandle) {
+    fn save_dyn(&self, level: AccessLevel, ctx: &mut Context, binding: FieldId) {
         debug_assert!(level <= X::level());
         <M as ListMapping<<X as ListAccess>::List, I>>::save_dyn(
             &self.mapping,

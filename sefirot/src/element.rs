@@ -25,10 +25,10 @@ impl<I: FieldIndex> Element<I> {
 }
 
 pub struct Context {
-    pub(crate) bindings: HashMap<FieldHandle, Box<dyn DynMapping>>,
-    pub cache: HashMap<FieldHandle, Box<dyn Any>>,
+    pub(crate) bindings: HashMap<FieldId, Box<dyn DynMapping>>,
+    pub cache: HashMap<FieldId, Box<dyn Any>>,
     pub kernel: Arc<KernelContext>,
-    pub(crate) access_levels: HashMap<FieldHandle, AccessLevel>,
+    pub(crate) access_levels: HashMap<FieldId, AccessLevel>,
 }
 impl Context {
     pub fn new(kernel: Arc<KernelContext>) -> Self {
@@ -52,7 +52,7 @@ impl Context {
     }
     pub fn on_mapping_opt<R>(
         &mut self,
-        handle: FieldHandle,
+        handle: FieldId,
         f: impl FnOnce(&mut Self, Option<&dyn DynMapping>) -> R,
     ) -> R {
         if let Some(mapping) = self.bindings.remove(&handle) {
@@ -71,7 +71,7 @@ impl Context {
     }
     pub fn on_mapping<R>(
         &mut self,
-        handle: FieldHandle,
+        handle: FieldId,
         f: impl FnOnce(&mut Self, &dyn DynMapping) -> R,
     ) -> R {
         self.on_mapping_opt(handle, |ctx, mapping| {

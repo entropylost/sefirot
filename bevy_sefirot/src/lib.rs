@@ -7,10 +7,10 @@ use bevy::ecs::schedule::{NodeId, SystemTypeSet};
 use bevy::prelude::*;
 use bevy::utils::HashMap;
 use luisa_compute::runtime::Device;
-use sefirot::domain::kernel::KernelSignature;
+use sefirot::field::FieldIndex;
 use sefirot::graph::{AsNodes, ComputeGraph, NodeHandle};
+use sefirot::kernel::{Kernel, KernelSignature};
 use sefirot::luisa as luisa_compute;
-use sefirot::prelude::{FieldIndex, Kernel};
 
 #[cfg(feature = "display")]
 pub mod display;
@@ -24,22 +24,24 @@ pub mod prelude {
     pub use sefirot;
     pub use sefirot::prelude::*;
 
-    pub use crate::luisa::{InitKernel, LuisaDevice, LuisaPlugin};
+    pub use crate::luisa::{InitKernel, LuisaDevice as Device, LuisaPlugin};
 }
 
-pub struct KernelCell<T: FieldIndex, S: KernelSignature, A = ()>(OnceLock<Kernel<T, S, A>>);
+pub struct KernelCell<I: FieldIndex, S: KernelSignature, A: 'static = ()>(
+    OnceLock<Kernel<I, S, A>>,
+);
 
-impl<T: FieldIndex, S: KernelSignature, A> Deref for KernelCell<T, S, A> {
-    type Target = Kernel<T, S, A>;
+impl<I: FieldIndex, S: KernelSignature, A: 'static> Deref for KernelCell<I, S, A> {
+    type Target = Kernel<I, S, A>;
     fn deref(&self) -> &Self::Target {
         self.0.get().unwrap()
     }
 }
-impl<T: FieldIndex, S: KernelSignature, A> KernelCell<T, S, A> {
+impl<I: FieldIndex, S: KernelSignature, A: 'static> KernelCell<I, S, A> {
     pub const fn default() -> Self {
         Self(OnceLock::new())
     }
-    pub fn init(&self, kernel: Kernel<T, S, A>) {
+    pub fn init(&self, kernel: Kernel<I, S, A>) {
         self.0.set(kernel).ok().unwrap();
     }
 }

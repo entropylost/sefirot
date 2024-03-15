@@ -1,9 +1,8 @@
 use std::collections::HashSet;
 
-use pretty_type_name::pretty_type_name;
-
 use super::*;
 
+// TODO: Remove?
 #[derive(Copy, Clone, PartialEq, Eq, Hash, UniqueId)]
 pub struct FieldSetId {
     id: u64,
@@ -26,7 +25,7 @@ impl Debug for FieldSet {
                 f.debug_map()
                     .entries(self.0.iter().map(|x| {
                         (
-                            x,
+                            x.0,
                             x.field_desc()
                                 .unwrap_or_else(|| "Field[dropped]".to_string()),
                         )
@@ -51,21 +50,16 @@ impl FieldSet {
     pub fn id(&self) -> FieldSetId {
         self.id
     }
-    pub fn create_field<X: Access, I: FieldIndex>(&self, name: impl AsRef<str>) -> Field<X, I> {
-        let handle = FieldHandle::unique();
-        FIELDS.insert(
-            handle,
-            RawField {
-                name: name.as_ref().to_string(),
-                access_type_name: pretty_type_name::<X>(),
-                index_type_name: pretty_type_name::<I>(),
-                binding: None,
-            },
-        );
-        Field {
-            handle,
-            set: self.id,
-            _marker: PhantomData,
-        }
+    pub fn create<X: Access, I: FieldIndex>(&mut self, name: impl AsRef<str>) -> Field<X, I> {
+        let (field, handle) = Field::create(name);
+        self.fields.insert(handle);
+        field
+    }
+    pub fn create_bind<X: Access, I: FieldIndex>(
+        &mut self,
+        name: impl AsRef<str>,
+        mapping: impl Mapping<X, I>,
+    ) -> Field<X, I> {
+        self.create::<X, I>(name).bind(mapping)
     }
 }

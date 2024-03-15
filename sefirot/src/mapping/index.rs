@@ -20,29 +20,29 @@ where
     M: Mapping<X, J>,
     IndexMap<J, M, I>: ListMapping<L, I>,
 {
-    fn access(&self, index: &I, ctx: &mut Context, binding: FieldHandle) -> X {
-        let index = self.index.at_opt(index, ctx).unwrap();
+    fn access(&self, index: &I, ctx: &mut Context, binding: FieldId) -> X {
+        let index = self.index.handle.at_opt(index, ctx).unwrap();
         self.mapping.access(&index, ctx, binding)
     }
-    fn save(&self, ctx: &mut Context, binding: FieldHandle) {
+    fn save(&self, ctx: &mut Context, binding: FieldId) {
         self.mapping.save(ctx, binding);
     }
 }
 
 #[allow(dead_code)]
 mod test {
-    use luisa::lang::types::vector::Vec2;
+    use luisa::lang::types::vector::{Vec2, Vec4};
     use luisa::lang::types::AtomicRef;
 
-    use self::buffer::BufferMapping;
-    use self::cache::VarCacheMapping;
+    use self::buffer::{BufferMapping, Tex2dMapping};
     use super::*;
     fn test_mapping<M: Mapping<X, Y>, X: Access, Y: 'static>(_: ()) {}
     fn foo() {
         test_mapping::<
-            IndexMap<Expr<u32>, VarCacheMapping<BufferMapping<u32>>, Expr<Vec2<u32>>>,
+            IndexMap<Expr<u32>, BufferMapping<u32>, Expr<Vec2<u32>>>,
             AtomicRef<u32>,
             Expr<Vec2<u32>>,
         >(());
+        test_mapping::<Tex2dMapping<Vec4<f32>>, Var<Vec4<f32>>, Expr<Vec2<u32>>>(());
     }
 }

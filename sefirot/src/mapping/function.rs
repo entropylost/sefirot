@@ -32,7 +32,7 @@ impl<
 where
     F: Fn(&I, &mut Context) -> X,
 {
-    fn access(&self, index: &I, ctx: &mut Context, _binding: FieldHandle) -> X {
+    fn access(&self, index: &I, ctx: &mut Context, _binding: FieldId) -> X {
         (self.f)(index, ctx)
     }
 }
@@ -66,7 +66,7 @@ impl<
 where
     F: Fn(&I, &mut Context) -> X,
 {
-    fn access(&self, index: &I, ctx: &mut Context, binding: FieldHandle) -> X {
+    fn access(&self, index: &I, ctx: &mut Context, binding: FieldId) -> X {
         #[allow(clippy::map_entry)]
         if !ctx.cache.contains_key(&binding) {
             let value = (self.f)(index, ctx);
