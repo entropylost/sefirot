@@ -18,7 +18,7 @@ pub trait IndexDomain: Domain {
 /// For most purposes, [`IndexDomain`] is a conveinent way to implement this trait if only a single dispatch call is necessary.
 pub trait Domain: Send + Sync + 'static {
     type A: 'static;
-    type I: 'static + Clone;
+    type I: FieldIndex;
     fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<Self::I>;
     fn dispatch_async(&self, domain_args: Self::A, args: DispatchArgs) -> NodeConfigs<'static>;
     fn into_boxed(self) -> Box<dyn Domain<A = Self::A, I = Self::I>>
@@ -34,7 +34,7 @@ pub trait AsEntireDomain {
     fn entire_domain(&self) -> Self::Entire;
 }
 
-impl<A: 'static, I: 'static + Clone> Domain for Box<dyn Domain<A = A, I = I>> {
+impl<A: 'static, I: FieldIndex> Domain for Box<dyn Domain<A = A, I = I>> {
     type A = A;
     type I = I;
     fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<I> {

@@ -6,7 +6,6 @@ extern crate self as sefirot;
 
 pub mod domain;
 pub mod element;
-pub mod emanation;
 pub mod field;
 pub mod graph;
 pub mod kernel;
@@ -23,8 +22,7 @@ mod internal_prelude {
     pub use luisa_compute as luisa;
 
     pub use crate::element::{Context, Element};
-    pub use crate::emanation::{Emanation, EmanationId, EmanationType};
-    pub use crate::field::{Access, Field, FieldHandle};
+    pub use crate::field::{Access, Field, FieldHandle, FieldIndex};
     pub use crate::mapping::Mapping;
     pub use crate::utils::Paradox;
 }
@@ -35,7 +33,7 @@ pub mod prelude {
 
     pub use crate::domain::Domain;
     pub use crate::element::Element;
-    pub use crate::emanation::{Emanation, EmanationType};
+    pub use crate::field::set::FieldSet;
     pub use crate::field::{EField, Field};
     pub use crate::kernel::Kernel;
 }

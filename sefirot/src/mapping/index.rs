@@ -1,26 +1,26 @@
 use super::*;
 
-pub struct IndexMap<I: Access, M, T: EmanationType> {
-    pub index: Field<I, T>,
+pub struct IndexMap<J: Access, M, I: FieldIndex> {
+    pub index: Field<J, I>,
     pub mapping: M,
 }
-impl<I: Access, M, T: EmanationType> IndexMap<I, M, T> {
-    pub fn new(index: Field<I, T>, mapping: M) -> Self {
+impl<J: Access, M, I: FieldIndex> IndexMap<J, M, I> {
+    pub fn new(index: Field<J, I>, mapping: M) -> Self {
         Self { index, mapping }
     }
 }
 impl<
         L: AccessList,
         X: Access + ListAccess<List = AccessCons<X, L>>,
-        I: Access,
+        J: Access,
         M,
-        T: EmanationType,
-    > Mapping<X, T::Index> for IndexMap<I, M, T>
+        I: FieldIndex,
+    > Mapping<X, I> for IndexMap<J, M, I>
 where
-    M: Mapping<X, I>,
-    IndexMap<I, M, T>: ListMapping<L, T::Index>,
+    M: Mapping<X, J>,
+    IndexMap<J, M, I>: ListMapping<L, I>,
 {
-    fn access(&self, index: &T::Index, ctx: &mut Context, binding: FieldHandle) -> X {
+    fn access(&self, index: &I, ctx: &mut Context, binding: FieldHandle) -> X {
         let index = self.index.at_opt(index, ctx).unwrap();
         self.mapping.access(&index, ctx, binding)
     }
@@ -37,12 +37,10 @@ mod test {
     use self::buffer::BufferMapping;
     use self::cache::VarCacheMapping;
     use super::*;
-    use crate::emanation::Auto;
-    pub type E = Auto<Expr<Vec2<u32>>>;
     fn test_mapping<M: Mapping<X, Y>, X: Access, Y: 'static>(_: ()) {}
     fn foo() {
         test_mapping::<
-            IndexMap<Expr<u32>, VarCacheMapping<BufferMapping<u32>>, E>,
+            IndexMap<Expr<u32>, VarCacheMapping<BufferMapping<u32>>, Expr<Vec2<u32>>>,
             AtomicRef<u32>,
             Expr<Vec2<u32>>,
         >(());

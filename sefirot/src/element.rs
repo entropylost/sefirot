@@ -8,11 +8,11 @@ use crate::internal_prelude::*;
 use crate::kernel::KernelContext;
 use crate::mapping::{DynMapping, MappingBinding};
 
-pub struct Element<I: Clone + 'static> {
+pub struct Element<I: FieldIndex> {
     pub index: I,
     pub context: Context,
 }
-impl<I: Clone + 'static> Element<I> {
+impl<I: FieldIndex> Element<I> {
     pub fn index(&self) -> I {
         self.index.clone()
     }
@@ -39,14 +39,14 @@ impl Context {
             kernel,
         }
     }
-    pub fn bind_local<X: Access, T: EmanationType>(
+    pub fn bind_local<X: Access, I: FieldIndex>(
         &mut self,
-        field: Field<X, T>,
-        mapping: impl Mapping<X, T::Index> + 'static,
+        field: Field<X, I>,
+        mapping: impl Mapping<X, I> + 'static,
     ) {
         let old = self.bindings.insert(
             field.handle,
-            Box::new(MappingBinding::<X, T, _>::new(mapping)),
+            Box::new(MappingBinding::<X, I, _>::new(mapping)),
         );
         assert!(old.is_none(), "Field already bound");
     }

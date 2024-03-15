@@ -13,7 +13,7 @@ pub enum Material {
     Default = 0,
     NULL = u32::MAX,
 }
-impl EmanationType for Material {}
+impl FieldIndex for Material {}
 
 impl PartitionIndex for Material {
     fn to(this: Self) -> u32 {
@@ -35,7 +35,7 @@ struct Particle {
     material: Material,
 }
 
-impl EmanationType for Particle {}
+impl FieldIndex for Particle {}
 
 const SIZE: u32 = 512;
 

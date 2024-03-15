@@ -9,7 +9,7 @@ use winit::event_loop::ControlFlow;
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum Particles {}
 
-impl EmanationType for Particles {}
+impl FieldIndex for Particles {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Value, Structure)]
 #[repr(C)]

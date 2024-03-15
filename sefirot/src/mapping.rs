@@ -74,7 +74,7 @@ pub trait Mapping<X: Access, I: 'static>:
 mod private {
     use super::*;
     pub trait Sealed {}
-    impl<X: Access, T: EmanationType, M: Mapping<X, T::Index>> Sealed for MappingBinding<X, T, M> {}
+    impl<X: Access, I: FieldIndex, M: Mapping<X, I>> Sealed for MappingBinding<X, I, M> {}
 }
 
 pub trait DynMapping: Send + Sync + 'static + private::Sealed {
@@ -88,11 +88,11 @@ pub trait DynMapping: Send + Sync + 'static + private::Sealed {
     fn save_dyn(&self, level: AccessLevel, ctx: &mut Context, binding: FieldHandle);
 }
 
-pub(crate) struct MappingBinding<X: Access, T: EmanationType, M: Mapping<X, T::Index>> {
+pub(crate) struct MappingBinding<X: Access, I: FieldIndex, M: Mapping<X, I>> {
     pub(crate) mapping: M,
-    pub(crate) _marker: PhantomData<fn() -> (X, T)>,
+    pub(crate) _marker: PhantomData<fn() -> (X, I)>,
 }
-impl<X: Access, T: EmanationType, M: Mapping<X, T::Index>> MappingBinding<X, T, M> {
+impl<X: Access, I: FieldIndex, M: Mapping<X, I>> MappingBinding<X, I, M> {
     pub(crate) fn new(mapping: M) -> Self {
         Self {
             mapping,
@@ -100,7 +100,7 @@ impl<X: Access, T: EmanationType, M: Mapping<X, T::Index>> MappingBinding<X, T, 
         }
     }
 }
-impl<X: Access, T: EmanationType, M: Mapping<X, T::Index>> DynMapping for MappingBinding<X, T, M> {
+impl<X: Access, I: FieldIndex, M: Mapping<X, I>> DynMapping for MappingBinding<X, I, M> {
     fn access_dyn(
         &self,
         level: AccessLevel,
@@ -109,7 +109,7 @@ impl<X: Access, T: EmanationType, M: Mapping<X, T::Index>> DynMapping for Mappin
         binding: FieldHandle,
     ) -> Box<dyn Any> {
         debug_assert!(level <= X::level());
-        <M as ListMapping<<X as ListAccess>::List, T::Index>>::access_dyn(
+        <M as ListMapping<<X as ListAccess>::List, I>>::access_dyn(
             &self.mapping,
             level,
             index,
@@ -119,7 +119,7 @@ impl<X: Access, T: EmanationType, M: Mapping<X, T::Index>> DynMapping for Mappin
     }
     fn save_dyn(&self, level: AccessLevel, ctx: &mut Context, binding: FieldHandle) {
         debug_assert!(level <= X::level());
-        <M as ListMapping<<X as ListAccess>::List, T::Index>>::save_dyn(
+        <M as ListMapping<<X as ListAccess>::List, I>>::save_dyn(
             &self.mapping,
             level,
             ctx,

@@ -1,11 +1,12 @@
-use super::prelude::*;
 use bevy::prelude::*;
 use bevy::winit::WinitWindows;
 use luisa::lang::types::vector::{Vec2, Vec4};
 
+use super::prelude::*;
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Display;
-impl EmanationType for Display {}
+impl FieldIndex for Display {}
 
 #[derive(Component)]
 pub struct DisplayTexture {

@@ -17,7 +17,7 @@ pub struct VarCache<V: Value, I> {
 #[derive(Debug, Clone, Copy)]
 pub struct VarCacheMapping<M>(pub M);
 
-fn get_cache<'a, V: Value, I: 'static + Clone, M: SimpleExprMapping<V, I>>(
+fn get_cache<'a, V: Value, I: FieldIndex, M: SimpleExprMapping<V, I>>(
     this: &'a M,
     index: &I,
     ctx: &'a mut Context,
@@ -39,11 +39,11 @@ fn get_cache<'a, V: Value, I: 'static + Clone, M: SimpleExprMapping<V, I>>(
 
 /// A trait describing a way of getting and setting a value given an index.
 /// See [`CachedMapping`] for use.
-pub trait SimpleExprMapping<V: Value, I: 'static + Clone>: Send + Sync + 'static {
+pub trait SimpleExprMapping<V: Value, I: FieldIndex>: Send + Sync + 'static {
     fn get_expr(&self, index: &I, ctx: &mut Context, binding: FieldHandle) -> Expr<V>;
     fn set_expr(&self, index: &I, value: Expr<V>, ctx: &mut Context, binding: FieldHandle);
 }
-impl<X, V: Value, I: 'static + Clone> Mapping<Expr<V>, I> for VarCacheMapping<X>
+impl<X, V: Value, I: FieldIndex> Mapping<Expr<V>, I> for VarCacheMapping<X>
 where
     X: SimpleExprMapping<V, I>,
 {
@@ -51,7 +51,7 @@ where
         **get_cache(&self.0, index, ctx, binding).value
     }
 }
-impl<X, V: Value, I: 'static + Clone> Mapping<Var<V>, I> for VarCacheMapping<X>
+impl<X, V: Value, I: FieldIndex> Mapping<Var<V>, I> for VarCacheMapping<X>
 where
     X: SimpleExprMapping<V, I>,
 {
@@ -68,7 +68,7 @@ where
         self.0.set_expr(&cache.index, **cache.value, ctx, binding);
     }
 }
-impl<X, V: Value, I: 'static + Clone> Mapping<AtomicRef<V>, I> for VarCacheMapping<X>
+impl<X, V: Value, I: FieldIndex> Mapping<AtomicRef<V>, I> for VarCacheMapping<X>
 where
     X: SimpleExprMapping<V, I> + Mapping<AtomicRef<V>, I>,
 {
@@ -79,7 +79,7 @@ where
         self.0.save(ctx, binding);
     }
 }
-impl<X, V: Value, I: 'static + Clone> Mapping<Static<V>, I> for VarCacheMapping<X>
+impl<X, V: Value, I: FieldIndex> Mapping<Static<V>, I> for VarCacheMapping<X>
 where
     X: SimpleExprMapping<V, I> + Mapping<Static<V>, I>,
 {
