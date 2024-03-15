@@ -11,7 +11,6 @@ use crate::internal_prelude::*;
 use crate::kernel::KernelContext;
 use crate::mapping::cache::impl_cache_mapping;
 
-// TODO: Consider swapping this, so you first create domain and then bind.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct StaticDomain<const N: usize>(pub [u32; N]);
 impl StaticDomain<1> {

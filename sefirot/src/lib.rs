@@ -30,6 +30,7 @@ mod internal_prelude {
 pub mod prelude {
     pub use luisa::prelude::*;
     pub use luisa_compute as luisa;
+    pub use sefirot_macro::{track, tracked};
 
     pub use crate::domain::{Domain, IndexDomain};
     pub use crate::element::Element;

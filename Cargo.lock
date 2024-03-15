@@ -2118,6 +2118,7 @@ dependencies = [
  "petgraph",
  "pretty-type-name",
  "rand",
+ "sefirot_macro",
  "smallvec",
  "static_assertions",
  "take_mut",
@@ -2130,6 +2131,14 @@ name = "sefirot_grid"
 version = "0.1.0"
 dependencies = [
  "sefirot",
+]
+
+[[package]]
+name = "sefirot_macro"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
 ]
 
 [[package]]

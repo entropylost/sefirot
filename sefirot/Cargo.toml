@@ -16,6 +16,7 @@ id_newtype = { path = "../id_newtype" }
 once_cell = "1.19.0"
 dashmap = "5.5.3"
 dyn-clone = "1.0.17"
+sefirot_macro = { path = "../sefirot_macro" }
 
 [dependencies.luisa_compute]
 git = "https://github.com/iMplode-nZ/luisa-compute-rs"

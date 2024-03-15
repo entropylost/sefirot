@@ -36,7 +36,6 @@ pub struct KernelContext {
 
 pub type LuisaKernel<S> = luisa::runtime::Kernel<<S as KernelSignature>::LuisaSignature>;
 
-// TODO: Find a way of passing the domain into the kernel.
 pub struct Kernel<I: FieldIndex, S: KernelSignature, A: 'static = ()> {
     pub(crate) domain: Box<dyn Domain<I = I, A = A>>,
     pub(crate) raw: LuisaKernel<S>,
@@ -93,7 +92,7 @@ impl<I: FieldIndex, S: KernelSignature, A: 'static> Kernel<I, S, A> {
                 kernel_context.builder.into_inner()
             });
         });
-        // TODO: Fix the name - F is generally boring. Perhaps with `CoerceUnsized`?
+        // TODO: Fix the name - F is generally boring, or a closure inside so can grab the container name.
         Kernel {
             domain,
             raw: device.compile_kernel_def_with_options(&kernel, options),
