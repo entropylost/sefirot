@@ -3,6 +3,8 @@ use quote::quote_spanned;
 use syn::spanned::Spanned;
 use syn::*;
 
+// TODO: Add option to disable fast math.
+// See https://docs.rs/syn/latest/syn/meta/fn.parser.html
 fn kernel_impl(f: ItemFn, init_vis: Visibility) -> TokenStream {
     let bevy_sefirot_path: Path = parse_quote!(::bevy_sefirot);
     let span = f.span();
@@ -14,7 +16,7 @@ fn kernel_impl(f: ItemFn, init_vis: Visibility) -> TokenStream {
     else {
         panic!("Function must return a `Kernel`.");
     };
-    let (index_type, kernel_sig, domain_args_sig) = {
+    let (kernel_sig, domain_args_sig) = {
         let Type::Path(path) = &*kernel_type else {
             panic!("Function must return a `Kernel`.");
         };
@@ -27,24 +29,21 @@ fn kernel_impl(f: ItemFn, init_vis: Visibility) -> TokenStream {
         else {
             panic!("Function must return a `Kernel`.");
         };
-        if args.len() != 2 && args.len() != 3 {
+        if args.len() != 1 && args.len() != 2 {
             panic!("Function must return a `Kernel`.");
         }
-        let GenericArgument::Type(index_type) = &args[0] else {
+        let GenericArgument::Type(kernel_sig) = &args[0] else {
             panic!("Function must return a `Kernel`.");
         };
-        let GenericArgument::Type(kernel_sig) = &args[1] else {
-            panic!("Function must return a `Kernel`.");
-        };
-        let domain_args_sig = if args.len() == 3 {
-            match &args[2] {
+        let domain_args_sig = if args.len() == 2 {
+            match &args[1] {
                 GenericArgument::Type(x) => x.clone(),
                 _ => panic!("Function must return a `Kernel`."),
             }
         } else {
             parse_quote!(())
         };
-        (index_type.clone(), kernel_sig.clone(), domain_args_sig)
+        (kernel_sig.clone(), domain_args_sig)
     };
     let kernel_name = sig.ident;
 
@@ -65,9 +64,8 @@ fn kernel_impl(f: ItemFn, init_vis: Visibility) -> TokenStream {
                 && segments[0].ident == "Kernel"
                 && segments[0].arguments == PathArguments::None
             {
-                segments[0].arguments = PathArguments::AngleBracketed(
-                    parse_quote!(::<#index_type, #kernel_sig, #domain_args_sig>),
-                );
+                segments[0].arguments =
+                    PathArguments::AngleBracketed(parse_quote!(::<#kernel_sig, #domain_args_sig>));
                 last_stmt = Stmt::Expr(
                     parse_quote! {
                         #last_stmt.with_name(stringify!(#kernel_name))
@@ -85,7 +83,7 @@ fn kernel_impl(f: ItemFn, init_vis: Visibility) -> TokenStream {
 
     quote_spanned! {span=>
         #[allow(non_upper_case_globals)]
-        #vis static #kernel_name: #bevy_sefirot_path::KernelCell<#index_type, #kernel_sig, #domain_args_sig> =
+        #vis static #kernel_name: #bevy_sefirot_path::KernelCell<#kernel_sig, #domain_args_sig> =
             #bevy_sefirot_path::KernelCell::default();
         #(#attrs)*
         #[forbid(dead_code)]
@@ -109,7 +107,7 @@ pub fn kernel(
 #[test]
 fn test_kernel() {
     let f = parse_quote! {
-        fn clear_display_kernel(particles: Res<Emanation<Particles>>, device: LuisaDevice, domain: Res<ArrayIndex>) -> Kernel<Particles, fn(Tex2d<Vec4<f32>>, Vec4<f32>)> {
+        fn clear_display_kernel(particles: Res<Emanation<Particles>>, device: LuisaDevice, domain: Res<ArrayIndex>) -> Kernel<fn(Tex2d<Vec4<f32>>, Vec4<f32>)> {
             Kernel::build(domain, |el, display, clear_color| {
                 display.write(dispatch_id().xy(), clear_color);
             })

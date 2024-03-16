@@ -36,13 +36,14 @@ pub mod prelude {
     pub use crate::element::Element;
     pub use crate::field::set::FieldSet;
     pub use crate::field::{AField, EField, Field, VField};
+    pub use crate::graph::AsNodes;
     pub use crate::kernel::Kernel;
 }
 
 pub mod ext_prelude {
     pub use crate::domain::DispatchArgs;
     pub use crate::element::Context;
-    pub use crate::graph::{AsNodes, NodeConfigs};
+    pub use crate::graph::NodeConfigs;
     pub use crate::kernel::KernelContext;
     pub use crate::mapping::{EMapping, Mapping, VMapping};
     pub use crate::prelude::*;

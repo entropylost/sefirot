@@ -35,13 +35,11 @@ pub fn save_cache<'a, V: Value, I: FieldIndex, M: SimpleExprMapping<V, I>>(
     ctx: &'a mut Context,
     binding: FieldId,
 ) {
-    let cache = ctx
-        .cache
-        .remove(&binding)
-        .unwrap()
-        .downcast::<VarCache<V, I>>()
-        .unwrap();
-    this.set_expr(&cache.index, **cache.value, ctx, binding);
+    if let Some(cache) = ctx.cache.remove(&binding) {
+        let cache = cache.downcast::<VarCache<V, I>>().unwrap();
+
+        this.set_expr(&cache.index, **cache.value, ctx, binding);
+    }
 }
 
 /// A trait describing a way of getting and setting a value given an index.

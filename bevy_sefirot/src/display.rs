@@ -7,7 +7,6 @@ use super::prelude::*;
 
 #[derive(Component)]
 pub struct DisplayTexture {
-    pub fields: FieldSet,
     /// The color texture for the display. Note that the format is not guaranteed,
     /// so this should not be used for intermediate calculations.
     pub color: VField<Vec4<f32>, Vec2<u32>>,
@@ -16,6 +15,7 @@ pub struct DisplayTexture {
     /// The domain of the screen.
     // TODO: Implement resizing.
     pub domain: StaticDomain<2>,
+    _fields: FieldSet,
 }
 
 #[derive(Deref, Component)]
@@ -59,7 +59,7 @@ pub fn setup_display(
         commands.entity(entity).insert((
             LuisaSwapchain(swapchain),
             DisplayTexture {
-                fields,
+                _fields: fields,
                 domain,
                 color,
                 color_texture,

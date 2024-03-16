@@ -3,9 +3,10 @@ use std::sync::Arc;
 use sefirot::ext_prelude::*;
 use sefirot::field::FieldHandle;
 use sefirot::luisa::lang::types::vector::Vec2;
-use sefirot::mapping::buffer::{HandledTex2d, IntoHandled, StaticDomain};
+use sefirot::mapping::buffer::{HandledBuffer, HandledTex2d, IntoHandled, StaticDomain};
 use sefirot::mapping::function::CachedFnMapping;
 use sefirot::mapping::index::IndexMap;
+use sefirot::mapping::AMapping;
 
 // TODO: Actually make this useful.
 
@@ -13,13 +14,15 @@ use sefirot::mapping::index::IndexMap;
 pub struct GridDomain {
     index: EField<Vec2<u32>, Vec2<i32>>,
     index_handle: Arc<FieldHandle>,
+    morton_index: Option<EField<u32, Vec2<i32>>>,
+    morton_handle: Option<Arc<FieldHandle>>,
     start: [i32; 2],
     shifted_domain: StaticDomain<2>,
 }
 impl Domain for GridDomain {
     type A = ();
     type I = Expr<Vec2<i32>>;
-    #[tracked(crate = "sefirot::luisa")]
+    #[tracked]
     fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<Self::I> {
         Element {
             index: dispatch_id().xy().cast_i32() + Vec2::from(self.start),
@@ -38,7 +41,7 @@ impl IndexDomain for GridDomain {
             context: Context::new(kernel_context),
         }
     }
-    #[tracked(crate = "sefirot::luisa")]
+    #[tracked]
     fn get_index_fallable(
         &self,
         index: &Self::I,
@@ -67,13 +70,50 @@ impl GridDomain {
     pub fn new(start: [i32; 2], size: [u32; 2]) -> Self {
         let (index, handle) = Field::create_bind(
             "grid-index",
-            CachedFnMapping::<Expr<Vec2<u32>>, Expr<Vec2<i32>>, _>::new(move |index, _ctx| {
-                track!((index - Vec2::from(start)).cast_u32())
-            }),
+            CachedFnMapping::<Expr<Vec2<u32>>, Expr<Vec2<i32>>, _>::new(track!(
+                move |index, _ctx| { (index - Vec2::from(start)).cast_u32() }
+            )),
         );
+        let (morton_index, morton_handle) =
+            if size[0] == size[1] && size[0].is_power_of_two() && size[0] <= 1 << 16 {
+                let (morton_index, morton_handle) = Field::create_bind(
+                    "grid-morton-index",
+                    IndexMap::new(
+                        index,
+                        CachedFnMapping::<Expr<u32>, Expr<Vec2<u32>>, _>::new(track!(
+                            move |index, _ctx| {
+                                // https://graphics.stanford.edu/%7Eseander/bithacks.html#InterleaveBMN
+                                // TODO: Apparently it's possible to implement this with half as much computations
+                                // but it requires u64s: see https://docs.rs/morton/0.3.0/src/morton/lib.rs.html
+
+                                let x = index.x.var();
+
+                                *x = (x | (x << 8)) & 0x00ff00ff;
+                                *x = (x | (x << 4)) & 0x0f0f0f0f; // 0b00001111
+                                *x = (x | (x << 2)) & 0x33333333; // 0b00110011
+                                *x = (x | (x << 1)) & 0x55555555; // 0b01010101
+
+                                let y = index.y.var();
+
+                                *y = (y | (y << 8)) & 0x00ff00ff;
+                                *y = (y | (y << 4)) & 0x0f0f0f0f; // 0b00001111
+                                *y = (y | (y << 2)) & 0x33333333; // 0b00110011
+                                *y = (y | (y << 1)) & 0x55555555; // 0b01010101
+
+                                x | (y << 1)
+                            }
+                        )),
+                    ),
+                );
+                (Some(morton_index), Some(Arc::new(morton_handle)))
+            } else {
+                (None, None)
+            };
         Self {
             index,
             index_handle: Arc::new(handle),
+            morton_index,
+            morton_handle,
             start,
             shifted_domain: StaticDomain(size),
         }
@@ -83,5 +123,27 @@ impl GridDomain {
         texture: impl IntoHandled<H = HandledTex2d<V>>,
     ) -> impl VMapping<V, Vec2<i32>> {
         IndexMap::new(self.index, self.shifted_domain.map_tex2d(texture))
+    }
+    pub fn map_buffer_morton<V: Value>(
+        &self,
+        buffer: impl IntoHandled<H = HandledBuffer<V>>,
+    ) -> impl AMapping<V, Vec2<i32>> {
+        let morton_index = self
+            .morton_index
+            .expect("Morton index is not available, due to a non power-of-two square size");
+        IndexMap::new(
+            morton_index,
+            StaticDomain::<1>::new(self.size()[0] * self.size()[1]).map_buffer(buffer),
+        )
+    }
+    #[tracked]
+    pub fn on_adjacent(&self, el: &Element<Expr<Vec2<i32>>>, f: impl Fn(Element<Expr<Vec2<i32>>>)) {
+        for dir in [Vec2::x(), Vec2::y(), -Vec2::x(), -Vec2::y()] {
+            let (el, within) =
+                self.get_index_fallable(&(el.index + dir), el.context.kernel.clone());
+            if within {
+                f(el);
+            }
+        }
     }
 }

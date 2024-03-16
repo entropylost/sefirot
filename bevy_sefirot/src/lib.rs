@@ -7,7 +7,6 @@ use bevy::ecs::schedule::{NodeId, SystemTypeSet};
 use bevy::prelude::*;
 use bevy::utils::HashMap;
 use luisa_compute::runtime::Device;
-use sefirot::field::FieldIndex;
 use sefirot::graph::{AsNodes, ComputeGraph, NodeHandle};
 use sefirot::kernel::{Kernel, KernelSignature};
 use sefirot::luisa as luisa_compute;
@@ -27,21 +26,19 @@ pub mod prelude {
     pub use crate::luisa::{InitKernel, LuisaDevice as Device, LuisaPlugin};
 }
 
-pub struct KernelCell<I: FieldIndex, S: KernelSignature, A: 'static = ()>(
-    OnceLock<Kernel<I, S, A>>,
-);
+pub struct KernelCell<S: KernelSignature, A: 'static = ()>(OnceLock<Kernel<S, A>>);
 
-impl<I: FieldIndex, S: KernelSignature, A: 'static> Deref for KernelCell<I, S, A> {
-    type Target = Kernel<I, S, A>;
+impl<S: KernelSignature, A: 'static> Deref for KernelCell<S, A> {
+    type Target = Kernel<S, A>;
     fn deref(&self) -> &Self::Target {
         self.0.get().unwrap()
     }
 }
-impl<I: FieldIndex, S: KernelSignature, A: 'static> KernelCell<I, S, A> {
+impl<S: KernelSignature, A: 'static> KernelCell<S, A> {
     pub const fn default() -> Self {
         Self(OnceLock::new())
     }
-    pub fn init(&self, kernel: Kernel<I, S, A>) {
+    pub fn init(&self, kernel: Kernel<S, A>) {
         self.0.set(kernel).ok().unwrap();
     }
 }

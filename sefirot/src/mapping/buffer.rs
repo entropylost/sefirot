@@ -11,6 +11,7 @@ use crate::internal_prelude::*;
 use crate::kernel::KernelContext;
 use crate::mapping::cache::impl_cache_mapping;
 
+// TODO: Offer ways of creating buffers of the correct size.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct StaticDomain<const N: usize>(pub [u32; N]);
 impl StaticDomain<1> {
@@ -21,7 +22,13 @@ impl StaticDomain<1> {
         &self,
         buffer: impl IntoHandled<H = HandledBuffer<V>>,
     ) -> BufferMapping<V> {
-        BufferMapping(buffer.into_handled())
+        let buffer = buffer.into_handled();
+        debug_assert_eq!(buffer.len() as u32, self.len());
+        BufferMapping(buffer)
+    }
+    #[allow(clippy::len_without_is_empty)]
+    pub fn len(&self) -> u32 {
+        self.0[0]
     }
     pub fn width(&self) -> u32 {
         self.0[0]
@@ -35,7 +42,9 @@ impl StaticDomain<2> {
         &self,
         texture: impl IntoHandled<H = HandledTex2d<V>>,
     ) -> Tex2dMapping<V> {
-        Tex2dMapping(texture.into_handled())
+        let texture = texture.into_handled();
+        debug_assert_eq!(texture.size()[0..2], self.0);
+        Tex2dMapping(texture)
     }
     pub fn width(&self) -> u32 {
         self.0[0]
@@ -52,7 +61,9 @@ impl StaticDomain<3> {
         &self,
         texture: impl IntoHandled<H = HandledTex3d<V>>,
     ) -> Tex3dMapping<V> {
-        Tex3dMapping(texture.into_handled())
+        let texture = texture.into_handled();
+        debug_assert_eq!(texture.size(), self.0);
+        Tex3dMapping(texture)
     }
     pub fn width(&self) -> u32 {
         self.0[0]

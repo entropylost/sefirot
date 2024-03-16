@@ -91,12 +91,12 @@ impl FieldId {
 )]
 #[repr(C)]
 pub struct Field<X: Access, I: FieldIndex> {
-    pub(crate) handle: FieldId,
+    pub(crate) id: FieldId,
     pub(crate) _marker: PhantomData<fn() -> (I, X)>,
 }
 impl<X: Access, I: FieldIndex> PartialEq for Field<X, I> {
     fn eq(&self, other: &Self) -> bool {
-        self.handle == other.handle
+        self.id == other.id
     }
 }
 impl<X: Access, I: FieldIndex> Eq for Field<X, I> {}
@@ -119,47 +119,41 @@ impl<X: Access, T: FieldIndex> Debug for Field<X, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct(
             &self
-                .handle
+                .id
                 .field_desc()
                 .unwrap_or_else(|| "Field[dropped]".to_string()),
         )
-        .field("handle", &self.handle)
+        .field("handle", &self.id)
         .finish()
     }
 }
 impl<X: Access, T: FieldIndex> Hash for Field<X, T> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.handle.hash(state);
+        self.id.hash(state);
     }
 }
 
 impl<X: Access, I: FieldIndex> Field<X, I> {
-    pub fn at(&self, el: &mut Element<I>) -> X {
-        self.handle
-            .at_opt::<X, I>(&el.index, &mut el.context)
-            .unwrap()
+    pub fn at(&self, index: &I, ctx: &mut Context) -> X {
+        self.id.at_opt::<X, I>(index, ctx).unwrap()
     }
     pub fn bind(&self, mapping: impl Mapping<X, I>) -> Self {
-        let binding = &mut FIELDS.get_mut(&self.handle).expect("Field dropped").binding;
+        let binding = &mut FIELDS.get_mut(&self.id).expect("Field dropped").binding;
         debug_assert!(binding.is_none());
         *binding = Some(Box::new(MappingBinding::<X, I, _>::new(mapping)));
         *self
     }
     pub fn name(&self) -> String {
-        FIELDS
-            .get(&self.handle)
-            .expect("Field dropped")
-            .name
-            .clone()
+        FIELDS.get(&self.id).expect("Field dropped").name.clone()
     }
-    pub fn handle(&self) -> FieldId {
-        self.handle
+    pub fn id(&self) -> FieldId {
+        self.id
     }
     /// Creates a new field with the given name, returning the field and a root handle, which will drop the field when dropped.
     pub fn create(name: impl AsRef<str>) -> (Self, FieldHandle) {
-        let handle = FieldId::unique();
+        let id = FieldId::unique();
         FIELDS.insert(
-            handle,
+            id,
             RawField {
                 name: name.as_ref().to_string(),
                 access_type_name: pretty_type_name::<X>(),
@@ -169,31 +163,16 @@ impl<X: Access, I: FieldIndex> Field<X, I> {
         );
         (
             Field {
-                handle,
+                id,
                 _marker: PhantomData,
             },
-            FieldHandle(handle),
+            FieldHandle(id),
         )
     }
     pub fn create_bind(name: impl AsRef<str>, mapping: impl Mapping<X, I>) -> (Self, FieldHandle) {
         let (field, handle) = Self::create(name);
         field.bind(mapping);
         (field, handle)
-    }
-}
-impl<V: Value, I: FieldIndex> Field<Expr<V>, I> {
-    pub fn get(&self, el: &mut Element<I>) -> Expr<V> {
-        self.at(el)
-    }
-}
-impl<V: Value, I: FieldIndex> Field<Var<V>, I> {
-    pub fn get_mut(&self, el: &mut Element<I>) -> Var<V> {
-        self.at(el)
-    }
-}
-impl<V: Value, I: FieldIndex> Field<AtomicRef<V>, I> {
-    pub fn get_atomic(&self, el: &mut Element<I>) -> AtomicRef<V> {
-        self.at(el)
     }
 }
 

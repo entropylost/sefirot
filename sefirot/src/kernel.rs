@@ -34,16 +34,38 @@ pub struct KernelContext {
     builder: Mutex<KernelBuilder>,
 }
 
+trait KernelDomain: Send + Sync + 'static {
+    type A: 'static;
+    fn kernel_dispatch_async(
+        &self,
+        domain_args: Self::A,
+        args: DispatchArgs,
+    ) -> NodeConfigs<'static>;
+}
+impl<T> KernelDomain for T
+where
+    T: Domain,
+{
+    type A = <T as Domain>::A;
+    fn kernel_dispatch_async(
+        &self,
+        domain_args: Self::A,
+        args: DispatchArgs,
+    ) -> NodeConfigs<'static> {
+        self.dispatch_async(domain_args, args)
+    }
+}
+
 pub type LuisaKernel<S> = luisa::runtime::Kernel<<S as KernelSignature>::LuisaSignature>;
 
-pub struct Kernel<I: FieldIndex, S: KernelSignature, A: 'static = ()> {
-    pub(crate) domain: Box<dyn Domain<I = I, A = A>>,
+pub struct Kernel<S: KernelSignature, A: 'static = ()> {
+    domain: Box<dyn KernelDomain<A = A>>,
     pub(crate) raw: LuisaKernel<S>,
     pub(crate) bindings: KernelBindings,
     pub(crate) debug_name: Option<String>,
     pub(crate) device: Device,
 }
-impl<I: FieldIndex, S: KernelSignature, A: 'static> Kernel<I, S, A> {
+impl<S: KernelSignature, A: 'static> Kernel<S, A> {
     pub fn with_name(mut self, name: impl AsRef<str>) -> Self {
         self.debug_name = Some(name.as_ref().to_string());
         self
@@ -51,9 +73,9 @@ impl<I: FieldIndex, S: KernelSignature, A: 'static> Kernel<I, S, A> {
     pub fn debug_name(&self) -> Option<&str> {
         self.debug_name.as_deref()
     }
-    pub fn build(
+    pub fn build<I: FieldIndex>(
         device: &Device,
-        domain: impl Domain<I = I, A = A>,
+        domain: &impl Domain<I = I, A = A>,
         f: S::Function<'_, I>,
     ) -> Self {
         Self::build_with_options(
@@ -66,13 +88,13 @@ impl<I: FieldIndex, S: KernelSignature, A: 'static> Kernel<I, S, A> {
             f,
         )
     }
-    pub fn build_with_options(
+    pub fn build_with_options<I: FieldIndex>(
         device: &Device,
         options: KernelBuildOptions,
-        domain: impl Domain<I = I, A = A>,
+        domain: &impl Domain<I = I, A = A>,
         f: S::Function<'_, I>,
     ) -> Self {
-        let domain = domain.into_boxed();
+        let domain = dyn_clone::clone(domain);
         let mut bindings = None;
         let mut builder = KernelBuilder::new(Some(device.clone()), true);
         let kernel = builder.build_kernel(|builder| {
@@ -92,6 +114,7 @@ impl<I: FieldIndex, S: KernelSignature, A: 'static> Kernel<I, S, A> {
                 kernel_context.builder.into_inner()
             });
         });
+        let domain = Box::new(domain);
         // TODO: Fix the name - F is generally boring, or a closure inside so can grab the container name.
         Kernel {
             domain,
@@ -104,7 +127,7 @@ impl<I: FieldIndex, S: KernelSignature, A: 'static> Kernel<I, S, A> {
 }
 macro_rules! impl_kernel {
     () => {
-        impl<I: FieldIndex> Kernel<I, fn()> {
+        impl Kernel<fn()> {
             pub fn dispatch_blocking(&self) {
                 self.dispatch_blocking_with_domain_args(())
             }
@@ -112,7 +135,7 @@ macro_rules! impl_kernel {
                 self.dispatch_with_domain_args(())
             }
         }
-        impl<I: FieldIndex, A: 'static> Kernel<I, fn(), A> {
+        impl<A: 'static> Kernel<fn(), A> {
             pub fn dispatch_blocking_with_domain_args(&self, domain_args: A) {
                 let mut graph = ComputeGraph::new(&self.device);
                 graph.add(self.dispatch_with_domain_args(domain_args));
@@ -125,12 +148,12 @@ macro_rules! impl_kernel {
                     },
                     debug_name: self.debug_name.clone(),
                 };
-                self.domain.dispatch_async(domain_args, args)
+                self.domain.kernel_dispatch_async(domain_args, args)
             }
         }
     };
     ($T0:ident: $S0:ident $(,$Tn:ident: $Sn:ident)*) => {
-        impl<I: FieldIndex, $T0: KernelArg + 'static $(, $Tn: KernelArg + 'static)*> Kernel<I, fn($T0 $(, $Tn)*)> {
+        impl<$T0: KernelArg + 'static $(, $Tn: KernelArg + 'static)*> Kernel<fn($T0 $(, $Tn)*)> {
             #[allow(non_snake_case)]
             #[allow(clippy::too_many_arguments)]
             pub fn dispatch_blocking<$S0: AsKernelArg<Output = $T0> $(, $Sn: AsKernelArg<Output = $Tn>)*>
@@ -144,7 +167,7 @@ macro_rules! impl_kernel {
                 self.dispatch_with_domain_args((), $S0 $(, $Sn)*)
             }
         }
-        impl<I: FieldIndex, A: 'static, $T0: KernelArg + 'static $(, $Tn: KernelArg + 'static)*> Kernel<I, fn($T0 $(, $Tn)*), A> {
+        impl<A: 'static, $T0: KernelArg + 'static $(, $Tn: KernelArg + 'static)*> Kernel<fn($T0 $(, $Tn)*), A> {
             #[allow(non_snake_case)]
             #[allow(unused_variables)]
             #[allow(clippy::too_many_arguments)]
@@ -165,7 +188,7 @@ macro_rules! impl_kernel {
                     },
                     debug_name: self.debug_name.clone(),
                 };
-                self.domain.dispatch_async(domain_args, args)
+                self.domain.kernel_dispatch_async(domain_args, args)
             }
         }
         impl_kernel!( $($Tn: $Sn),* );

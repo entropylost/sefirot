@@ -6,6 +6,25 @@ use crate::graph::NodeConfigs;
 use crate::internal_prelude::*;
 use crate::kernel::KernelContext;
 
+pub trait AsKernelContext {
+    fn as_kernel_context(&self) -> &Arc<KernelContext>;
+}
+impl AsKernelContext for Arc<KernelContext> {
+    fn as_kernel_context(&self) -> &Arc<KernelContext> {
+        self
+    }
+}
+impl<I: FieldIndex> AsKernelContext for Element<I> {
+    fn as_kernel_context(&self) -> &Arc<KernelContext> {
+        &self.context.kernel
+    }
+}
+impl AsKernelContext for Context {
+    fn as_kernel_context(&self) -> &Arc<KernelContext> {
+        &self.kernel
+    }
+}
+
 pub trait IndexDomain: Domain {
     fn get_index(&self, index: &Self::I, kernel_context: Arc<KernelContext>) -> Element<Self::I>;
     // Returns true if the index is within the domain.
@@ -14,6 +33,9 @@ pub trait IndexDomain: Domain {
         index: &Self::I,
         kernel_context: Arc<KernelContext>,
     ) -> (Element<Self::I>, Expr<bool>);
+    fn index(&self, index: Self::I, kernel_context: &impl AsKernelContext) -> Element<Self::I> {
+        self.get_index(&index, kernel_context.as_kernel_context().clone())
+    }
 }
 
 /// A trait representing a space across which computations may be performed by calling kernels.
@@ -24,12 +46,6 @@ pub trait Domain: DynClone + Send + Sync + 'static {
     type I: FieldIndex;
     fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<Self::I>;
     fn dispatch_async(&self, domain_args: Self::A, args: DispatchArgs) -> NodeConfigs<'static>;
-    fn into_boxed(self) -> Box<dyn Domain<A = Self::A, I = Self::I>>
-    where
-        Self: Sized,
-    {
-        Box::new(self)
-    }
 }
 dyn_clone::clone_trait_object!(<A: 'static, I: FieldIndex> Domain<A = A, I = I>);
 
@@ -41,12 +57,6 @@ impl<A: 'static, I: FieldIndex> Domain for Box<dyn Domain<A = A, I = I>> {
     }
     fn dispatch_async(&self, domain_args: A, args: DispatchArgs) -> NodeConfigs<'static> {
         self.as_ref().dispatch_async(domain_args, args)
-    }
-    fn into_boxed(self) -> Box<dyn Domain<A = A, I = I>>
-    where
-        Self: Sized,
-    {
-        self
     }
 }
 

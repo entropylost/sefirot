@@ -1,6 +1,9 @@
 use std::any::Any;
 use std::collections::HashMap;
+use std::ops::Deref;
 use std::sync::Arc;
+
+use luisa::lang::types::AtomicRef;
 
 use crate::field::access::AccessLevel;
 use crate::field::FIELDS;
@@ -13,14 +16,23 @@ pub struct Element<I: FieldIndex> {
     pub context: Context,
 }
 impl<I: FieldIndex> Element<I> {
-    pub fn index(&self) -> I {
-        self.index.clone()
+    pub fn expr<V: Value>(&mut self, field: &Field<Expr<V>, I>) -> Expr<V> {
+        self.get(field)
     }
-    pub fn context(&self) -> &Context {
-        &self.context
+    pub fn var<V: Value>(&mut self, field: &Field<Var<V>, I>) -> Var<V> {
+        self.get(field)
     }
-    pub fn context_mut(&mut self) -> &mut Context {
-        &mut self.context
+    pub fn atomic<V: Value>(&mut self, field: &Field<AtomicRef<V>, I>) -> AtomicRef<V> {
+        self.get(field)
+    }
+    pub fn get<X: Access>(&mut self, field: &Field<X, I>) -> X {
+        field.at(&self.index, &mut self.context)
+    }
+}
+impl<I: FieldIndex> Deref for Element<I> {
+    type Target = I;
+    fn deref(&self) -> &Self::Target {
+        &self.index
     }
 }
 
@@ -44,10 +56,9 @@ impl Context {
         field: Field<X, I>,
         mapping: impl Mapping<X, I> + 'static,
     ) {
-        let old = self.bindings.insert(
-            field.handle,
-            Box::new(MappingBinding::<X, I, _>::new(mapping)),
-        );
+        let old = self
+            .bindings
+            .insert(field.id, Box::new(MappingBinding::<X, I, _>::new(mapping)));
         assert!(old.is_none(), "Field already bound");
     }
     pub fn on_mapping_opt<R>(
