@@ -23,6 +23,9 @@ impl StaticDomain<1> {
     ) -> BufferMapping<V> {
         BufferMapping(buffer.into_handled())
     }
+    pub fn width(&self) -> u32 {
+        self.0[0]
+    }
 }
 impl StaticDomain<2> {
     pub fn new(width: u32, height: u32) -> Self {
@@ -34,6 +37,12 @@ impl StaticDomain<2> {
     ) -> Tex2dMapping<V> {
         Tex2dMapping(texture.into_handled())
     }
+    pub fn width(&self) -> u32 {
+        self.0[0]
+    }
+    pub fn height(&self) -> u32 {
+        self.0[1]
+    }
 }
 impl StaticDomain<3> {
     pub fn new(width: u32, height: u32, depth: u32) -> Self {
@@ -44,6 +53,15 @@ impl StaticDomain<3> {
         texture: impl IntoHandled<H = HandledTex3d<V>>,
     ) -> Tex3dMapping<V> {
         Tex3dMapping(texture.into_handled())
+    }
+    pub fn width(&self) -> u32 {
+        self.0[0]
+    }
+    pub fn height(&self) -> u32 {
+        self.0[1]
+    }
+    pub fn depth(&self) -> u32 {
+        self.0[2]
     }
 }
 

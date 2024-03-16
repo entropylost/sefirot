@@ -54,7 +54,7 @@ pub fn setup_display(
         let color_texture = device.create_tex2d::<Vec4<f32>>(swapchain.pixel_storage(), w, h, 1);
         let domain = StaticDomain::<2>::new(w, h);
         let mapping = domain.map_tex2d(color_texture.view(0));
-        let color = fields.create_bind("display-color-final", mapping);
+        let color = fields.create_bind("display-color-swapchain", mapping);
 
         commands.entity(entity).insert((
             LuisaSwapchain(swapchain),
