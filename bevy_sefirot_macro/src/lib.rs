@@ -48,7 +48,7 @@ fn kernel_impl(f: ItemFn, init_vis: Visibility) -> TokenStream {
     let kernel_name = sig.ident;
 
     let mut last_stmt = block.stmts.pop().unwrap();
-    if let Stmt::Expr(Expr::Call(ExprCall { func, .. }), None) = &mut last_stmt {
+    if let Stmt::Expr(Expr::Call(ExprCall { func, args, .. }), None) = &mut last_stmt {
         if let Expr::Path(ExprPath {
             path:
                 Path {
@@ -62,10 +62,16 @@ fn kernel_impl(f: ItemFn, init_vis: Visibility) -> TokenStream {
             if segments.len() == 2
                 && ["build", "build_with_options"].contains(&&*segments[1].ident.to_string())
                 && segments[0].ident == "Kernel"
-                && segments[0].arguments == PathArguments::None
             {
-                segments[0].arguments =
-                    PathArguments::AngleBracketed(parse_quote!(::<#kernel_sig, #domain_args_sig>));
+                if segments[0].arguments == PathArguments::None {
+                    segments[0].arguments = PathArguments::AngleBracketed(
+                        parse_quote!(::<#kernel_sig, #domain_args_sig>),
+                    );
+                }
+                let closure_index = args.len() - 1;
+                args[closure_index] = parse_quote! {
+                    ::sefirot::prelude::track!(#args[closure_index])
+                };
                 last_stmt = Stmt::Expr(
                     parse_quote! {
                         #last_stmt.with_name(stringify!(#kernel_name))
@@ -87,13 +93,12 @@ fn kernel_impl(f: ItemFn, init_vis: Visibility) -> TokenStream {
             #bevy_sefirot_path::KernelCell::default();
         #(#attrs)*
         #[forbid(dead_code)]
-        #[tracked]
         #init_vis #sig #block
     }
 }
 
 /// Initializes a function returning a kernel during `PostStartup`.
-/// To use most kernel functions, use the `tracked` attribute or `track` macro.
+/// This automatically adds a [`sefirot::track!`] around the closure passed to [`Kernel::build`], if it exists.
 #[proc_macro_attribute]
 pub fn kernel(
     attr: proc_macro::TokenStream,

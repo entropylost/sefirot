@@ -6,7 +6,7 @@ use luisa::lang::types::AtomicRef;
 
 use super::cache::SimpleExprMapping;
 use crate::domain::{DispatchArgs, Domain, IndexDomain};
-use crate::graph::{AsNodes, NodeConfigs};
+use crate::graph::NodeConfigs;
 use crate::internal_prelude::*;
 use crate::kernel::KernelContext;
 use crate::mapping::cache::impl_cache_mapping;
@@ -83,7 +83,7 @@ impl Domain for StaticDomain<1> {
         Element::new(dispatch_id().x, Context::new(kernel_context))
     }
     fn dispatch_async(&self, _domain_args: (), args: DispatchArgs) -> NodeConfigs<'static> {
-        args.dispatch([self.0[0], 1, 1]).into_node_configs()
+        args.dispatch([self.0[0], 1, 1])
     }
 }
 impl Domain for StaticDomain<2> {
@@ -93,7 +93,7 @@ impl Domain for StaticDomain<2> {
         Element::new(dispatch_id().xy(), Context::new(kernel_context))
     }
     fn dispatch_async(&self, _domain_args: (), args: DispatchArgs) -> NodeConfigs<'static> {
-        args.dispatch([self.0[0], self.0[1], 1]).into_node_configs()
+        args.dispatch([self.0[0], self.0[1], 1])
     }
 }
 impl Domain for StaticDomain<3> {
@@ -103,7 +103,7 @@ impl Domain for StaticDomain<3> {
         Element::new(dispatch_id(), Context::new(kernel_context))
     }
     fn dispatch_async(&self, _domain_args: (), args: DispatchArgs) -> NodeConfigs<'static> {
-        args.dispatch(self.0).into_node_configs()
+        args.dispatch(self.0)
     }
 }
 impl IndexDomain for StaticDomain<1> {

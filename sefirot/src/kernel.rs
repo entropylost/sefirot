@@ -7,6 +7,13 @@ use crate::domain::{DispatchArgs, Domain};
 use crate::graph::{ComputeGraph, NodeConfigs};
 use crate::internal_prelude::*;
 
+pub fn default_kernel_build_options() -> KernelBuildOptions {
+    KernelBuildOptions {
+        async_compile: true,
+        ..Default::default()
+    }
+}
+
 #[derive(Default)]
 pub struct KernelBindings {
     bindings: Mutex<Vec<Box<dyn Fn(&mut KernelArgEncoder) + Send>>>,
@@ -78,15 +85,7 @@ impl<S: KernelSignature, A: 'static> Kernel<S, A> {
         domain: &impl Domain<I = I, A = A>,
         f: S::Function<'_, I>,
     ) -> Self {
-        Self::build_with_options(
-            device,
-            KernelBuildOptions {
-                async_compile: true,
-                ..Default::default()
-            },
-            domain,
-            f,
-        )
+        Self::build_with_options(device, default_kernel_build_options(), domain, f)
     }
     pub fn build_with_options<I: FieldIndex>(
         device: &Device,

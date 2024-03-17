@@ -16,6 +16,7 @@ pub mod utils;
 #[doc(hidden)]
 pub use bevy_ecs as _bevy_ecs;
 pub use luisa_compute as luisa;
+pub use sefirot_macro::{track, track_nc, tracked, tracked_nc};
 
 mod internal_prelude {
     pub use luisa::prelude::*;
@@ -30,7 +31,6 @@ mod internal_prelude {
 pub mod prelude {
     pub use luisa::prelude::*;
     pub use luisa_compute as luisa;
-    pub use sefirot_macro::{track, tracked};
 
     pub use crate::domain::{Domain, IndexDomain};
     pub use crate::element::Element;
@@ -38,6 +38,7 @@ pub mod prelude {
     pub use crate::field::{AField, EField, Field, VField};
     pub use crate::graph::AsNodes;
     pub use crate::kernel::Kernel;
+    pub use crate::{track, tracked};
 }
 
 pub mod ext_prelude {
@@ -47,4 +48,5 @@ pub mod ext_prelude {
     pub use crate::kernel::KernelContext;
     pub use crate::mapping::{EMapping, Mapping, VMapping};
     pub use crate::prelude::*;
+    pub use crate::{track_nc, tracked_nc};
 }

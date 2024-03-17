@@ -478,3 +478,25 @@ fn track_impl(mut ast: Expr, crate_path: &TokenStream) -> TokenStream {
 
     quote!(#ast)
 }
+
+#[proc_macro_attribute]
+pub fn tracked_nc(
+    _attr: proc_macro::TokenStream,
+    item: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    let item = TokenStream::from(item);
+    let res = quote! {
+        #[::sefirot::luisa::prelude::tracked(crate = "::sefirot::luisa")]
+        #item
+    };
+    res.into()
+}
+
+#[proc_macro]
+pub fn track_nc(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input = TokenStream::from(input);
+    let res = quote! {
+        ::sefirot::luisa::prelude::track!(crate = "::sefirot::luisa" => #input)
+    };
+    res.into()
+}

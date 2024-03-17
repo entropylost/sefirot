@@ -23,7 +23,7 @@ pub struct GridDomain {
 impl Domain for GridDomain {
     type A = ();
     type I = Expr<Vec2<i32>>;
-    #[tracked]
+    #[tracked_nc]
     fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<Self::I> {
         let index = dispatch_id().xy().cast_i32() + Vec2::from(self.start);
         let context = Context::new(kernel_context);
@@ -32,14 +32,13 @@ impl Domain for GridDomain {
     }
     fn dispatch_async(&self, _domain_args: Self::A, args: DispatchArgs) -> NodeConfigs<'static> {
         args.dispatch([self.size()[0], self.size()[1], 1])
-            .into_node_configs()
     }
 }
 impl IndexDomain for GridDomain {
     fn get_index(&self, index: &Self::I, kernel_context: Arc<KernelContext>) -> Element<Self::I> {
         Element::new(*index, Context::new(kernel_context))
     }
-    #[tracked]
+    #[tracked_nc]
     fn get_index_fallable(
         &self,
         index: &Self::I,
@@ -78,7 +77,7 @@ impl GridDomain {
     pub fn new_with_wrapping(start: [i32; 2], size: [u32; 2], wrapping: bool) -> Self {
         let (index, handle) = Field::create_bind(
             "grid-index",
-            CachedFnMapping::<Expr<Vec2<u32>>, Expr<Vec2<i32>>, _>::new(track!(
+            CachedFnMapping::<Expr<Vec2<u32>>, Expr<Vec2<i32>>, _>::new(track_nc!(
                 move |index, _ctx| {
                     if wrapping {
                         let size = Vec2::new(size[0] as i32, size[1] as i32);
@@ -95,7 +94,7 @@ impl GridDomain {
                     "grid-morton-index",
                     IndexMap::new(
                         index,
-                        CachedFnMapping::<Expr<u32>, Expr<Vec2<u32>>, _>::new(track!(
+                        CachedFnMapping::<Expr<u32>, Expr<Vec2<u32>>, _>::new(track_nc!(
                             move |index, _ctx| {
                                 // https://graphics.stanford.edu/%7Eseander/bithacks.html#InterleaveBMN
                                 // TODO: Apparently it's possible to implement this with half as much computations

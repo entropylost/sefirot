@@ -93,22 +93,16 @@ struct ActiveContexts {
 #[doc(hidden)]
 pub fn __enter_block() {
     ACTIVE_CONTEXTS.with(|active_contexts| {
-        println!("Entering");
         for (_, context) in active_contexts.borrow().contexts.iter() {
-            if let Some(mut context) = context.upgrade().unwrap().try_borrow_mut().ok() {
-                context.enter();
-            }
+            context.upgrade().unwrap().borrow_mut().enter();
         }
     });
 }
 #[doc(hidden)]
 pub fn __exit_block() {
     ACTIVE_CONTEXTS.with(|active_contexts| {
-        println!("Exiting");
         for (_, context) in active_contexts.borrow().contexts.iter() {
-            if let Some(mut context) = context.upgrade().unwrap().try_borrow_mut().ok() {
-                context.exit();
-            }
+            context.upgrade().unwrap().borrow_mut().exit();
         }
     });
 }

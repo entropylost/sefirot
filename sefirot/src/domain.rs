@@ -5,6 +5,7 @@ use dyn_clone::DynClone;
 use crate::graph::NodeConfigs;
 use crate::internal_prelude::*;
 use crate::kernel::KernelContext;
+use crate::prelude::AsNodes;
 
 pub trait AsKernelContext {
     fn as_kernel_context(&self) -> Arc<KernelContext>;
@@ -67,7 +68,15 @@ pub struct DispatchArgs<'a> {
     pub(crate) debug_name: Option<String>,
 }
 impl DispatchArgs<'_> {
-    pub fn dispatch(&self, dispatch_size: [u32; 3]) -> Command<'static, 'static> {
+    pub fn dispatch(&self, dispatch_size: [u32; 3]) -> NodeConfigs<'static> {
+        let config = (self.call_kernel_async)(dispatch_size).into_node_configs();
+        if let Some(name) = self.debug_name.as_deref() {
+            config.debug(name)
+        } else {
+            config
+        }
+    }
+    pub fn dispatch_command(&self, dispatch_size: [u32; 3]) -> Command<'static, 'static> {
         (self.call_kernel_async)(dispatch_size)
     }
     pub fn debug_name(&self) -> Option<&str> {
