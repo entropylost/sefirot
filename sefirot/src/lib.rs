@@ -12,9 +12,9 @@ pub mod kernel;
 pub mod mapping;
 pub mod utils;
 
-#[cfg(feature = "bevy")]
-#[doc(hidden)]
-pub use bevy_ecs as _bevy_ecs;
+#[cfg(test)]
+mod tests;
+
 pub use luisa_compute as luisa;
 pub use sefirot_macro::{track, track_nc, tracked, tracked_nc};
 

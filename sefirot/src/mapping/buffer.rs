@@ -10,6 +10,7 @@ use crate::graph::NodeConfigs;
 use crate::internal_prelude::*;
 use crate::kernel::KernelContext;
 use crate::mapping::cache::impl_cache_mapping;
+use crate::tracked_nc;
 
 // TODO: Offer ways of creating buffers of the correct size.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -25,6 +26,10 @@ impl StaticDomain<1> {
         let buffer = buffer.into_handled();
         debug_assert_eq!(buffer.len() as u32, self.len());
         BufferMapping(buffer)
+    }
+    pub fn create_buffer<V: Value>(&self, device: &Device) -> BufferMapping<V> {
+        let buffer = device.create_buffer::<V>(self.len() as usize);
+        self.map_buffer(buffer)
     }
     #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> u32 {
@@ -46,6 +51,14 @@ impl StaticDomain<2> {
         debug_assert_eq!(texture.size()[0..2], self.0);
         Tex2dMapping(texture)
     }
+    pub fn create_tex2d<V: IoTexel>(
+        &self,
+        device: &Device,
+        storage: PixelStorage,
+    ) -> Tex2dMapping<V> {
+        let texture = device.create_tex2d::<V>(storage, self.width(), self.height(), 1);
+        self.map_tex2d(texture)
+    }
     pub fn width(&self) -> u32 {
         self.0[0]
     }
@@ -64,6 +77,15 @@ impl StaticDomain<3> {
         let texture = texture.into_handled();
         debug_assert_eq!(texture.size(), self.0);
         Tex3dMapping(texture)
+    }
+    pub fn create_tex3d<V: IoTexel>(
+        &self,
+        device: &Device,
+        storage: PixelStorage,
+    ) -> Tex3dMapping<V> {
+        let texture =
+            device.create_tex3d::<V>(storage, self.width(), self.height(), self.depth(), 1);
+        self.map_tex3d(texture)
     }
     pub fn width(&self) -> u32 {
         self.0[0]
@@ -110,7 +132,7 @@ impl IndexDomain for StaticDomain<1> {
     fn get_index(&self, index: &Self::I, kernel_context: Arc<KernelContext>) -> Element<Self::I> {
         Element::new(*index, Context::new(kernel_context))
     }
-    #[tracked]
+    #[tracked_nc]
     fn get_index_fallable(
         &self,
         index: &Self::I,
@@ -123,7 +145,7 @@ impl IndexDomain for StaticDomain<2> {
     fn get_index(&self, index: &Self::I, kernel_context: Arc<KernelContext>) -> Element<Self::I> {
         Element::new(*index, Context::new(kernel_context))
     }
-    #[tracked]
+    #[tracked_nc]
     fn get_index_fallable(
         &self,
         index: &Self::I,
@@ -139,7 +161,7 @@ impl IndexDomain for StaticDomain<3> {
     fn get_index(&self, index: &Self::I, kernel_context: Arc<KernelContext>) -> Element<Self::I> {
         Element::new(*index, Context::new(kernel_context))
     }
-    #[tracked]
+    #[tracked_nc]
     fn get_index_fallable(
         &self,
         index: &Self::I,

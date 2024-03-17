@@ -201,6 +201,7 @@ impl Context {
                 }
             });
         }
+        self.cache.cache_stack.pop().unwrap();
     }
     pub fn bind_local<X: Access, I: FieldIndex>(
         &mut self,
