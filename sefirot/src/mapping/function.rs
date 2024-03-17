@@ -67,12 +67,6 @@ where
     F: Fn(&I, &mut Context) -> X,
 {
     fn access(&self, index: &I, ctx: &mut Context, binding: FieldId) -> X {
-        #[allow(clippy::map_entry)]
-        if !ctx.cache.contains_key(&binding) {
-            let value = (self.f)(index, ctx);
-            ctx.cache.insert(binding, Box::new(value));
-        }
-        let value = ctx.cache.get(&binding).unwrap();
-        value.downcast_ref::<X>().unwrap().clone()
+        ctx.get_cache_or_insert_with::<X, _>(binding, |ctx| (self.f)(index, ctx), |v| v.clone())
     }
 }

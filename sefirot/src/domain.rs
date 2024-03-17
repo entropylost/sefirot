@@ -7,21 +7,21 @@ use crate::internal_prelude::*;
 use crate::kernel::KernelContext;
 
 pub trait AsKernelContext {
-    fn as_kernel_context(&self) -> &Arc<KernelContext>;
+    fn as_kernel_context(&self) -> Arc<KernelContext>;
 }
 impl AsKernelContext for Arc<KernelContext> {
-    fn as_kernel_context(&self) -> &Arc<KernelContext> {
-        self
+    fn as_kernel_context(&self) -> Arc<KernelContext> {
+        self.clone()
     }
 }
 impl<I: FieldIndex> AsKernelContext for Element<I> {
-    fn as_kernel_context(&self) -> &Arc<KernelContext> {
-        &self.context.kernel
+    fn as_kernel_context(&self) -> Arc<KernelContext> {
+        self.context().kernel.clone()
     }
 }
 impl AsKernelContext for Context {
-    fn as_kernel_context(&self) -> &Arc<KernelContext> {
-        &self.kernel
+    fn as_kernel_context(&self) -> Arc<KernelContext> {
+        self.kernel.clone()
     }
 }
 
@@ -34,7 +34,7 @@ pub trait IndexDomain: Domain {
         kernel_context: Arc<KernelContext>,
     ) -> (Element<Self::I>, Expr<bool>);
     fn index(&self, index: Self::I, kernel_context: &impl AsKernelContext) -> Element<Self::I> {
-        self.get_index(&index, kernel_context.as_kernel_context().clone())
+        self.get_index(&index, kernel_context.as_kernel_context())
     }
 }
 

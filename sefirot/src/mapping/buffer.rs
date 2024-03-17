@@ -80,10 +80,7 @@ impl Domain for StaticDomain<1> {
     type A = ();
     type I = Expr<u32>;
     fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<Self::I> {
-        Element {
-            index: dispatch_id().x,
-            context: Context::new(kernel_context),
-        }
+        Element::new(dispatch_id().x, Context::new(kernel_context))
     }
     fn dispatch_async(&self, _domain_args: (), args: DispatchArgs) -> NodeConfigs<'static> {
         args.dispatch([self.0[0], 1, 1]).into_node_configs()
@@ -93,10 +90,7 @@ impl Domain for StaticDomain<2> {
     type A = ();
     type I = Expr<Vec2<u32>>;
     fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<Self::I> {
-        Element {
-            index: dispatch_id().xy(),
-            context: Context::new(kernel_context),
-        }
+        Element::new(dispatch_id().xy(), Context::new(kernel_context))
     }
     fn dispatch_async(&self, _domain_args: (), args: DispatchArgs) -> NodeConfigs<'static> {
         args.dispatch([self.0[0], self.0[1], 1]).into_node_configs()
@@ -106,10 +100,7 @@ impl Domain for StaticDomain<3> {
     type A = ();
     type I = Expr<Vec3<u32>>;
     fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<Self::I> {
-        Element {
-            index: dispatch_id(),
-            context: Context::new(kernel_context),
-        }
+        Element::new(dispatch_id(), Context::new(kernel_context))
     }
     fn dispatch_async(&self, _domain_args: (), args: DispatchArgs) -> NodeConfigs<'static> {
         args.dispatch(self.0).into_node_configs()
@@ -117,10 +108,7 @@ impl Domain for StaticDomain<3> {
 }
 impl IndexDomain for StaticDomain<1> {
     fn get_index(&self, index: &Self::I, kernel_context: Arc<KernelContext>) -> Element<Self::I> {
-        Element {
-            index: *index,
-            context: Context::new(kernel_context),
-        }
+        Element::new(*index, Context::new(kernel_context))
     }
     #[tracked]
     fn get_index_fallable(
@@ -133,10 +121,7 @@ impl IndexDomain for StaticDomain<1> {
 }
 impl IndexDomain for StaticDomain<2> {
     fn get_index(&self, index: &Self::I, kernel_context: Arc<KernelContext>) -> Element<Self::I> {
-        Element {
-            index: *index,
-            context: Context::new(kernel_context),
-        }
+        Element::new(*index, Context::new(kernel_context))
     }
     #[tracked]
     fn get_index_fallable(
@@ -152,10 +137,7 @@ impl IndexDomain for StaticDomain<2> {
 }
 impl IndexDomain for StaticDomain<3> {
     fn get_index(&self, index: &Self::I, kernel_context: Arc<KernelContext>) -> Element<Self::I> {
-        Element {
-            index: *index,
-            context: Context::new(kernel_context),
-        }
+        Element::new(*index, Context::new(kernel_context))
     }
     #[tracked]
     fn get_index_fallable(

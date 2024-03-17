@@ -18,16 +18,17 @@ pub struct GridDomain {
     morton_handle: Option<Arc<FieldHandle>>,
     start: [i32; 2],
     shifted_domain: StaticDomain<2>,
+    wrapping: bool,
 }
 impl Domain for GridDomain {
     type A = ();
     type I = Expr<Vec2<i32>>;
     #[tracked]
     fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<Self::I> {
-        Element {
-            index: dispatch_id().xy().cast_i32() + Vec2::from(self.start),
-            context: Context::new(kernel_context),
-        }
+        let index = dispatch_id().xy().cast_i32() + Vec2::from(self.start);
+        let context = Context::new(kernel_context);
+        // TODO: Bind the index field.
+        Element::new(index, context)
     }
     fn dispatch_async(&self, _domain_args: Self::A, args: DispatchArgs) -> NodeConfigs<'static> {
         args.dispatch([self.size()[0], self.size()[1], 1])
@@ -36,10 +37,7 @@ impl Domain for GridDomain {
 }
 impl IndexDomain for GridDomain {
     fn get_index(&self, index: &Self::I, kernel_context: Arc<KernelContext>) -> Element<Self::I> {
-        Element {
-            index: *index,
-            context: Context::new(kernel_context),
-        }
+        Element::new(*index, Context::new(kernel_context))
     }
     #[tracked]
     fn get_index_fallable(
@@ -49,7 +47,11 @@ impl IndexDomain for GridDomain {
     ) -> (Element<Self::I>, Expr<bool>) {
         (
             self.get_index(index, kernel_context),
-            (index >= Vec2::from(self.start)).all() && (index < Vec2::from(self.end())).all(),
+            if self.wrapping {
+                true.expr()
+            } else {
+                (index >= Vec2::from(self.start)).all() && (index < Vec2::from(self.end())).all()
+            },
         )
     }
 }
@@ -68,10 +70,23 @@ impl GridDomain {
         ]
     }
     pub fn new(start: [i32; 2], size: [u32; 2]) -> Self {
+        Self::new_with_wrapping(start, size, false)
+    }
+    pub fn new_wrapping(start: [i32; 2], size: [u32; 2]) -> Self {
+        Self::new_with_wrapping(start, size, true)
+    }
+    pub fn new_with_wrapping(start: [i32; 2], size: [u32; 2], wrapping: bool) -> Self {
         let (index, handle) = Field::create_bind(
             "grid-index",
             CachedFnMapping::<Expr<Vec2<u32>>, Expr<Vec2<i32>>, _>::new(track!(
-                move |index, _ctx| { (index - Vec2::from(start)).cast_u32() }
+                move |index, _ctx| {
+                    if wrapping {
+                        let size = Vec2::new(size[0] as i32, size[1] as i32);
+                        (((index - Vec2::from(start)) % size + size) % size).cast_u32()
+                    } else {
+                        (index - Vec2::from(start)).cast_u32()
+                    }
+                }
             )),
         );
         let (morton_index, morton_handle) =
@@ -116,6 +131,7 @@ impl GridDomain {
             morton_handle,
             start,
             shifted_domain: StaticDomain(size),
+            wrapping,
         }
     }
     pub fn map_texture<V: IoTexel>(
@@ -139,8 +155,7 @@ impl GridDomain {
     #[tracked]
     pub fn on_adjacent(&self, el: &Element<Expr<Vec2<i32>>>, f: impl Fn(Element<Expr<Vec2<i32>>>)) {
         for dir in [Vec2::x(), Vec2::y(), -Vec2::x(), -Vec2::y()] {
-            let (el, within) =
-                self.get_index_fallable(&(el.index + dir), el.context.kernel.clone());
+            let (el, within) = self.get_index_fallable(&(**el + dir), el.context().kernel.clone());
             if within {
                 f(el);
             }

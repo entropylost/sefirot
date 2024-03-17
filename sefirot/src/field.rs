@@ -17,8 +17,6 @@ pub use access::Access;
 
 pub mod set;
 
-use self::access::AccessLevel;
-
 pub(crate) static FIELDS: Lazy<DashMap<FieldId, RawField>> = Lazy::new(DashMap::new);
 
 pub type EField<V, I> = Field<Expr<V>, Expr<I>>;
@@ -68,10 +66,12 @@ impl FieldId {
         }
     }
     pub fn at_opt<X: Access, I: FieldIndex>(self, index: &I, ctx: &mut Context) -> Option<X> {
-        ctx.access_levels
+        ctx.context_stack
+            .last_mut()
+            .unwrap()
             .entry(self)
-            .and_modify(|lvl| *lvl = AccessLevel(lvl.0.max(X::level().0)))
-            .or_insert(X::level());
+            .or_default()
+            .insert(X::level());
         ctx.on_mapping_opt(self, |ctx, mapping| {
             if let Some(mapping) = mapping {
                 let value = mapping.access_dyn(X::level(), index, ctx, self);
@@ -134,8 +134,11 @@ impl<X: Access, T: FieldIndex> Hash for Field<X, T> {
 }
 
 impl<X: Access, I: FieldIndex> Field<X, I> {
-    pub fn at(&self, index: &I, ctx: &mut Context) -> X {
+    pub fn at_split(&self, index: &I, ctx: &mut Context) -> X {
         self.id.at_opt::<X, I>(index, ctx).unwrap()
+    }
+    pub fn at(&self, el: &Element<I>) -> X {
+        self.at_split(el.index(), &mut el.context())
     }
     pub fn bind(&self, mapping: impl Mapping<X, I>) -> Self {
         let binding = &mut FIELDS.get_mut(&self.id).expect("Field dropped").binding;
@@ -173,6 +176,26 @@ impl<X: Access, I: FieldIndex> Field<X, I> {
         let (field, handle) = Self::create(name);
         field.bind(mapping);
         (field, handle)
+    }
+}
+impl<V: Value, I: FieldIndex> Field<Expr<V>, I> {
+    pub fn expr(&self, el: &Element<I>) -> Expr<V> {
+        self.at(el)
+    }
+}
+impl<V: Value, I: FieldIndex> Field<Var<V>, I> {
+    pub fn var(&self, el: &Element<I>) -> Var<V> {
+        self.at(el)
+    }
+}
+impl<V: Value, I: FieldIndex> Field<AtomicRef<V>, I> {
+    pub fn atomic(&self, el: &Element<I>) -> AtomicRef<V> {
+        self.at(el)
+    }
+}
+impl<T: 'static, I: FieldIndex> Field<Static<T>, I> {
+    pub fn static_(&self, el: &Element<I>) -> T {
+        self.at(el).0
     }
 }
 

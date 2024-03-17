@@ -69,6 +69,7 @@ pub trait Mapping<X: Access, I: 'static>:
     ListMapping<<X as ListAccess>::List, I> + Send + Sync + 'static
 {
     fn access(&self, index: &I, ctx: &mut Context, binding: FieldId) -> X;
+    /// Saves the value of the field to the context. After this, the cached value should be droppable.
     fn save(&self, _ctx: &mut Context, _binding: FieldId) {}
 }
 pub trait EMapping<V: Value, I: Value>: Mapping<Expr<V>, Expr<I>> {}

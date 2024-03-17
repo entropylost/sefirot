@@ -240,7 +240,8 @@ macro_rules! impl_kernel_function {
             #[allow(non_snake_case)]
             #[allow(unused_variables)]
             fn execute(&self, el: Element<I>) {
-                let mut builder = el.context.kernel.builder.lock();
+                let kernel_context = el.context().kernel.clone();
+                let mut builder = kernel_context.builder.lock();
                 let $T0 = <$T0::Parameter as KernelParameter>::def_param(&mut builder);
                 $(let $Tn = <$Tn::Parameter as KernelParameter>::def_param(&mut builder);)*
                 drop(builder);
