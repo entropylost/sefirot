@@ -5,12 +5,15 @@ use luisa::lang::types::vector::{Vec2, Vec3};
 use luisa::lang::types::AtomicRef;
 
 use super::cache::SimpleExprMapping;
-use crate::domain::{DispatchArgs, Domain, IndexDomain};
+use crate::domain::{DispatchArgs, Domain};
 use crate::graph::NodeConfigs;
 use crate::internal_prelude::*;
 use crate::kernel::KernelContext;
 use crate::mapping::cache::impl_cache_mapping;
 use crate::tracked_nc;
+
+mod storage;
+pub use storage::HasPixelStorage;
 
 // TODO: Offer ways of creating buffers of the correct size.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -51,7 +54,10 @@ impl StaticDomain<2> {
         debug_assert_eq!(texture.size()[0..2], self.0);
         Tex2dMapping(texture)
     }
-    pub fn create_tex2d<V: IoTexel>(
+    pub fn create_tex2d<V: HasPixelStorage>(&self, device: &Device) -> Tex2dMapping<V> {
+        self.create_tex2d_with_storage(device, V::storage())
+    }
+    pub fn create_tex2d_with_storage<V: IoTexel>(
         &self,
         device: &Device,
         storage: PixelStorage,
@@ -78,7 +84,10 @@ impl StaticDomain<3> {
         debug_assert_eq!(texture.size(), self.0);
         Tex3dMapping(texture)
     }
-    pub fn create_tex3d<V: IoTexel>(
+    pub fn create_tex3d<V: HasPixelStorage>(&self, device: &Device) -> Tex3dMapping<V> {
+        self.create_tex3d_with_storage(device, V::storage())
+    }
+    pub fn create_tex3d_with_storage<V: IoTexel>(
         &self,
         device: &Device,
         storage: PixelStorage,
@@ -107,6 +116,10 @@ impl Domain for StaticDomain<1> {
     fn dispatch_async(&self, _domain_args: (), args: DispatchArgs) -> NodeConfigs<'static> {
         args.dispatch([self.0[0], 1, 1])
     }
+    #[tracked_nc]
+    fn contains(&self, index: &Self::I) -> Expr<bool> {
+        *index < self.0[0]
+    }
 }
 impl Domain for StaticDomain<2> {
     type A = ();
@@ -116,6 +129,10 @@ impl Domain for StaticDomain<2> {
     }
     fn dispatch_async(&self, _domain_args: (), args: DispatchArgs) -> NodeConfigs<'static> {
         args.dispatch([self.0[0], self.0[1], 1])
+    }
+    #[tracked_nc]
+    fn contains(&self, index: &Self::I) -> Expr<bool> {
+        (index < Vec2::from(self.0)).all()
     }
 }
 impl Domain for StaticDomain<3> {
@@ -127,50 +144,9 @@ impl Domain for StaticDomain<3> {
     fn dispatch_async(&self, _domain_args: (), args: DispatchArgs) -> NodeConfigs<'static> {
         args.dispatch(self.0)
     }
-}
-impl IndexDomain for StaticDomain<1> {
-    fn get_index(&self, index: &Self::I, kernel_context: Arc<KernelContext>) -> Element<Self::I> {
-        Element::new(*index, Context::new(kernel_context))
-    }
     #[tracked_nc]
-    fn get_index_fallable(
-        &self,
-        index: &Self::I,
-        kernel_context: Arc<KernelContext>,
-    ) -> (Element<Self::I>, Expr<bool>) {
-        (self.get_index(index, kernel_context), index < self.0[0])
-    }
-}
-impl IndexDomain for StaticDomain<2> {
-    fn get_index(&self, index: &Self::I, kernel_context: Arc<KernelContext>) -> Element<Self::I> {
-        Element::new(*index, Context::new(kernel_context))
-    }
-    #[tracked_nc]
-    fn get_index_fallable(
-        &self,
-        index: &Self::I,
-        kernel_context: Arc<KernelContext>,
-    ) -> (Element<Self::I>, Expr<bool>) {
-        (
-            self.get_index(index, kernel_context),
-            (index < Vec2::from(self.0)).all(),
-        )
-    }
-}
-impl IndexDomain for StaticDomain<3> {
-    fn get_index(&self, index: &Self::I, kernel_context: Arc<KernelContext>) -> Element<Self::I> {
-        Element::new(*index, Context::new(kernel_context))
-    }
-    #[tracked_nc]
-    fn get_index_fallable(
-        &self,
-        index: &Self::I,
-        kernel_context: Arc<KernelContext>,
-    ) -> (Element<Self::I>, Expr<bool>) {
-        (
-            self.get_index(index, kernel_context),
-            (index < Vec3::from(self.0)).all(),
-        )
+    fn contains(&self, index: &Self::I) -> Expr<bool> {
+        (index < Vec3::from(self.0)).all()
     }
 }
 

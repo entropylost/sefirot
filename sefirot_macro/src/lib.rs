@@ -153,7 +153,7 @@ impl VisitMut for TraceVisitor {
                             #debug_path::with_lineno("for range",
                                 file!(),
                                 line!(),
-                                column!(), ||#range.for_each(#element_path::__block(|#pat| #body)))
+                                column!(), ||#range.for_each(#element_path::__block_input(|#pat| #body)))
                         }
                     } else {
                         *node = parse_quote_spanned! {span=>
@@ -161,7 +161,7 @@ impl VisitMut for TraceVisitor {
                                 file!(),
                                 line!(),
                                 column!(), || #flow_path::for_range(#range,
-                                    #element_path::__block(|#pat| #body)))
+                                    #element_path::__block_input(|#pat| #body)))
                         }
                     }
                 }

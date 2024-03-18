@@ -7,38 +7,6 @@ use crate::internal_prelude::*;
 use crate::kernel::KernelContext;
 use crate::prelude::AsNodes;
 
-pub trait AsKernelContext {
-    fn as_kernel_context(&self) -> Arc<KernelContext>;
-}
-impl AsKernelContext for Arc<KernelContext> {
-    fn as_kernel_context(&self) -> Arc<KernelContext> {
-        self.clone()
-    }
-}
-impl<I: FieldIndex> AsKernelContext for Element<I> {
-    fn as_kernel_context(&self) -> Arc<KernelContext> {
-        self.context().kernel.clone()
-    }
-}
-impl AsKernelContext for Context {
-    fn as_kernel_context(&self) -> Arc<KernelContext> {
-        self.kernel.clone()
-    }
-}
-
-pub trait IndexDomain: Domain {
-    fn get_index(&self, index: &Self::I, kernel_context: Arc<KernelContext>) -> Element<Self::I>;
-    // Returns true if the index is within the domain.
-    fn get_index_fallable(
-        &self,
-        index: &Self::I,
-        kernel_context: Arc<KernelContext>,
-    ) -> (Element<Self::I>, Expr<bool>);
-    fn index(&self, index: Self::I, kernel_context: &impl AsKernelContext) -> Element<Self::I> {
-        self.get_index(&index, kernel_context.as_kernel_context())
-    }
-}
-
 /// A trait representing a space across which computations may be performed by calling kernels.
 /// This is intentionally very generic, and does not provide any guarantees on how many dispatch calls are generated.
 /// For most purposes, [`IndexDomain`] is a conveinent way to implement this trait if only a single dispatch call is necessary.
@@ -47,6 +15,7 @@ pub trait Domain: DynClone + Send + Sync + 'static {
     type I: FieldIndex;
     fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<Self::I>;
     fn dispatch_async(&self, domain_args: Self::A, args: DispatchArgs) -> NodeConfigs<'static>;
+    fn contains(&self, index: &Self::I) -> Expr<bool>;
 }
 dyn_clone::clone_trait_object!(<A: 'static, I: FieldIndex> Domain<A = A, I = I>);
 
@@ -58,6 +27,9 @@ impl<A: 'static, I: FieldIndex> Domain for Box<dyn Domain<A = A, I = I>> {
     }
     fn dispatch_async(&self, domain_args: A, args: DispatchArgs) -> NodeConfigs<'static> {
         self.as_ref().dispatch_async(domain_args, args)
+    }
+    fn contains(&self, index: &I) -> Expr<bool> {
+        self.as_ref().contains(index)
     }
 }
 

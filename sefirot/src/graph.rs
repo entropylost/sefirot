@@ -390,7 +390,7 @@ impl<'a> ComputeGraph<'a> {
 pub trait CopyExt<T: Value + Send> {
     fn copy_to_shared(&self, dst: &Arc<Mutex<Vec<T>>>) -> NodeConfigs<'static>;
     fn copy_from_shared(&self, src: &Arc<Mutex<Vec<T>>>) -> NodeConfigs<'static>;
-    fn copy_from_owned(&self, src: Vec<T>) -> NodeConfigs<'static> {
+    fn copy_from_vec(&self, src: Vec<T>) -> NodeConfigs<'static> {
         let src = Arc::new(Mutex::new(src));
         self.copy_from_shared(&src)
     }
@@ -407,6 +407,14 @@ impl<T: Value + Send> CopyExt<T> for BufferView<T> {
         let mut guard = src.clone().lock_arc();
         let src = unsafe { std::mem::transmute::<&mut [T], &'static mut [T]>(&mut *guard) };
         dst.copy_from_async(src).release(guard)
+    }
+}
+impl<T: Value + Send> CopyExt<T> for Buffer<T> {
+    fn copy_to_shared(&self, dst: &Arc<Mutex<Vec<T>>>) -> NodeConfigs<'static> {
+        self.view(..).copy_to_shared(dst)
+    }
+    fn copy_from_shared(&self, src: &Arc<Mutex<Vec<T>>>) -> NodeConfigs<'static> {
+        self.view(..).copy_from_shared(src)
     }
 }
 

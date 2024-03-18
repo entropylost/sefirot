@@ -1,9 +1,12 @@
+use std::cell::Cell;
 use std::sync::Arc;
 
 use sefirot::ext_prelude::*;
 use sefirot::field::FieldHandle;
 use sefirot::luisa::lang::types::vector::Vec2;
-use sefirot::mapping::buffer::{HandledBuffer, HandledTex2d, IntoHandled, StaticDomain};
+use sefirot::mapping::buffer::{
+    HandledBuffer, HandledTex2d, HasPixelStorage, IntoHandled, StaticDomain,
+};
 use sefirot::mapping::function::{CachedFnMapping, FnMapping};
 use sefirot::mapping::index::IndexMap;
 use sefirot::mapping::AMapping;
@@ -33,25 +36,13 @@ impl Domain for GridDomain {
     fn dispatch_async(&self, _domain_args: Self::A, args: DispatchArgs) -> NodeConfigs<'static> {
         args.dispatch([self.size()[0], self.size()[1], 1])
     }
-}
-impl IndexDomain for GridDomain {
-    fn get_index(&self, index: &Self::I, kernel_context: Arc<KernelContext>) -> Element<Self::I> {
-        Element::new(*index, Context::new(kernel_context))
-    }
     #[tracked_nc]
-    fn get_index_fallable(
-        &self,
-        index: &Self::I,
-        kernel_context: Arc<KernelContext>,
-    ) -> (Element<Self::I>, Expr<bool>) {
-        (
-            self.get_index(index, kernel_context),
-            if self.wrapping {
-                true.expr()
-            } else {
-                (index >= Vec2::from(self.start)).all() && (index < Vec2::from(self.end())).all()
-            },
-        )
+    fn contains(&self, index: &Self::I) -> Expr<bool> {
+        if self.wrapping {
+            true.expr()
+        } else {
+            (index >= Vec2::from(self.start)).all() && (index < Vec2::from(self.end())).all()
+        }
     }
 }
 
@@ -139,7 +130,13 @@ impl GridDomain {
     ) -> impl VMapping<V, Vec2<i32>> {
         IndexMap::new(self.index, self.shifted_domain.map_tex2d(texture))
     }
-    pub fn create_texture<V: IoTexel>(
+    pub fn create_texture<V: HasPixelStorage>(
+        &self,
+        device: &Device,
+    ) -> impl VMapping<V, Vec2<i32>> {
+        self.create_texture_with_storage(device, V::storage())
+    }
+    pub fn create_texture_with_storage<V: IoTexel>(
         &self,
         device: &Device,
         storage: PixelStorage,
@@ -164,9 +161,11 @@ impl GridDomain {
     #[tracked]
     pub fn on_adjacent(&self, el: &Element<Expr<Vec2<i32>>>, f: impl Fn(Element<Expr<Vec2<i32>>>)) {
         for dir in [Vec2::x(), Vec2::y(), -Vec2::x(), -Vec2::y()] {
-            let (el, within) = self.get_index_fallable(&(**el + dir), el.context().kernel.clone());
+            let el = el.at(**el + dir);
+            let within = self.contains(&el);
+            let cell = Cell::new(Some(el));
             if within {
-                f(el);
+                f(cell.take().unwrap());
             }
         }
     }

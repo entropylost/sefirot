@@ -3,9 +3,10 @@ use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::sync::OnceLock;
 
-use bevy::ecs::schedule::{NodeId, SystemTypeSet};
+use bevy::ecs::schedule::{NodeId, ScheduleLabel, SystemTypeSet};
 use bevy::prelude::*;
 use bevy::utils::HashMap;
+use luisa::LuisaDevice;
 use luisa_compute::runtime::Device;
 use sefirot::graph::{AsNodes, ComputeGraph, NodeHandle};
 use sefirot::kernel::{Kernel, KernelSignature};
@@ -62,6 +63,11 @@ pub struct MirrorGraph {
 }
 
 impl MirrorGraph {
+    pub fn from_world(schedule: impl ScheduleLabel, world: &mut World) -> Self {
+        world.schedule_scope(schedule, |world, schedule| {
+            Self::new(world.resource::<LuisaDevice>(), schedule)
+        })
+    }
     pub fn new(device: &Device, schedule: &Schedule) -> Self {
         let mut graph = Self::null(device);
         graph.init(schedule);

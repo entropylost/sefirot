@@ -13,6 +13,28 @@ use crate::internal_prelude::*;
 use crate::kernel::KernelContext;
 use crate::mapping::{DynMapping, MappingBinding};
 
+pub trait AsKernelContext {
+    fn as_kernel_context(&self) -> Arc<KernelContext>;
+    fn at<I: FieldIndex>(&self, index: I) -> Element<I> {
+        Element::new(index, Context::new(self.as_kernel_context()))
+    }
+}
+impl AsKernelContext for Arc<KernelContext> {
+    fn as_kernel_context(&self) -> Arc<KernelContext> {
+        self.clone()
+    }
+}
+impl<I: FieldIndex> AsKernelContext for Element<I> {
+    fn as_kernel_context(&self) -> Arc<KernelContext> {
+        self.context().kernel.clone()
+    }
+}
+impl AsKernelContext for Context {
+    fn as_kernel_context(&self) -> Arc<KernelContext> {
+        self.kernel.clone()
+    }
+}
+
 pub struct Element<I: FieldIndex> {
     index: I,
     context: Rc<RefCell<Context>>,
@@ -107,10 +129,19 @@ pub fn __exit_block() {
     });
 }
 #[doc(hidden)]
-pub fn __block<R>(f: impl FnOnce() -> R) -> impl FnOnce() -> R {
-    || {
+pub fn __block<R>(f: impl Fn() -> R) -> impl Fn() -> R {
+    move || {
         __enter_block();
         let result = f();
+        __exit_block();
+        result
+    }
+}
+#[doc(hidden)]
+pub fn __block_input<T, R>(f: impl Fn(T) -> R) -> impl Fn(T) -> R {
+    move |x| {
+        __enter_block();
+        let result = f(x);
         __exit_block();
         result
     }

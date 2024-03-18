@@ -69,8 +69,9 @@ fn kernel_impl(f: ItemFn, init_vis: Visibility) -> TokenStream {
                     );
                 }
                 let closure_index = args.len() - 1;
-                args[closure_index] = parse_quote! {
-                    ::sefirot::prelude::track!(#args[closure_index])
+                let ac = &mut args[closure_index];
+                *ac = parse_quote! {
+                    ::sefirot::prelude::track!(#ac)
                 };
                 last_stmt = Stmt::Expr(
                     parse_quote! {
