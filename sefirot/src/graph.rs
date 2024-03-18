@@ -409,12 +409,56 @@ impl<T: Value + Send> CopyExt<T> for BufferView<T> {
         dst.copy_from_async(src).release(guard)
     }
 }
+impl<T: StorageTexel<U> + Value + Send, U: IoTexel> CopyExt<T> for Tex2dView<U> {
+    fn copy_to_shared(&self, dst: &Arc<Mutex<Vec<T>>>) -> NodeConfigs<'static> {
+        let src = self.clone();
+        let mut guard = dst.clone().lock_arc();
+        let dst = unsafe { std::mem::transmute::<&mut [T], &'static mut [T]>(&mut *guard) };
+        src.copy_to_async(dst).release(guard)
+    }
+    fn copy_from_shared(&self, src: &Arc<Mutex<Vec<T>>>) -> NodeConfigs<'static> {
+        let dst = self.clone();
+        let mut guard = src.clone().lock_arc();
+        let src = unsafe { std::mem::transmute::<&mut [T], &'static mut [T]>(&mut *guard) };
+        dst.copy_from_async(src).release(guard)
+    }
+}
+impl<T: StorageTexel<U> + Value + Send, U: IoTexel> CopyExt<T> for Tex3dView<U> {
+    fn copy_to_shared(&self, dst: &Arc<Mutex<Vec<T>>>) -> NodeConfigs<'static> {
+        let src = self.clone();
+        let mut guard = dst.clone().lock_arc();
+        let dst = unsafe { std::mem::transmute::<&mut [T], &'static mut [T]>(&mut *guard) };
+        src.copy_to_async(dst).release(guard)
+    }
+    fn copy_from_shared(&self, src: &Arc<Mutex<Vec<T>>>) -> NodeConfigs<'static> {
+        let dst = self.clone();
+        let mut guard = src.clone().lock_arc();
+        let src = unsafe { std::mem::transmute::<&mut [T], &'static mut [T]>(&mut *guard) };
+        dst.copy_from_async(src).release(guard)
+    }
+}
 impl<T: Value + Send> CopyExt<T> for Buffer<T> {
     fn copy_to_shared(&self, dst: &Arc<Mutex<Vec<T>>>) -> NodeConfigs<'static> {
         self.view(..).copy_to_shared(dst)
     }
     fn copy_from_shared(&self, src: &Arc<Mutex<Vec<T>>>) -> NodeConfigs<'static> {
         self.view(..).copy_from_shared(src)
+    }
+}
+impl<T: StorageTexel<U> + Value + Send, U: IoTexel> CopyExt<T> for Tex2d<U> {
+    fn copy_to_shared(&self, dst: &Arc<Mutex<Vec<T>>>) -> NodeConfigs<'static> {
+        self.view(0).copy_to_shared(dst)
+    }
+    fn copy_from_shared(&self, src: &Arc<Mutex<Vec<T>>>) -> NodeConfigs<'static> {
+        self.view(0).copy_from_shared(src)
+    }
+}
+impl<T: StorageTexel<U> + Value + Send, U: IoTexel> CopyExt<T> for Tex3d<U> {
+    fn copy_to_shared(&self, dst: &Arc<Mutex<Vec<T>>>) -> NodeConfigs<'static> {
+        self.view(0).copy_to_shared(dst)
+    }
+    fn copy_from_shared(&self, src: &Arc<Mutex<Vec<T>>>) -> NodeConfigs<'static> {
+        self.view(0).copy_from_shared(src)
     }
 }
 
