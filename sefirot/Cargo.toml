@@ -20,7 +20,7 @@ sefirot_macro = { path = "../sefirot_macro" }
 
 [dependencies.luisa_compute]
 git = "https://github.com/iMplode-nZ/luisa-compute-rs"
-branch = "main"
+branch = "older-submod"
 
 [dev-dependencies]
 rand = "0.8.5"
