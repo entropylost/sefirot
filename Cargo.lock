@@ -482,6 +482,7 @@ dependencies = [
  "bevy",
  "bevy_sefirot_macro",
  "once_cell",
+ "pretty-type-name",
  "sefirot",
  "static_assertions",
 ]

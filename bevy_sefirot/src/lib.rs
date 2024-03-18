@@ -4,6 +4,7 @@ use std::ops::{Deref, DerefMut};
 use std::sync::OnceLock;
 
 use bevy::ecs::schedule::{NodeId, ScheduleLabel, SystemTypeSet};
+use bevy::ecs::system::FunctionSystem;
 use bevy::prelude::*;
 use bevy::utils::HashMap;
 use luisa::LuisaDevice;
@@ -184,8 +185,8 @@ impl<
 
     fn run(&mut self, nodes: N, mut graph: ResMut<G>) {
         let nodes = graph.add_handles(nodes);
-        let parent_set =
-            graph.set_map[&(Box::new(system_type_set::<Self>()) as Box<dyn SystemSet>)];
+        let parent_set = graph.set_map
+            [&(Box::new(system_type_set::<AddNodeMarker, Self>()) as Box<dyn SystemSet>)];
         let children = graph
             .hierarchy()
             .edges(parent_set)
@@ -194,7 +195,7 @@ impl<
         if children.len() != 1 {
             panic!(
                 "Cannot add to graph with multiple systems within set {:?} ({:?}): Children are {:?}.",
-                system_type_set::<F>(),
+                pretty_type_name::pretty_type_name::<F>(),
                 parent_set,
                 children
             );
@@ -204,8 +205,11 @@ impl<
     }
 }
 
-fn system_type_set<F>() -> SystemTypeSet<F> {
-    unsafe { std::mem::transmute::<(), SystemTypeSet<F>>(()) }
+fn system_type_set<Marker, F>() -> SystemTypeSet<FunctionSystem<Marker, F>>
+where
+    F: SystemParamFunction<Marker>,
+{
+    unsafe { std::mem::transmute::<(), SystemTypeSet<FunctionSystem<Marker, F>>>(()) }
 }
 
 pub trait AsNodesStatic: AsNodes<'static> {}

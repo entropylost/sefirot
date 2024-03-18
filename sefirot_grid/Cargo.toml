@@ -5,4 +5,3 @@ edition = "2021"
 
 [dependencies]
 sefirot = { path = "../sefirot" }
-# luisa_compute = { git = "https://github.com/iMplode-nZ/luisa-compute-rs/" }
