@@ -247,69 +247,75 @@ impl<'a> ComputeGraph<'a> {
 
         let mut this = std::mem::replace(self, Self::new(&self.device));
 
-        let (sender, receiver) = channel::<(String, f32)>();
+        let mut timings = vec![];
 
-        thread::scope(|s| {
-            s.spawn(move || {
-                let stream = this.device.default_stream().native_handle() as CUstream;
+        let stream = this.device.default_stream().native_handle() as CUstream;
 
-                let device = unsafe { *(this.device.native_handle() as *const CUdevice) };
-                let mut context: CUcontext = ptr::null_mut();
+        let device = unsafe { *(this.device.native_handle() as *const CUdevice) };
+        let mut context: CUcontext = ptr::null_mut();
 
-                unsafe {
-                    assert_eq!(
-                        cuDevicePrimaryCtxRetain(&mut context as *mut CUcontext, device),
-                        0
-                    );
-                    assert_eq!(cuCtxPushCurrent_v2(context), 0);
-                }
+        unsafe {
+            assert_eq!(
+                cuDevicePrimaryCtxRetain(&mut context as *mut CUcontext, device),
+                0
+            );
+            assert_eq!(cuCtxPushCurrent_v2(context), 0);
+        }
 
-                let mut start: CUevent = ptr::null_mut();
-                let mut end: CUevent = ptr::null_mut();
+        let mut start: CUevent = ptr::null_mut();
+        let mut end: CUevent = ptr::null_mut();
 
-                unsafe {
-                    assert_eq!(cuEventCreate(&mut start as *mut CUevent, 0), 0);
-                    assert_eq!(cuEventCreate(&mut end as *mut CUevent, 0), 0);
-                }
+        unsafe {
+            assert_eq!(cuEventCreate(&mut start as *mut CUevent, 0), 0);
+            assert_eq!(cuEventCreate(&mut end as *mut CUevent, 0), 0);
+        }
 
-                let commands = this.commands_order();
-                for command in commands {
-                    unsafe {
-                        assert_eq!(cuEventRecord(start, stream), 0);
-                    }
-
-                    let scope = this.device.default_stream().scope();
-                    scope.submit(std::iter::once(command.command.into_inner()));
-
-                    let mut elapsed_time: f32 = 0.0;
-
-                    unsafe {
-                        assert_eq!(cuEventRecord(end, stream), 0);
-                        assert_eq!(cuEventSynchronize(end), 0);
-                        assert_eq!(
-                            cuEventElapsedTime(&mut elapsed_time as *mut f32, start, end),
-                            0
-                        );
-                    }
-                    sender.send((command.debug_name, elapsed_time)).unwrap();
-                }
-
-                unsafe {
-                    assert_eq!(cuEventDestroy_v2(start), 0);
-                    assert_eq!(cuEventDestroy_v2(end), 0);
-                    assert_eq!(cuCtxPopCurrent_v2(&mut context as *mut CUcontext), 0);
-                    assert_eq!(cuDevicePrimaryCtxRelease_v2(device), 0);
-                }
-            });
-
-            while let Ok((name, time)) = receiver.recv() {
-                let start = std::time::Instant::now();
-                let _guard = tracing::info_span!("command", name).entered();
-                while start.elapsed().as_millis_f32() < time {
-                    std::hint::spin_loop();
-                }
+        let commands = this.commands_order();
+        for command in commands {
+            unsafe {
+                assert_eq!(cuEventRecord(start, stream), 0);
             }
-        });
+
+            let scope = this.device.default_stream().scope();
+            scope.submit(std::iter::once(command.command.into_inner()));
+
+            let mut elapsed_time: f32 = 0.0;
+
+            unsafe {
+                assert_eq!(cuEventRecord(end, stream), 0);
+                assert_eq!(cuEventSynchronize(end), 0);
+                assert_eq!(
+                    cuEventElapsedTime(&mut elapsed_time as *mut f32, start, end),
+                    0
+                );
+            }
+            timings.push((command.debug_name, elapsed_time));
+        }
+
+        unsafe {
+            assert_eq!(cuEventDestroy_v2(start), 0);
+            assert_eq!(cuEventDestroy_v2(end), 0);
+            assert_eq!(cuCtxPopCurrent_v2(&mut context as *mut CUcontext), 0);
+            assert_eq!(cuDevicePrimaryCtxRelease_v2(device), 0);
+        }
+
+        let _guard = tracing::info_span!("graph timings").entered();
+
+        for (name, time) in timings {
+            let start = std::time::Instant::now();
+            let _guard = tracing::info_span!("command", name).entered();
+            while start.elapsed().as_millis_f32() < time {
+                std::hint::spin_loop();
+            }
+            let dt = start.elapsed().as_millis_f32();
+            if dt > time + 0.01 {
+                let message = format!(
+                    "command {:?} took {}ms while being profiled as {}ms",
+                    name, time, dt
+                );
+                tracing::warn!(name:"overrun", message);
+            }
+        }
     }
 
     pub fn clear(&mut self) {
