@@ -14,3 +14,4 @@ pretty-type-name = "1.0.1"
 [features]
 display = ["bevy/bevy_winit"]
 debug = ["sefirot/debug"]
+trace = ["sefirot/trace"]

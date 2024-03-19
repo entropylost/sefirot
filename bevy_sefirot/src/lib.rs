@@ -23,6 +23,7 @@ pub use bevy_sefirot_macro::kernel;
 pub mod prelude {
     pub use bevy_sefirot_macro::kernel;
     pub use sefirot;
+    pub use sefirot::luisa::DeviceType;
     pub use sefirot::prelude::*;
 
     pub use crate::luisa::{InitKernel, LuisaDevice as Device, LuisaPlugin};
@@ -153,13 +154,18 @@ impl MirrorGraph {
     ) -> impl System<In = I, Out = ()> {
         f.pipe(AddNodeInterior::<G, F, I, N, M>(PhantomData))
     }
-    pub fn execute_init(&mut self) {
-        self.graph.execute_clear();
+    pub fn execute(&mut self) {
+        self.graph.execute();
         self.reinit();
     }
     #[cfg(feature = "debug")]
-    pub fn execute_init_dbg(&mut self) {
-        self.graph.execute_clear_dbg();
+    pub fn execute_dbg(&mut self) {
+        self.graph.execute_dbg();
+        self.reinit();
+    }
+    #[cfg(feature = "trace")]
+    pub fn execute_trace(&mut self) {
+        self.graph.execute_trace();
         self.reinit();
     }
 }

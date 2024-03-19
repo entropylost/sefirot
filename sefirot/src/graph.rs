@@ -192,63 +192,124 @@ impl<'a> ComputeGraph<'a> {
             .collect()
     }
 
-    // TODO: This currently does not parallelize anything.
-    /// Consumes the graph, executing it.
-    pub fn execute(self) {
+    fn commands_order(&mut self) -> Vec<CommandNode<'a>> {
         let order = self.order();
-        let mut commands = self.commands.into_iter().map(Some).collect::<Vec<_>>();
-        let mut exec_commands = Vec::new();
-        if order.is_empty() {
-            return;
-        }
-        for handle in order {
-            let NodeHandle::Command(idx) = handle else {
-                panic!("Order should only produce command nodes.");
-            };
-            exec_commands.push(
+        let mut commands = std::mem::take(&mut self.commands)
+            .into_iter()
+            .map(Some)
+            .collect::<Vec<_>>();
+        order
+            .into_iter()
+            .map(|handle| {
+                let NodeHandle::Command(idx) = handle else {
+                    panic!("Order should only produce command nodes.");
+                };
                 commands[idx]
                     .take()
                     .expect("Cannot have duplicate commands.")
-                    .command
-                    .into_inner(),
-            );
-        }
-        let scope = self.device.default_stream().scope();
-        scope.submit_with_callback(exec_commands, || {
-            drop(self.release);
+            })
+            .collect::<Vec<_>>()
+    }
+
+    // TODO: This currently does not parallelize anything.
+    /// Consumes the graph, executing it.
+    pub fn execute(&mut self) {
+        let mut this = std::mem::replace(self, Self::new(&self.device));
+
+        let commands = this.commands_order();
+        let scope = this.device.default_stream().scope();
+        scope.submit_with_callback(commands.into_iter().map(|c| c.command.into_inner()), || {
+            drop(this.release);
         });
     }
 
     /// Executes the graph without parallelism, printing debug information.
     #[cfg(feature = "debug")]
-    pub fn execute_dbg(self) {
+    pub fn execute_dbg(&mut self) {
         use tracing::info;
 
-        let order = self.order();
+        let mut this = std::mem::replace(self, Self::new(&self.device));
 
-        let mut commands = self.commands.into_iter().map(Some).collect::<Vec<_>>();
-        for handle in order {
-            let NodeHandle::Command(idx) = handle else {
-                panic!("Order should only produce command nodes.");
-            };
-            let command = commands[idx]
-                .take()
-                .expect("Cannot have duplicate commands.");
-
+        let commands = this.commands_order();
+        for command in commands {
             info!("Executing {:?}", command.debug_name);
-            let scope = self.device.default_stream().scope();
+            let scope = this.device.default_stream().scope();
             scope.submit(std::iter::once(command.command.into_inner()));
         }
     }
 
-    #[cfg(feature = "debug")]
-    pub fn execute_clear_dbg(&mut self) {
-        std::mem::replace(self, Self::new(&self.device)).execute_dbg();
-    }
+    #[cfg(feature = "trace")]
+    pub fn execute_trace(&mut self) {
+        use std::sync::mpsc::channel;
+        use std::{ptr, thread};
 
-    /// Executes the graph and clears it.
-    pub fn execute_clear(&mut self) {
-        std::mem::replace(self, Self::new(&self.device)).execute();
+        use cuda_device_sys::*;
+
+        let mut this = std::mem::replace(self, Self::new(&self.device));
+
+        let (sender, receiver) = channel::<(String, f32)>();
+
+        thread::scope(|s| {
+            s.spawn(move || {
+                let stream = this.device.default_stream().native_handle() as CUstream;
+
+                let device = unsafe { *(this.device.native_handle() as *const CUdevice) };
+                let mut context: CUcontext = ptr::null_mut();
+
+                unsafe {
+                    assert_eq!(
+                        cuDevicePrimaryCtxRetain(&mut context as *mut CUcontext, device),
+                        0
+                    );
+                    assert_eq!(cuCtxPushCurrent_v2(context), 0);
+                }
+
+                let mut start: CUevent = ptr::null_mut();
+                let mut end: CUevent = ptr::null_mut();
+
+                unsafe {
+                    assert_eq!(cuEventCreate(&mut start as *mut CUevent, 0), 0);
+                    assert_eq!(cuEventCreate(&mut end as *mut CUevent, 0), 0);
+                }
+
+                let commands = this.commands_order();
+                for command in commands {
+                    unsafe {
+                        assert_eq!(cuEventRecord(start, stream), 0);
+                    }
+
+                    let scope = this.device.default_stream().scope();
+                    scope.submit(std::iter::once(command.command.into_inner()));
+
+                    let mut elapsed_time: f32 = 0.0;
+
+                    unsafe {
+                        assert_eq!(cuEventRecord(end, stream), 0);
+                        assert_eq!(cuEventSynchronize(end), 0);
+                        assert_eq!(
+                            cuEventElapsedTime(&mut elapsed_time as *mut f32, start, end),
+                            0
+                        );
+                    }
+                    sender.send((command.debug_name, elapsed_time)).unwrap();
+                }
+
+                unsafe {
+                    assert_eq!(cuEventDestroy_v2(start), 0);
+                    assert_eq!(cuEventDestroy_v2(end), 0);
+                    assert_eq!(cuCtxPopCurrent_v2(&mut context as *mut CUcontext), 0);
+                    assert_eq!(cuDevicePrimaryCtxRelease_v2(device), 0);
+                }
+            });
+
+            while let Ok((name, time)) = receiver.recv() {
+                let start = std::time::Instant::now();
+                let _guard = tracing::info_span!("command", name).entered();
+                while start.elapsed().as_millis_f32() < time {
+                    std::hint::spin_loop();
+                }
+            }
+        });
     }
 
     pub fn clear(&mut self) {

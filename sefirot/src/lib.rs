@@ -1,5 +1,6 @@
 // This feature is basically guaranteed to be stablized. If the nightly dependency is an issue, just switch to `bevy`'s SyncCell.
 #![feature(exclusive_wrapper)]
+#![feature(duration_millis_float)]
 #![allow(clippy::type_complexity)]
 
 extern crate self as sefirot;

@@ -32,7 +32,6 @@ where
 #[allow(dead_code)]
 mod test {
     use luisa::lang::types::vector::{Vec2, Vec4};
-    use luisa::lang::types::AtomicRef;
 
     use self::buffer::{BufferMapping, Tex2dMapping};
     use super::*;

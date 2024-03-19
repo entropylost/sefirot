@@ -17,6 +17,7 @@ once_cell = "1.19.0"
 dashmap = "5.5.3"
 dyn-clone = "1.0.17"
 sefirot_macro = { path = "../sefirot_macro" }
+cuda_device_sys = { path = "../cuda_device_sys", optional = true }
 
 [dependencies.luisa_compute]
 git = "https://github.com/iMplode-nZ/luisa-compute-rs"
@@ -34,3 +35,4 @@ optional = true
 [features]
 bevy = ["dep:bevy_ecs"]
 debug = ["dep:tracing"]
+trace = ["debug", "dep:cuda_device_sys"]

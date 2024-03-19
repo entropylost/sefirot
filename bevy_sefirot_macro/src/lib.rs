@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use proc_macro2::TokenStream;
 use quote::quote_spanned;
 use syn::parse::Parser;
@@ -5,14 +7,11 @@ use syn::spanned::Spanned;
 use syn::token::Paren;
 use syn::*;
 
-// TODO: Add option to disable fast math.
-// Also offer "run" to generate the running system.
-// Use init(pub) to mean making the init public.
-// See https://docs.rs/syn/latest/syn/meta/fn.parser.html
 fn kernel_impl(f: ItemFn, attributes: Attributes) -> TokenStream {
     let init_vis = attributes.init_vis;
     let bevy_sefirot_path: Path = parse_quote!(::bevy_sefirot);
     let span = f.span();
+    let build_options = attributes.build_options.0;
     let vis = f.vis;
     let mut sig = f.sig;
     let mut block = f.block;
@@ -78,6 +77,21 @@ fn kernel_impl(f: ItemFn, attributes: Attributes) -> TokenStream {
                 *ac = parse_quote! {
                     ::sefirot::prelude::track!(#ac)
                 };
+                if !build_options.is_empty() {
+                    assert!(segments[1].ident == "build");
+                    assert!(args.len() == 3);
+                    let build_options = build_options.into_iter().collect::<Vec<_>>();
+                    let keys = build_options.iter().map(|(k, _)| k);
+                    let values = build_options.iter().map(|(_, v)| v);
+                    let kernel_build_options: Expr = parse_quote! {
+                        ::sefirot::luisa::runtime::KernelBuildOptions {
+                            #(#keys: #values,)*
+                            ..::sefirot::kernel::default_kernel_build_options()
+                        }
+                    };
+                    args.insert(2, kernel_build_options);
+                    segments[1].ident = Ident::new("build_with_options", segments[1].ident.span());
+                }
                 last_stmt = Stmt::Expr(
                     parse_quote! {
                         #last_stmt.with_name(stringify!(#kernel_name))
@@ -131,17 +145,41 @@ struct Run {
     vis: Visibility,
 }
 
+struct BuildOptions(HashMap<Ident, Expr>);
+impl BuildOptions {
+    fn register(&mut self, key: Ident, value: Expr) -> Result<()> {
+        let allowed_keys = [
+            "enable_debug_info",
+            "enable_optimization",
+            "async_compile",
+            "enable_cache",
+            "enable_fast_math",
+            "max_registers",
+            "time_trace",
+            "name",
+            "native_include",
+        ];
+        if !allowed_keys.contains(&&*key.to_string()) {
+            return Err(Error::new(
+                key.span(),
+                format!("unsupported build option: {}", key),
+            ));
+        }
+        self.0.insert(key, value);
+        Ok(())
+    }
+}
+
 struct Attributes {
     init_vis: Visibility,
     run: Option<Run>,
-    // TODO: Use
-    fast_math: Option<LitBool>,
+    build_options: BuildOptions,
 }
 
 fn parse_attrs(attr: TokenStream) -> std::result::Result<Attributes, TokenStream> {
     let mut init_vis = Visibility::Inherited;
     let mut run = None;
-    let mut fast_math = None;
+    let mut build_options = BuildOptions(HashMap::new());
     let parser = meta::parser(|meta| {
         if meta.path.is_ident("init") {
             let content;
@@ -161,11 +199,13 @@ fn parse_attrs(attr: TokenStream) -> std::result::Result<Attributes, TokenStream
                 this_run.name = Some(value.parse()?);
             }
             run = Some(this_run);
-        } else if meta.path.is_ident("fast_math") {
-            let value = meta.value()?;
-            fast_math = Some(value.parse()?);
         } else {
-            return Err(meta.error("unsupported attribute"));
+            let key = meta
+                .path
+                .get_ident()
+                .ok_or_else(|| Error::new(meta.path.span(), "expected identifier"))?;
+            let value = meta.value()?;
+            build_options.register(key.clone(), value.parse()?)?;
         }
         Ok(())
     });
@@ -175,7 +215,7 @@ fn parse_attrs(attr: TokenStream) -> std::result::Result<Attributes, TokenStream
     Ok(Attributes {
         init_vis,
         run,
-        fast_math,
+        build_options,
     })
 }
 
@@ -210,7 +250,7 @@ fn test_kernel() {
     let f = kernel_impl(
         f,
         parse_attrs(quote!(
-            init(pub), run(pub) = "foo", fast_math = true
+            init(pub), run(pub) = "foo", enable_fast_math = true
         ))
         .unwrap(),
     );
