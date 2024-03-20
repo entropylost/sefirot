@@ -66,7 +66,7 @@ where
 }
 
 pub trait Mapping<X: Access, I: 'static>:
-    ListMapping<<X as ListAccess>::List, I> + Send + Sync + 'static
+    ListMapping<<X as ListAccess>::List, I> + 'static
 {
     fn access(&self, index: &I, ctx: &mut Context, binding: FieldId) -> X;
     /// Saves the value of the field to the context. After this, the cached value should be droppable.
@@ -85,7 +85,7 @@ mod private {
     impl<X: Access, I: FieldIndex, M: Mapping<X, I>> Sealed for MappingBinding<X, I, M> {}
 }
 
-pub trait DynMapping: Send + Sync + 'static + private::Sealed {
+pub trait DynMapping: 'static + private::Sealed {
     fn access_dyn(
         &self,
         level: AccessLevel,

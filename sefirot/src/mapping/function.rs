@@ -6,7 +6,7 @@ use crate::internal_prelude::*;
 pub struct FnMapping<
     X: Access<List = AccessCons<X, AccessNil>>,
     I: 'static,
-    F: Fn(&I, &mut Context) -> X + Send + Sync + 'static,
+    F: Fn(&I, &mut Context) -> X + 'static,
 > {
     f: F,
     _marker: PhantomData<fn(I) -> X>,
@@ -14,7 +14,7 @@ pub struct FnMapping<
 impl<
         X: Access<List = AccessCons<X, AccessNil>>,
         I: 'static,
-        F: Fn(&I, &mut Context) -> X + Send + Sync + 'static,
+        F: Fn(&I, &mut Context) -> X + 'static,
     > FnMapping<X, I, F>
 {
     pub fn new(f: F) -> Self {
@@ -27,7 +27,7 @@ impl<
 impl<
         X: Access<List = AccessCons<X, AccessNil>>,
         I: 'static,
-        F: Fn(&I, &mut Context) -> X + Send + Sync + 'static,
+        F: Fn(&I, &mut Context) -> X + 'static,
     > Mapping<X, I> for FnMapping<X, I, F>
 where
     F: Fn(&I, &mut Context) -> X,
@@ -40,7 +40,7 @@ where
 pub struct CachedFnMapping<
     X: Access<List = AccessCons<X, AccessNil>> + Clone,
     I: 'static,
-    F: Fn(&I, &mut Context) -> X + Send + Sync + 'static,
+    F: Fn(&I, &mut Context) -> X + 'static,
 > {
     f: F,
     _marker: PhantomData<fn(I) -> X>,
@@ -48,7 +48,7 @@ pub struct CachedFnMapping<
 impl<
         X: Access<List = AccessCons<X, AccessNil>> + Clone,
         I: 'static,
-        F: Fn(&I, &mut Context) -> X + Send + Sync + 'static,
+        F: Fn(&I, &mut Context) -> X + 'static,
     > CachedFnMapping<X, I, F>
 {
     pub fn new(f: F) -> Self {
@@ -61,7 +61,7 @@ impl<
 impl<
         X: Access<List = AccessCons<X, AccessNil>> + Clone,
         I: 'static,
-        F: Fn(&I, &mut Context) -> X + Send + Sync + 'static,
+        F: Fn(&I, &mut Context) -> X + 'static,
     > Mapping<X, I> for CachedFnMapping<X, I, F>
 where
     F: Fn(&I, &mut Context) -> X,

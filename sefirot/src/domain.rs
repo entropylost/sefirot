@@ -25,12 +25,12 @@ pub trait DomainImpl: Clone + Send + Sync + 'static {
         kernel_context: Arc<KernelContext>,
         passthrough: <Self::Passthrough as KernelArg>::Parameter,
     ) -> Element<Self::Index>;
-    fn dispatch_async(
+    fn dispatch(
         &self,
         domain_args: Self::Args,
         args: KernelDispatch<Self::Passthrough>,
     ) -> NodeConfigs<'static>;
-    fn contains(&self, index: &Self::Index) -> Expr<bool>;
+    fn contains_impl(&self, index: &Self::Index) -> Expr<bool>;
 }
 
 impl<X: DomainImpl> Domain for X
@@ -39,17 +39,17 @@ where
 {
     type Args = <X as DomainImpl>::Args;
     type Index = <X as DomainImpl>::Index;
-    fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<Self::Index> {
+    fn __get_element_erased(&self, kernel_context: Arc<KernelContext>) -> Element<Self::Index> {
         let passthrough =
             <X::Passthrough as KernelArg>::Parameter::def_param(&mut kernel_context.builder.lock());
         self.get_element(kernel_context, passthrough)
     }
-    fn dispatch_async(
+    fn __dispatch_async_erased(
         &self,
         domain_args: Self::Args,
         args: ErasedKernelDispatch,
     ) -> NodeConfigs<'static> {
-        self.dispatch_async(
+        self.dispatch(
             domain_args,
             KernelDispatch {
                 erased: args,
@@ -58,31 +58,38 @@ where
         )
     }
     fn contains(&self, index: &Self::Index) -> Expr<bool> {
-        self.contains(index)
+        <Self as DomainImpl>::contains_impl(self, index)
     }
 }
 
 pub trait Domain: DynClone + Send + Sync + 'static {
     type Args: 'static;
     type Index: FieldIndex;
-    fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<Self::Index>;
-    fn dispatch_async(
+    fn contains(&self, index: &Self::Index) -> Expr<bool>;
+
+    #[doc(hidden)]
+    fn __get_element_erased(&self, kernel_context: Arc<KernelContext>) -> Element<Self::Index>;
+    #[doc(hidden)]
+    fn __dispatch_async_erased(
         &self,
         domain_args: Self::Args,
         args: ErasedKernelDispatch,
     ) -> NodeConfigs<'static>;
-    fn contains(&self, index: &Self::Index) -> Expr<bool>;
 }
 dyn_clone::clone_trait_object!(<A: 'static, I: FieldIndex> Domain<Args = A, Index = I>);
 
 impl<A: 'static, I: FieldIndex> Domain for Box<dyn Domain<Args = A, Index = I>> {
     type Args = A;
     type Index = I;
-    fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<I> {
-        self.as_ref().get_element(kernel_context)
+    fn __get_element_erased(&self, kernel_context: Arc<KernelContext>) -> Element<I> {
+        self.as_ref().__get_element_erased(kernel_context)
     }
-    fn dispatch_async(&self, domain_args: A, args: ErasedKernelDispatch) -> NodeConfigs<'static> {
-        self.as_ref().dispatch_async(domain_args, args)
+    fn __dispatch_async_erased(
+        &self,
+        domain_args: A,
+        args: ErasedKernelDispatch,
+    ) -> NodeConfigs<'static> {
+        self.as_ref().__dispatch_async_erased(domain_args, args)
     }
     fn contains(&self, index: &I) -> Expr<bool> {
         self.as_ref().contains(index)
@@ -104,7 +111,6 @@ pub trait KernelDispatchT<P> {
     }
 }
 
-// TODO: () still does computations. Perhaps make a separate null type for this.
 pub struct KernelDispatch<'a, P: PassthroughArg = ()> {
     erased: ErasedKernelDispatch<'a>,
     _marker: PhantomData<P>,

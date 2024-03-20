@@ -41,10 +41,10 @@ pub struct KernelContext {
     pub(crate) builder: Mutex<KernelBuilder>,
 }
 
-pub(crate) struct ErasedKernelArg {
+pub struct ErasedKernelArg {
     pub(crate) encode: Box<dyn Fn(&mut KernelArgEncoder)>,
 }
-struct PlaceholderKernelParam;
+pub struct PlaceholderKernelParam;
 
 impl KernelArg for ErasedKernelArg {
     type Parameter = PlaceholderKernelParam;
@@ -87,7 +87,7 @@ where
         domain_args: Self::Args,
         args: ErasedKernelDispatch,
     ) -> NodeConfigs<'static> {
-        self.dispatch_async(domain_args, args)
+        self.__dispatch_async_erased(domain_args, args)
     }
 }
 
@@ -131,7 +131,7 @@ impl<S: KernelSignature, A: 'static> Kernel<S, A> {
                     builder: Mutex::new(builder),
                 });
 
-                let element = domain.get_element(kernel_context.clone());
+                let element = domain.__get_element_erased(kernel_context.clone());
 
                 f.execute(element);
 

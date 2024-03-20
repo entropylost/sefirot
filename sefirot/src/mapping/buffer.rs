@@ -5,7 +5,7 @@ use luisa::lang::types::vector::{Vec2, Vec3};
 use luisa::lang::types::AtomicRef;
 
 use super::cache::SimpleExprMapping;
-use crate::domain::{Domain, KernelDispatch};
+use crate::domain::{DomainImpl, KernelDispatch};
 use crate::graph::NodeConfigs;
 use crate::internal_prelude::*;
 use crate::kernel::KernelContext;
@@ -107,46 +107,48 @@ impl StaticDomain<3> {
     }
 }
 
-impl Domain for StaticDomain<1> {
+impl DomainImpl for StaticDomain<1> {
     type Args = ();
     type Index = Expr<u32>;
     type Passthrough = ();
-    fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<Self::Index> {
+    fn get_element(&self, kernel_context: Arc<KernelContext>, _: ()) -> Element<Self::Index> {
         Element::new(dispatch_id().x, Context::new(kernel_context))
     }
-    fn dispatch_async(&self, _domain_args: (), args: KernelDispatch) -> NodeConfigs<'static> {
+    fn dispatch(&self, _: (), args: KernelDispatch) -> NodeConfigs<'static> {
         args.dispatch([self.0[0], 1, 1])
     }
     #[tracked_nc]
-    fn contains(&self, index: &Self::Index) -> Expr<bool> {
+    fn contains_impl(&self, index: &Self::Index) -> Expr<bool> {
         *index < self.0[0]
     }
 }
-impl Domain for StaticDomain<2> {
+impl DomainImpl for StaticDomain<2> {
     type Args = ();
     type Index = Expr<Vec2<u32>>;
-    fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<Self::Index> {
+    type Passthrough = ();
+    fn get_element(&self, kernel_context: Arc<KernelContext>, _: ()) -> Element<Self::Index> {
         Element::new(dispatch_id().xy(), Context::new(kernel_context))
     }
-    fn dispatch_async(&self, _domain_args: (), args: KernelDispatch) -> NodeConfigs<'static> {
+    fn dispatch(&self, _: (), args: KernelDispatch) -> NodeConfigs<'static> {
         args.dispatch([self.0[0], self.0[1], 1])
     }
     #[tracked_nc]
-    fn contains(&self, index: &Self::Index) -> Expr<bool> {
+    fn contains_impl(&self, index: &Self::Index) -> Expr<bool> {
         (index < Vec2::from(self.0)).all()
     }
 }
-impl Domain for StaticDomain<3> {
+impl DomainImpl for StaticDomain<3> {
     type Args = ();
     type Index = Expr<Vec3<u32>>;
-    fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<Self::Index> {
+    type Passthrough = ();
+    fn get_element(&self, kernel_context: Arc<KernelContext>, _: ()) -> Element<Self::Index> {
         Element::new(dispatch_id(), Context::new(kernel_context))
     }
-    fn dispatch_async(&self, _domain_args: (), args: KernelDispatch) -> NodeConfigs<'static> {
+    fn dispatch(&self, _: (), args: KernelDispatch) -> NodeConfigs<'static> {
         args.dispatch(self.0)
     }
     #[tracked_nc]
-    fn contains(&self, index: &Self::Index) -> Expr<bool> {
+    fn contains_impl(&self, index: &Self::Index) -> Expr<bool> {
         (index < Vec3::from(self.0)).all()
     }
 }

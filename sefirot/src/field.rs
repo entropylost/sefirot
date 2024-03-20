@@ -140,7 +140,7 @@ impl<X: Access, I: FieldIndex> Field<X, I> {
     pub fn at(&self, el: &Element<I>) -> X {
         self.at_split(el.index(), &mut el.context())
     }
-    pub fn bind(&self, mapping: impl Mapping<X, I>) -> Self {
+    pub fn bind(&self, mapping: impl Mapping<X, I> + Send + Sync) -> Self {
         let binding = &mut FIELDS.get_mut(&self.id).expect("Field dropped").binding;
         debug_assert!(binding.is_none());
         *binding = Some(Box::new(MappingBinding::<X, I, _>::new(mapping)));
@@ -172,7 +172,10 @@ impl<X: Access, I: FieldIndex> Field<X, I> {
             FieldHandle(id),
         )
     }
-    pub fn create_bind(name: impl AsRef<str>, mapping: impl Mapping<X, I>) -> (Self, FieldHandle) {
+    pub fn create_bind(
+        name: impl AsRef<str>,
+        mapping: impl Mapping<X, I> + Send + Sync,
+    ) -> (Self, FieldHandle) {
         let (field, handle) = Self::create(name);
         field.bind(mapping);
         (field, handle)
@@ -203,7 +206,7 @@ pub struct RawField {
     pub(crate) name: String,
     pub(crate) access_type_name: String,
     pub(crate) index_type_name: String,
-    pub(crate) binding: Option<Box<dyn DynMapping>>,
+    pub(crate) binding: Option<Box<dyn DynMapping + Send + Sync>>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]

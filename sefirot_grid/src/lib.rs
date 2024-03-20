@@ -2,6 +2,7 @@ use std::cell::Cell;
 use std::sync::Arc;
 
 use encoder::LinearEncoder;
+use patterns::{CheckerboardPattern, MargolusPattern};
 use sefirot::ext_prelude::*;
 use sefirot::field::FieldHandle;
 use sefirot::luisa::lang::types::vector::Vec2;
@@ -15,9 +16,7 @@ use sefirot::mapping::AMapping;
 
 pub mod dual;
 pub mod encoder;
-// pub mod margolus;
-
-// TODO: Actually make this useful.
+pub mod patterns;
 
 #[derive(Debug)]
 pub struct GridDomain {
@@ -40,25 +39,22 @@ impl Clone for GridDomain {
         }
     }
 }
-impl Domain for GridDomain {
+impl DomainImpl for GridDomain {
     type Args = ();
     type Index = Expr<Vec2<i32>>;
+    type Passthrough = ();
     #[tracked_nc]
-    fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<Self::Index> {
+    fn get_element(&self, kernel_context: Arc<KernelContext>, _: ()) -> Element<Self::Index> {
         let index = dispatch_id().xy().cast_i32() + Vec2::from(self.start);
         let mut context = Context::new(kernel_context);
         context.bind_local(self.index, FnMapping::new(|_el, _ctx| dispatch_id().xy()));
         Element::new(index, context)
     }
-    fn dispatch_async(
-        &self,
-        _domain_args: Self::Args,
-        args: KernelDispatch,
-    ) -> NodeConfigs<'static> {
+    fn dispatch(&self, _: Self::Args, args: KernelDispatch) -> NodeConfigs<'static> {
         args.dispatch([self.size()[0], self.size()[1], 1])
     }
     #[tracked_nc]
-    fn contains(&self, index: &Self::Index) -> Expr<bool> {
+    fn contains_impl(&self, index: &Self::Index) -> Expr<bool> {
         if self.wrapping {
             true.expr()
         } else {
@@ -68,18 +64,6 @@ impl Domain for GridDomain {
 }
 
 impl GridDomain {
-    pub fn start(&self) -> [i32; 2] {
-        self.start
-    }
-    pub fn size(&self) -> [u32; 2] {
-        self.shifted_domain.0
-    }
-    pub fn end(&self) -> [i32; 2] {
-        [
-            self.start[0] + self.shifted_domain.0[0] as i32,
-            self.start[1] + self.shifted_domain.0[1] as i32,
-        ]
-    }
     pub fn new(start: [i32; 2], size: [u32; 2]) -> Self {
         Self::new_with_wrapping(start, size, false)
     }
@@ -109,12 +93,32 @@ impl GridDomain {
             wrapping,
         }
     }
+    pub fn start(&self) -> [i32; 2] {
+        self.start
+    }
+    pub fn size(&self) -> [u32; 2] {
+        self.shifted_domain.0
+    }
+    pub fn end(&self) -> [i32; 2] {
+        [
+            self.start[0] + self.shifted_domain.0[0] as i32,
+            self.start[1] + self.shifted_domain.0[1] as i32,
+        ]
+    }
+    pub fn width(&self) -> u32 {
+        self.size()[0]
+    }
+    pub fn height(&self) -> u32 {
+        self.size()[1]
+    }
+
     pub fn encoder(&self) -> &LinearEncoder {
         self.encoder.as_ref().unwrap()
     }
     pub fn get_encoder(&self) -> Option<&LinearEncoder> {
         self.encoder.as_ref()
     }
+
     pub fn with_encoder(self, encoder: LinearEncoder) -> Self {
         debug_assert!(encoder.allowed_size(self.size()));
         Self {
@@ -125,6 +129,7 @@ impl GridDomain {
     pub fn with_morton(self) -> Self {
         self.with_encoder(LinearEncoder::morton())
     }
+
     pub fn map_texture<V: IoTexel>(
         &self,
         texture: impl IntoHandled<H = HandledTex2d<V>>,
@@ -161,6 +166,30 @@ impl GridDomain {
     pub fn create_buffer<V: Value>(&self, device: &Device) -> impl AMapping<V, Vec2<i32>> {
         self.map_buffer(device.create_buffer((self.size()[0] * self.size()[1]) as usize))
     }
+
+    pub fn checkerboard(&self) -> CheckerboardPattern {
+        debug_assert_eq!(self.width() % 2, 0, "Checkerboard pattern needs even size");
+        debug_assert_eq!(self.height() % 2, 0, "Checkerboard pattern needs even size");
+
+        CheckerboardPattern { grid: self.clone() }
+    }
+    pub fn margolus(&self) -> MargolusPattern {
+        if self.wrapping {
+            debug_assert_eq!(
+                self.width() % 2,
+                0,
+                "Margolus pattern on wrapping world needs even size"
+            );
+            debug_assert_eq!(
+                self.height() % 2,
+                0,
+                "Margolus pattern on wrapping world needs even size"
+            );
+        }
+
+        MargolusPattern { grid: self.clone() }
+    }
+
     #[tracked]
     pub fn on_adjacent(&self, el: &Element<Expr<Vec2<i32>>>, f: impl Fn(Element<Expr<Vec2<i32>>>)) {
         for dir in [Vec2::x(), Vec2::y(), -Vec2::x(), -Vec2::y()] {

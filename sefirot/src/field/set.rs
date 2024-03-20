@@ -58,7 +58,7 @@ impl FieldSet {
     pub fn create_bind<X: Access, I: FieldIndex>(
         &mut self,
         name: impl AsRef<str>,
-        mapping: impl Mapping<X, I>,
+        mapping: impl Mapping<X, I> + Send + Sync,
     ) -> Field<X, I> {
         self.create::<X, I>(name).bind(mapping)
     }
