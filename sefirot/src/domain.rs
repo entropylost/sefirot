@@ -1,31 +1,87 @@
+use std::marker::PhantomData;
 use std::sync::Arc;
 
 use dyn_clone::DynClone;
+use luisa::runtime::{KernelArg, KernelParameter};
 
 use crate::graph::NodeConfigs;
 use crate::internal_prelude::*;
-use crate::kernel::KernelContext;
+use crate::kernel::{ErasedKernelArg, ErasedKernelDispatch, KernelContext};
 use crate::prelude::AsNodes;
+
+pub trait PassthroughArg: KernelArg + 'static {}
+impl<T: KernelArg + 'static> PassthroughArg for T {}
 
 /// A trait representing a space across which computations may be performed by calling kernels.
 /// This is intentionally very generic, and does not provide any guarantees on how many dispatch calls are generated.
 /// For most purposes, [`IndexDomain`] is a conveinent way to implement this trait if only a single dispatch call is necessary.
-pub trait Domain: DynClone + Send + Sync + 'static {
-    type A: 'static;
-    type I: FieldIndex;
-    fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<Self::I>;
-    fn dispatch_async(&self, domain_args: Self::A, args: DispatchArgs) -> NodeConfigs<'static>;
-    fn contains(&self, index: &Self::I) -> Expr<bool>;
+pub trait DomainImpl: Clone + Send + Sync + 'static {
+    type Args: 'static;
+    type Index: FieldIndex;
+    type Passthrough: PassthroughArg;
+    // TODO: Need to be able to pass arguments into this.
+    fn get_element(
+        &self,
+        kernel_context: Arc<KernelContext>,
+        passthrough: <Self::Passthrough as KernelArg>::Parameter,
+    ) -> Element<Self::Index>;
+    fn dispatch_async(
+        &self,
+        domain_args: Self::Args,
+        args: KernelDispatch<Self::Passthrough>,
+    ) -> NodeConfigs<'static>;
+    fn contains(&self, index: &Self::Index) -> Expr<bool>;
 }
-dyn_clone::clone_trait_object!(<A: 'static, I: FieldIndex> Domain<A = A, I = I>);
 
-impl<A: 'static, I: FieldIndex> Domain for Box<dyn Domain<A = A, I = I>> {
-    type A = A;
-    type I = I;
+impl<X: DomainImpl> Domain for X
+where
+    X: DomainImpl,
+{
+    type Args = <X as DomainImpl>::Args;
+    type Index = <X as DomainImpl>::Index;
+    fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<Self::Index> {
+        let passthrough =
+            <X::Passthrough as KernelArg>::Parameter::def_param(&mut kernel_context.builder.lock());
+        self.get_element(kernel_context, passthrough)
+    }
+    fn dispatch_async(
+        &self,
+        domain_args: Self::Args,
+        args: ErasedKernelDispatch,
+    ) -> NodeConfigs<'static> {
+        self.dispatch_async(
+            domain_args,
+            KernelDispatch {
+                erased: args,
+                _marker: PhantomData,
+            },
+        )
+    }
+    fn contains(&self, index: &Self::Index) -> Expr<bool> {
+        self.contains(index)
+    }
+}
+
+pub trait Domain: DynClone + Send + Sync + 'static {
+    type Args: 'static;
+    type Index: FieldIndex;
+    fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<Self::Index>;
+    fn dispatch_async(
+        &self,
+        domain_args: Self::Args,
+        args: ErasedKernelDispatch,
+    ) -> NodeConfigs<'static>;
+    fn contains(&self, index: &Self::Index) -> Expr<bool>;
+}
+dyn_clone::clone_trait_object!(<A: 'static, I: FieldIndex> Domain<Args = A, Index = I>);
+
+impl<A: 'static, I: FieldIndex> Domain for Box<dyn Domain<Args = A, Index = I>> {
+    type Args = A;
+    type Index = I;
     fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<I> {
         self.as_ref().get_element(kernel_context)
     }
-    fn dispatch_async(&self, domain_args: A, args: DispatchArgs) -> NodeConfigs<'static> {
+    fn dispatch_async(&self, domain_args: A, args: ErasedKernelDispatch) -> NodeConfigs<'static> {
         self.as_ref().dispatch_async(domain_args, args)
     }
     fn contains(&self, index: &I) -> Expr<bool> {
@@ -33,25 +89,60 @@ impl<A: 'static, I: FieldIndex> Domain for Box<dyn Domain<A = A, I = I>> {
     }
 }
 
-// TODO: Change; indirect dispatch may be necessary.
-pub struct DispatchArgs<'a> {
-    pub(crate) call_kernel_async: &'a dyn Fn([u32; 3]) -> Command<'static, 'static>,
-    // TODO: Why is this here?
-    pub(crate) debug_name: Option<String>,
-}
-impl DispatchArgs<'_> {
-    pub fn dispatch(&self, dispatch_size: [u32; 3]) -> NodeConfigs<'static> {
-        let config = (self.call_kernel_async)(dispatch_size).into_node_configs();
-        if let Some(name) = self.debug_name.as_deref() {
+pub trait KernelDispatchT<P> {
+    fn kernel_name(&self) -> Option<&str>;
+    fn dispatch_raw(&self, dispatch_size: [u32; 3], passthrough: P) -> Command<'static, 'static>;
+    fn dispatch(&self, dispatch_size: [u32; 3], passthrough: P) -> NodeConfigs<'static> {
+        let config = self
+            .dispatch_raw(dispatch_size, passthrough)
+            .into_node_configs();
+        if let Some(name) = self.kernel_name() {
             config.debug(name)
         } else {
             config
         }
     }
-    pub fn dispatch_command(&self, dispatch_size: [u32; 3]) -> Command<'static, 'static> {
-        (self.call_kernel_async)(dispatch_size)
+}
+
+// TODO: () still does computations. Perhaps make a separate null type for this.
+pub struct KernelDispatch<'a, P: PassthroughArg = ()> {
+    erased: ErasedKernelDispatch<'a>,
+    _marker: PhantomData<P>,
+}
+impl<P: PassthroughArg> KernelDispatch<'_, P> {
+    pub fn kernel_name(&self) -> Option<&str> {
+        self.erased.debug_name.as_deref()
     }
-    pub fn debug_name(&self) -> Option<&str> {
-        self.debug_name.as_deref()
+    pub fn dispatch_raw_with(
+        &self,
+        dispatch_size: [u32; 3],
+        passthrough: P,
+    ) -> Command<'static, 'static> {
+        (self.erased.call_kernel_async)(
+            dispatch_size,
+            ErasedKernelArg {
+                encode: Box::new(move |encoder| {
+                    passthrough.encode(encoder);
+                }),
+            },
+        )
+    }
+    pub fn dispatch_with(&self, dispatch_size: [u32; 3], passthrough: P) -> NodeConfigs<'static> {
+        let config = self
+            .dispatch_raw_with(dispatch_size, passthrough)
+            .into_node_configs();
+        if let Some(name) = self.kernel_name() {
+            config.debug(name)
+        } else {
+            config
+        }
+    }
+}
+impl KernelDispatch<'_> {
+    pub fn dispatch_raw(&self, dispatch_size: [u32; 3]) -> Command<'static, 'static> {
+        self.dispatch_raw_with(dispatch_size, ())
+    }
+    pub fn dispatch(&self, dispatch_size: [u32; 3]) -> NodeConfigs<'static> {
+        self.dispatch_with(dispatch_size, ())
     }
 }

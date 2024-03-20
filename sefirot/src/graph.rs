@@ -239,9 +239,8 @@ impl<'a> ComputeGraph<'a> {
     }
 
     #[cfg(feature = "trace")]
-    pub fn execute_trace(&mut self) {
-        use std::sync::mpsc::channel;
-        use std::{ptr, thread};
+    pub fn execute_timings(&mut self) -> Vec<(String, f32)> {
+        use std::ptr;
 
         use cuda_device_sys::*;
 
@@ -298,6 +297,12 @@ impl<'a> ComputeGraph<'a> {
             assert_eq!(cuCtxPopCurrent_v2(&mut context as *mut CUcontext), 0);
             assert_eq!(cuDevicePrimaryCtxRelease_v2(device), 0);
         }
+
+        timings
+    }
+    #[cfg(feature = "trace")]
+    pub fn execute_trace(&mut self) {
+        let timings = self.execute_timings();
 
         let _guard = tracing::info_span!("graph timings").entered();
 

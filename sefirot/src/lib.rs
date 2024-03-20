@@ -43,7 +43,7 @@ pub mod prelude {
 }
 
 pub mod ext_prelude {
-    pub use crate::domain::DispatchArgs;
+    pub use crate::domain::{DomainImpl, KernelDispatch};
     pub use crate::element::Context;
     pub use crate::graph::NodeConfigs;
     pub use crate::kernel::KernelContext;

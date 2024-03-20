@@ -3,7 +3,7 @@ use std::sync::Arc;
 use luisa::runtime::{AsKernelArg, KernelArg, KernelArgEncoder, KernelBuilder, KernelParameter};
 use parking_lot::Mutex;
 
-use crate::domain::{DispatchArgs, Domain};
+use crate::domain::Domain;
 use crate::graph::{ComputeGraph, NodeConfigs};
 use crate::internal_prelude::*;
 
@@ -38,26 +38,54 @@ impl AsKernelArg for KernelBindings {
 
 pub struct KernelContext {
     bindings: KernelBindings,
-    builder: Mutex<KernelBuilder>,
+    pub(crate) builder: Mutex<KernelBuilder>,
+}
+
+pub(crate) struct ErasedKernelArg {
+    pub(crate) encode: Box<dyn Fn(&mut KernelArgEncoder)>,
+}
+struct PlaceholderKernelParam;
+
+impl KernelArg for ErasedKernelArg {
+    type Parameter = PlaceholderKernelParam;
+    fn encode(&self, encoder: &mut KernelArgEncoder) {
+        (self.encode)(encoder);
+    }
+}
+impl AsKernelArg for ErasedKernelArg {
+    type Output = Self;
+}
+impl KernelParameter for PlaceholderKernelParam {
+    type Arg = ErasedKernelArg;
+    fn def_param(_builder: &mut KernelBuilder) -> Self {
+        // Parameter must be manually defined elsewhere.
+        Self
+    }
+}
+
+pub struct ErasedKernelDispatch<'a> {
+    pub(crate) call_kernel_async:
+        &'a dyn Fn([u32; 3], ErasedKernelArg) -> Command<'static, 'static>,
+    pub(crate) debug_name: Option<String>,
 }
 
 trait KernelDomain: Send + Sync + 'static {
-    type A: 'static;
+    type Args: 'static;
     fn kernel_dispatch_async(
         &self,
-        domain_args: Self::A,
-        args: DispatchArgs,
+        domain_args: Self::Args,
+        args: ErasedKernelDispatch,
     ) -> NodeConfigs<'static>;
 }
 impl<T> KernelDomain for T
 where
     T: Domain,
 {
-    type A = <T as Domain>::A;
+    type Args = <T as Domain>::Args;
     fn kernel_dispatch_async(
         &self,
-        domain_args: Self::A,
-        args: DispatchArgs,
+        domain_args: Self::Args,
+        args: ErasedKernelDispatch,
     ) -> NodeConfigs<'static> {
         self.dispatch_async(domain_args, args)
     }
@@ -66,7 +94,7 @@ where
 pub type LuisaKernel<S> = luisa::runtime::Kernel<<S as KernelSignature>::LuisaSignature>;
 
 pub struct Kernel<S: KernelSignature, A: 'static = ()> {
-    domain: Box<dyn KernelDomain<A = A>>,
+    domain: Box<dyn KernelDomain<Args = A>>,
     pub(crate) raw: LuisaKernel<S>,
     pub(crate) bindings: KernelBindings,
     pub(crate) debug_name: Option<String>,
@@ -82,7 +110,7 @@ impl<S: KernelSignature, A: 'static> Kernel<S, A> {
     }
     pub fn build<I: FieldIndex>(
         device: &Device,
-        domain: &impl Domain<I = I, A = A>,
+        domain: &impl Domain<Index = I, Args = A>,
         f: S::Function<'_, I>,
     ) -> Self {
         Self::build_with_options(device, default_kernel_build_options(), domain, f)
@@ -90,7 +118,7 @@ impl<S: KernelSignature, A: 'static> Kernel<S, A> {
     pub fn build_with_options<I: FieldIndex>(
         device: &Device,
         options: KernelBuildOptions,
-        domain: &impl Domain<I = I, A = A>,
+        domain: &impl Domain<Index = I, Args = A>,
         f: S::Function<'_, I>,
     ) -> Self {
         let domain = dyn_clone::clone(domain);
@@ -141,9 +169,9 @@ macro_rules! impl_kernel {
                 graph.execute();
             }
             pub fn dispatch_with_domain_args(&self, domain_args: A) -> NodeConfigs<'static> {
-                let args = DispatchArgs {
-                    call_kernel_async: &|dispatch_size| {
-                        self.raw.dispatch_async(dispatch_size, &self.bindings)
+                let args = ErasedKernelDispatch {
+                    call_kernel_async: &|dispatch_size, arg| {
+                        self.raw.dispatch_async(dispatch_size, &arg, &self.bindings)
                     },
                     debug_name: self.debug_name.clone(),
                 };
@@ -181,9 +209,9 @@ macro_rules! impl_kernel {
             #[allow(clippy::too_many_arguments)]
             pub fn dispatch_with_domain_args<$S0: AsKernelArg<Output = $T0> $(, $Sn: AsKernelArg<Output = $Tn>)*>
                 (&self, domain_args: A, $S0: &$S0 $(, $Sn: &$Sn)*) -> NodeConfigs<'static> {
-                let args = DispatchArgs {
-                    call_kernel_async: &|dispatch_size| {
-                        self.raw.dispatch_async(dispatch_size, $S0, $($Sn,)* &self.bindings)
+                let args = ErasedKernelDispatch {
+                    call_kernel_async: &|dispatch_size, arg| {
+                        self.raw.dispatch_async(dispatch_size, &arg, $S0, $($Sn,)* &self.bindings)
                     },
                     debug_name: self.debug_name.clone(),
                 };
@@ -194,7 +222,7 @@ macro_rules! impl_kernel {
     };
 }
 
-impl_kernel!(T0:S0, T1:S1, T2:S2, T3:S3, T4:S4, T5:S5, T6:S6, T7:S7, T8:S8, T9:S9, T10:S10, T11:S11, T12:S12, T13:S13, T14:S14);
+impl_kernel!(T0:S0, T1:S1, T2:S2, T3:S3, T4:S4, T5:S5, T6:S6, T7:S7, T8:S8, T9:S9, T10:S10, T11:S11, T12:S12, T13:S13);
 
 pub trait KernelSignature: Sized {
     // Adds `KernelContext` to the end of the signature.
@@ -205,20 +233,20 @@ pub trait KernelSignature: Sized {
 macro_rules! impl_kernel_signature {
     () => {
         impl KernelSignature for fn() {
-            type LuisaSignature = fn(KernelBindings);
+            type LuisaSignature = fn(ErasedKernelArg, KernelBindings);
             type Function<'a, I: FieldIndex> = &'a dyn Fn(Element<I>);
         }
     };
     ($T0:ident $(,$Tn:ident)*) => {
         impl<$T0: KernelArg + 'static $(,$Tn: KernelArg + 'static)*> KernelSignature for fn($T0 $(,$Tn)*) {
-            type LuisaSignature = fn($T0, $($Tn,)* KernelBindings);
+            type LuisaSignature = fn(ErasedKernelArg, $T0, $($Tn,)* KernelBindings);
             type Function<'a, I: FieldIndex> = &'a dyn Fn(Element<I>, <$T0 as KernelArg>::Parameter $(,<$Tn as KernelArg>::Parameter)*);
         }
         impl_kernel_signature!($($Tn),*);
     };
 }
 
-impl_kernel_signature!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14);
+impl_kernel_signature!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13);
 
 pub trait KernelFunction<I: FieldIndex, S: KernelSignature> {
     fn execute(&self, el: Element<I>);
@@ -252,4 +280,4 @@ macro_rules! impl_kernel_function {
     }
 }
 
-impl_kernel_function!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14);
+impl_kernel_function!(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13);

@@ -15,6 +15,7 @@ use sefirot::mapping::AMapping;
 
 pub mod dual;
 pub mod encoder;
+// pub mod margolus;
 
 // TODO: Actually make this useful.
 
@@ -40,20 +41,24 @@ impl Clone for GridDomain {
     }
 }
 impl Domain for GridDomain {
-    type A = ();
-    type I = Expr<Vec2<i32>>;
+    type Args = ();
+    type Index = Expr<Vec2<i32>>;
     #[tracked_nc]
-    fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<Self::I> {
+    fn get_element(&self, kernel_context: Arc<KernelContext>) -> Element<Self::Index> {
         let index = dispatch_id().xy().cast_i32() + Vec2::from(self.start);
         let mut context = Context::new(kernel_context);
         context.bind_local(self.index, FnMapping::new(|_el, _ctx| dispatch_id().xy()));
         Element::new(index, context)
     }
-    fn dispatch_async(&self, _domain_args: Self::A, args: DispatchArgs) -> NodeConfigs<'static> {
+    fn dispatch_async(
+        &self,
+        _domain_args: Self::Args,
+        args: KernelDispatch,
+    ) -> NodeConfigs<'static> {
         args.dispatch([self.size()[0], self.size()[1], 1])
     }
     #[tracked_nc]
-    fn contains(&self, index: &Self::I) -> Expr<bool> {
+    fn contains(&self, index: &Self::Index) -> Expr<bool> {
         if self.wrapping {
             true.expr()
         } else {
@@ -103,6 +108,12 @@ impl GridDomain {
             shifted_domain: StaticDomain(size),
             wrapping,
         }
+    }
+    pub fn encoder(&self) -> &LinearEncoder {
+        self.encoder.as_ref().unwrap()
+    }
+    pub fn get_encoder(&self) -> Option<&LinearEncoder> {
+        self.encoder.as_ref()
     }
     pub fn with_encoder(self, encoder: LinearEncoder) -> Self {
         debug_assert!(encoder.allowed_size(self.size()));

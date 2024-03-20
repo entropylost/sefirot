@@ -9,6 +9,7 @@ use syn::*;
 
 fn kernel_impl(f: ItemFn, attributes: Attributes) -> TokenStream {
     let init_vis = attributes.init_vis;
+    let init_name = attributes.init_name;
     let bevy_sefirot_path: Path = parse_quote!(::bevy_sefirot);
     let span = f.span();
     let build_options = attributes.build_options.0;
@@ -105,23 +106,21 @@ fn kernel_impl(f: ItemFn, attributes: Attributes) -> TokenStream {
         #kernel_name.init(#last_stmt);
     });
 
-    sig.ident = Ident::new(&format!("init_{}", kernel_name), kernel_name.span());
+    sig.ident = init_name
+        .unwrap_or_else(|| Ident::new(&format!("init_{}", kernel_name), kernel_name.span()));
 
     let run_impl = attributes.run.map(|run| {
-        let name = run.name.map_or_else(
-            || {
-                let kn = kernel_name.to_string();
-                Ident::new(
-                    &if kn.ends_with("_kernel") {
-                        kn[0..kn.len() - 7].to_string()
-                    } else {
-                        format!("run_{}", kn)
-                    },
-                    kernel_name.span(),
-                )
-            },
-            |name| Ident::new(&name.value(), name.span()),
-        );
+        let name = run.name.unwrap_or_else(|| {
+            let kn = kernel_name.to_string();
+            Ident::new(
+                &if kn.ends_with("_kernel") {
+                    kn[0..kn.len() - 7].to_string()
+                } else {
+                    format!("run_{}", kn)
+                },
+                kernel_name.span(),
+            )
+        });
         let vis = run.vis;
         quote_spanned! {span=>
             #vis fn #name() -> impl ::sefirot::graph::AsNodes<'static> {
@@ -141,7 +140,7 @@ fn kernel_impl(f: ItemFn, attributes: Attributes) -> TokenStream {
     }
 }
 struct Run {
-    name: Option<LitStr>,
+    name: Option<Ident>,
     vis: Visibility,
 }
 
@@ -172,19 +171,26 @@ impl BuildOptions {
 
 struct Attributes {
     init_vis: Visibility,
+    init_name: Option<Ident>,
     run: Option<Run>,
     build_options: BuildOptions,
 }
 
 fn parse_attrs(attr: TokenStream) -> std::result::Result<Attributes, TokenStream> {
     let mut init_vis = Visibility::Inherited;
+    let mut init_name = None;
     let mut run = None;
     let mut build_options = BuildOptions(HashMap::new());
     let parser = meta::parser(|meta| {
         if meta.path.is_ident("init") {
             let content;
-            parenthesized!(content in meta.input);
-            init_vis = content.parse()?;
+            if meta.input.peek(Paren) {
+                parenthesized!(content in meta.input);
+                init_vis = content.parse()?;
+            }
+            if let Ok(value) = meta.value() {
+                init_name = Some(value.parse()?);
+            }
         } else if meta.path.is_ident("run") {
             let mut this_run = Run {
                 name: None,
@@ -214,6 +220,7 @@ fn parse_attrs(attr: TokenStream) -> std::result::Result<Attributes, TokenStream
     }
     Ok(Attributes {
         init_vis,
+        init_name,
         run,
         build_options,
     })
