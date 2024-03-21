@@ -36,7 +36,9 @@ pub mod prelude {
     pub use crate::domain::Domain;
     pub use crate::element::{AsKernelContext, Element};
     pub use crate::field::set::FieldSet;
-    pub use crate::field::{AField, EField, Field, VField};
+    pub use crate::field::{
+        AEField, AField, EEField, EField, Field, SEField, SField, VEField, VField,
+    };
     pub use crate::graph::{AsNodes, CopyExt};
     pub use crate::kernel::Kernel;
     pub use crate::{track, tracked};

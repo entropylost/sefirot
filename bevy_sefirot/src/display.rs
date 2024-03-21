@@ -9,7 +9,7 @@ use super::prelude::*;
 pub struct DisplayTexture {
     /// The color texture for the display. Note that the format is not guaranteed,
     /// so this should not be used for intermediate calculations.
-    pub color: VField<Vec4<f32>, Vec2<u32>>,
+    pub color: VEField<Vec4<f32>, Vec2<u32>>,
     /// The actual texture that will be displayed.
     pub color_texture: Tex2d<Vec4<f32>>,
     /// The domain of the screen.

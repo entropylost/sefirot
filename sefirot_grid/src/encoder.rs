@@ -9,7 +9,7 @@ use sefirot::mapping::AMapping;
 
 #[derive(Debug)]
 pub struct LinearEncoder {
-    index: EField<u32, Vec2<u32>>,
+    index: EEField<u32, Vec2<u32>>,
     _handle: Option<FieldHandle>,
     max_size: u32,
 }
@@ -23,7 +23,7 @@ impl Clone for LinearEncoder {
     }
 }
 impl LinearEncoder {
-    pub fn index(&self) -> EField<u32, Vec2<u32>> {
+    pub fn index(&self) -> EEField<u32, Vec2<u32>> {
         self.index
     }
     pub fn morton() -> Self {

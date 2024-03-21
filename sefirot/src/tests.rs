@@ -21,7 +21,7 @@ fn test_context_stack_if() {
     let na2 = num_accesses.clone();
 
     let domain = StaticDomain::<1>::new(16);
-    let half_field: EField<u32, u32> = fields.create_bind(
+    let half_field: EEField<u32, u32> = fields.create_bind(
         "half",
         CachedFnMapping::new(track_nc!(move |el, _ctx| {
             *na2.lock() += 1;

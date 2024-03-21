@@ -19,9 +19,14 @@ pub mod set;
 
 pub(crate) static FIELDS: Lazy<DashMap<FieldId, RawField>> = Lazy::new(DashMap::new);
 
-pub type EField<V, I> = Field<Expr<V>, Expr<I>>;
-pub type VField<V, I> = Field<Var<V>, Expr<I>>;
-pub type AField<V, I> = Field<AtomicRef<V>, Expr<I>>;
+pub type EEField<V, I> = Field<Expr<V>, Expr<I>>;
+pub type VEField<V, I> = Field<Var<V>, Expr<I>>;
+pub type AEField<V, I> = Field<AtomicRef<V>, Expr<I>>;
+pub type SEField<V, I> = Field<Static<V>, Expr<I>>;
+pub type EField<V, I> = Field<Expr<V>, I>;
+pub type VField<V, I> = Field<Var<V>, I>;
+pub type AField<V, I> = Field<AtomicRef<V>, I>;
+pub type SField<V, I> = Field<Static<V>, I>;
 
 pub trait FieldIndex: Clone + 'static {}
 impl<T: Clone + 'static> FieldIndex for T {}

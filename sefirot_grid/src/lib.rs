@@ -1,4 +1,4 @@
-use std::cell::Cell;
+use std::cell::Cell as StdCell;
 use std::sync::Arc;
 
 use encoder::LinearEncoder;
@@ -18,9 +18,11 @@ pub mod dual;
 pub mod encoder;
 pub mod patterns;
 
+pub type Cell = Expr<Vec2<i32>>;
+
 #[derive(Debug)]
 pub struct GridDomain {
-    index: EField<Vec2<u32>, Vec2<i32>>,
+    index: EField<Vec2<u32>, Cell>,
     _index_handle: Option<FieldHandle>,
     encoder: Option<LinearEncoder>,
     start: [i32; 2],
@@ -195,7 +197,7 @@ impl GridDomain {
         for dir in [Vec2::x(), Vec2::y(), -Vec2::x(), -Vec2::y()] {
             let el = el.at(**el + dir);
             let within = self.contains(&el);
-            let cell = Cell::new(Some(el));
+            let cell = StdCell::new(Some(el));
             if within {
                 f(cell.take().unwrap());
             }
