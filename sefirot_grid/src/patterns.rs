@@ -36,9 +36,14 @@ impl DomainImpl for CheckerboardPattern {
         args: KernelDispatch<Self::Passthrough>,
     ) -> NodeConfigs<'static> {
         let [w, h] = self.grid.size();
+        let prefix = args
+            .kernel_name()
+            .map_or_else(String::new, |name| format!("{}-", name));
         (
-            args.dispatch_with([w, h / 2, 1], false),
-            args.dispatch_with([w, h / 2, 1], true),
+            args.dispatch_with([w, h / 2, 1], false)
+                .debug(format!("{}alpha", prefix)),
+            args.dispatch_with([w, h / 2, 1], true)
+                .debug(format!("{}beta", prefix)),
         )
             .chain()
     }
@@ -75,22 +80,33 @@ impl DomainImpl for MargolusPattern {
         _: Self::Args,
         args: KernelDispatch<Self::Passthrough>,
     ) -> NodeConfigs<'static> {
+        let prefix = args
+            .kernel_name()
+            .map_or_else(String::new, |name| format!("{}-", name));
         let [w, h] = self.grid.size();
         if self.grid.wrapping {
             let size = [w / 2, h / 2, 1];
             (
-                args.dispatch_with(size, Vec2::new(false, false)),
-                args.dispatch_with(size, Vec2::new(false, true)),
-                args.dispatch_with(size, Vec2::new(true, true)),
-                args.dispatch_with(size, Vec2::new(true, false)),
+                args.dispatch_with(size, Vec2::new(false, false))
+                    .debug(format!("{}00", prefix)),
+                args.dispatch_with(size, Vec2::new(false, true))
+                    .debug(format!("{}01", prefix)),
+                args.dispatch_with(size, Vec2::new(true, true))
+                    .debug(format!("{}11", prefix)),
+                args.dispatch_with(size, Vec2::new(true, false))
+                    .debug(format!("{}10", prefix)),
             )
                 .chain()
         } else {
             (
-                args.dispatch_with([w / 2, h / 2, 1], Vec2::new(false, false)),
-                args.dispatch_with([w / 2, (h - 1) / 2, 1], Vec2::new(false, true)),
-                args.dispatch_with([(w - 1) / 2, (h - 1) / 2, 1], Vec2::new(true, true)),
-                args.dispatch_with([(w - 1) / 2, h / 2, 1], Vec2::new(true, false)),
+                args.dispatch_with([w / 2, h / 2, 1], Vec2::new(false, false))
+                    .debug(format!("{}00", prefix)),
+                args.dispatch_with([w / 2, (h - 1) / 2, 1], Vec2::new(false, true))
+                    .debug(format!("{}01", prefix)),
+                args.dispatch_with([(w - 1) / 2, (h - 1) / 2, 1], Vec2::new(true, true))
+                    .debug(format!("{}11", prefix)),
+                args.dispatch_with([(w - 1) / 2, h / 2, 1], Vec2::new(true, false))
+                    .debug(format!("{}10", prefix)),
             )
                 .chain()
         }

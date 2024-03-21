@@ -250,14 +250,10 @@ impl<'a> ComputeGraph<'a> {
 
         let stream = this.device.default_stream().native_handle() as CUstream;
 
-        let device = unsafe { *(this.device.native_handle() as *const CUdevice) };
-        let mut context: CUcontext = ptr::null_mut();
+        let mut context: CUcontext =
+            unsafe { std::mem::transmute::<*mut _, CUcontext>(this.device.native_handle()) };
 
         unsafe {
-            assert_eq!(
-                cuDevicePrimaryCtxRetain(&mut context as *mut CUcontext, device),
-                0
-            );
             assert_eq!(cuCtxPushCurrent_v2(context), 0);
         }
 
@@ -295,7 +291,6 @@ impl<'a> ComputeGraph<'a> {
             assert_eq!(cuEventDestroy_v2(start), 0);
             assert_eq!(cuEventDestroy_v2(end), 0);
             assert_eq!(cuCtxPopCurrent_v2(&mut context as *mut CUcontext), 0);
-            assert_eq!(cuDevicePrimaryCtxRelease_v2(device), 0);
         }
 
         timings
@@ -550,6 +545,7 @@ pub struct SingleConfig<'a> {
     pub release: Option<Exclusive<Box<dyn Send>>>,
 }
 
+#[must_use]
 pub enum NodeConfigs<'a> {
     Single {
         config: SingleConfig<'a>,
