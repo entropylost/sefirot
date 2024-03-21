@@ -4,7 +4,7 @@ use luisa::lang::types::vector::Vec2;
 use sefirot::ext_prelude::*;
 use sefirot::mapping::function::FnMapping;
 
-use crate::GridDomain;
+use crate::{Cell, GridDomain};
 
 #[derive(Debug, Clone)]
 pub struct CheckerboardPattern {
@@ -13,7 +13,7 @@ pub struct CheckerboardPattern {
 
 impl DomainImpl for CheckerboardPattern {
     type Args = ();
-    type Index = Expr<Vec2<i32>>;
+    type Index = Cell;
     type Passthrough = bool;
     #[tracked_nc]
     fn get_element(
@@ -61,7 +61,7 @@ pub struct MargolusPattern {
 
 impl DomainImpl for MargolusPattern {
     type Args = ();
-    type Index = Expr<Vec2<i32>>;
+    type Index = Cell;
     type Passthrough = Vec2<bool>;
     #[tracked_nc]
     fn get_element(

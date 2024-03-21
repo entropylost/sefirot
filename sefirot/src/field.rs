@@ -79,7 +79,7 @@ impl FieldId {
             .insert(X::level());
         ctx.on_mapping_opt(self, |ctx, mapping| {
             if let Some(mapping) = mapping {
-                let value = mapping.access_dyn(X::level(), index, ctx, self);
+                let value = mapping.access_dyn(X::level(), index, ctx, FieldBinding::new(self));
                 let value = *value.downcast().unwrap();
                 Some(value)
             } else {

@@ -156,19 +156,19 @@ macro_rules! impl_kernel {
     () => {
         impl Kernel<fn()> {
             pub fn dispatch_blocking(&self) {
-                self.dispatch_blocking_with_domain_args(())
+                self.dispatch_blocking_with(())
             }
             pub fn dispatch(&self) -> NodeConfigs<'static> {
-                self.dispatch_with_domain_args(())
+                self.dispatch_with(())
             }
         }
         impl<A: 'static> Kernel<fn(), A> {
-            pub fn dispatch_blocking_with_domain_args(&self, domain_args: A) {
+            pub fn dispatch_blocking_with(&self, domain_args: A) {
                 let mut graph = ComputeGraph::new(&self.device);
-                graph.add(self.dispatch_with_domain_args(domain_args));
+                graph.add(self.dispatch_with(domain_args));
                 graph.execute();
             }
-            pub fn dispatch_with_domain_args(&self, domain_args: A) -> NodeConfigs<'static> {
+            pub fn dispatch_with(&self, domain_args: A) -> NodeConfigs<'static> {
                 let args = ErasedKernelDispatch {
                     call_kernel_async: &|dispatch_size, arg| {
                         self.raw.dispatch_async(dispatch_size, &arg, &self.bindings)
@@ -185,29 +185,29 @@ macro_rules! impl_kernel {
             #[allow(clippy::too_many_arguments)]
             pub fn dispatch_blocking<$S0: AsKernelArg<Output = $T0> $(, $Sn: AsKernelArg<Output = $Tn>)*>
                 (&self, $S0: &$S0 $(, $Sn: &$Sn)*) {
-                self.dispatch_blocking_with_domain_args((), $S0 $(, $Sn)*)
+                self.dispatch_blocking_with((), $S0 $(, $Sn)*)
             }
             #[allow(non_snake_case)]
             #[allow(clippy::too_many_arguments)]
             pub fn dispatch<$S0: AsKernelArg<Output = $T0> $(, $Sn: AsKernelArg<Output = $Tn>)*>
                 (&self, $S0: &$S0 $(, $Sn: &$Sn)*) -> NodeConfigs<'static> {
-                self.dispatch_with_domain_args((), $S0 $(, $Sn)*)
+                self.dispatch_with((), $S0 $(, $Sn)*)
             }
         }
         impl<A: 'static, $T0: KernelArg + 'static $(, $Tn: KernelArg + 'static)*> Kernel<fn($T0 $(, $Tn)*), A> {
             #[allow(non_snake_case)]
             #[allow(unused_variables)]
             #[allow(clippy::too_many_arguments)]
-            pub fn dispatch_blocking_with_domain_args<$S0: AsKernelArg<Output = $T0> $(, $Sn: AsKernelArg<Output = $Tn>)*>
+            pub fn dispatch_blocking_with<$S0: AsKernelArg<Output = $T0> $(, $Sn: AsKernelArg<Output = $Tn>)*>
                 (&self, domain_args: A, $S0: &$S0 $(, $Sn: &$Sn)*) {
                 let mut graph = ComputeGraph::new(&self.device);
-                graph.add(self.dispatch_with_domain_args(domain_args, $S0 $(, $Sn)*));
+                graph.add(self.dispatch_with(domain_args, $S0 $(, $Sn)*));
                 graph.execute();
             }
             #[allow(non_snake_case)]
             #[allow(unused_variables)]
             #[allow(clippy::too_many_arguments)]
-            pub fn dispatch_with_domain_args<$S0: AsKernelArg<Output = $T0> $(, $Sn: AsKernelArg<Output = $Tn>)*>
+            pub fn dispatch_with<$S0: AsKernelArg<Output = $T0> $(, $Sn: AsKernelArg<Output = $Tn>)*>
                 (&self, domain_args: A, $S0: &$S0 $(, $Sn: &$Sn)*) -> NodeConfigs<'static> {
                 let args = ErasedKernelDispatch {
                     call_kernel_async: &|dispatch_size, arg| {

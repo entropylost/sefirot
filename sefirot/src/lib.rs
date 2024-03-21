@@ -23,7 +23,7 @@ mod internal_prelude {
     pub use luisa::prelude::*;
     pub use luisa_compute as luisa;
 
-    pub use crate::element::{Context, Element};
+    pub use crate::element::{Context, Element, FieldBinding};
     pub use crate::field::{Access, Field, FieldId, FieldIndex};
     pub use crate::mapping::Mapping;
     pub use crate::utils::Paradox;
@@ -46,10 +46,12 @@ pub mod prelude {
 
 pub mod ext_prelude {
     pub use crate::domain::{DomainImpl, KernelDispatch};
-    pub use crate::element::Context;
+    pub use crate::element::{Context, FieldBinding};
     pub use crate::graph::NodeConfigs;
     pub use crate::kernel::KernelContext;
-    pub use crate::mapping::{EMapping, Mapping, VMapping};
+    pub use crate::mapping::{
+        AEMapping, AMapping, EEMapping, EMapping, Mapping, SEMapping, SMapping, VEMapping, VMapping,
+    };
     pub use crate::prelude::*;
     pub use crate::{track_nc, tracked_nc};
 }

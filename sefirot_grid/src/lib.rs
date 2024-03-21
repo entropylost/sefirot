@@ -1,6 +1,7 @@
 use std::cell::Cell as StdCell;
 use std::sync::Arc;
 
+use dual::DualGrid;
 use encoder::LinearEncoder;
 use patterns::{CheckerboardPattern, MargolusPattern};
 use sefirot::ext_prelude::*;
@@ -8,17 +9,57 @@ use sefirot::field::FieldHandle;
 use sefirot::luisa::lang::types::vector::Vec2;
 use sefirot::luisa::lang::types::AtomicRef;
 use sefirot::mapping::buffer::{
-    HandledBuffer, HandledTex2d, HasPixelStorage, IntoHandled, StaticDomain,
+    BufferMapping, HandledBuffer, HandledTex2d, HasPixelStorage, IntoHandled, StaticDomain,
 };
 use sefirot::mapping::function::{CachedFnMapping, FnMapping};
 use sefirot::mapping::index::IndexMap;
-use sefirot::mapping::AMapping;
 
 pub mod dual;
 pub mod encoder;
 pub mod patterns;
 
 pub type Cell = Expr<Vec2<i32>>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum GridDirection {
+    Up,
+    Down,
+    Left,
+    Right,
+}
+impl GridDirection {
+    pub fn iter_all() -> [GridDirection; 4] {
+        [
+            GridDirection::Up,
+            GridDirection::Down,
+            GridDirection::Left,
+            GridDirection::Right,
+        ]
+    }
+    pub fn sign(&self) -> i32 {
+        match self {
+            GridDirection::Up => 1,
+            GridDirection::Down => -1,
+            GridDirection::Left => -1,
+            GridDirection::Right => 1,
+        }
+    }
+    pub fn signf(&self) -> f32 {
+        self.sign() as f32
+    }
+    pub fn as_vec(&self) -> Vec2<i32> {
+        match self {
+            GridDirection::Up => Vec2::new(0, 1),
+            GridDirection::Down => Vec2::new(0, -1),
+            GridDirection::Left => Vec2::new(-1, 0),
+            GridDirection::Right => Vec2::new(1, 0),
+        }
+    }
+    pub fn as_vec_f32(&self) -> Vec2<f32> {
+        let v = self.as_vec();
+        Vec2::new(v.x as f32, v.y as f32)
+    }
+}
 
 #[derive(Debug)]
 pub struct GridDomain {
@@ -43,7 +84,7 @@ impl Clone for GridDomain {
 }
 impl DomainImpl for GridDomain {
     type Args = ();
-    type Index = Expr<Vec2<i32>>;
+    type Index = Cell;
     type Passthrough = ();
     #[tracked_nc]
     fn get_element(&self, kernel_context: Arc<KernelContext>, _: ()) -> Element<Self::Index> {
@@ -75,16 +116,14 @@ impl GridDomain {
     pub fn new_with_wrapping(start: [i32; 2], size: [u32; 2], wrapping: bool) -> Self {
         let (index, handle) = Field::create_bind(
             "grid-index",
-            CachedFnMapping::<Expr<Vec2<u32>>, Expr<Vec2<i32>>, _>::new(track_nc!(
-                move |index, _ctx| {
-                    if wrapping {
-                        let size = Vec2::new(size[0] as i32, size[1] as i32);
-                        (((index - Vec2::from(start)) % size + size) % size).cast_u32()
-                    } else {
-                        (index - Vec2::from(start)).cast_u32()
-                    }
+            CachedFnMapping::<Expr<Vec2<u32>>, Cell, _>::new(track_nc!(move |index, _ctx| {
+                if wrapping {
+                    let size = Vec2::new(size[0] as i32, size[1] as i32);
+                    (index - Vec2::from(start)).rem_euclid(size).cast_u32()
+                } else {
+                    (index - Vec2::from(start)).cast_u32()
                 }
-            )),
+            })),
         );
         Self {
             index,
@@ -135,26 +174,25 @@ impl GridDomain {
     pub fn map_texture<V: IoTexel>(
         &self,
         texture: impl IntoHandled<H = HandledTex2d<V>>,
-    ) -> impl VMapping<V, Vec2<i32>> {
+    ) -> impl VEMapping<V, Vec2<i32>> {
         IndexMap::new(self.index, self.shifted_domain.map_tex2d(texture))
     }
-    pub fn create_texture<V: HasPixelStorage>(
-        &self,
-        device: &Device,
-    ) -> impl VMapping<V, Vec2<i32>> {
+    pub fn create_texture<V: HasPixelStorage>(&self, device: &Device) -> impl VMapping<V, Cell> {
         self.create_texture_with_storage(device, V::storage())
     }
     pub fn create_texture_with_storage<V: IoTexel>(
         &self,
         device: &Device,
         storage: PixelStorage,
-    ) -> impl VMapping<V, Vec2<i32>> {
+    ) -> impl VMapping<V, Cell> {
         self.map_texture(device.create_tex2d(storage, self.size()[0], self.size()[1], 1))
     }
-    pub fn map_buffer<V: Value>(
+    #[allow(clippy::type_complexity)]
+    fn _map_buffer_typed<V: Value>(
         &self,
         buffer: impl IntoHandled<H = HandledBuffer<V>>,
-    ) -> impl AMapping<V, Vec2<i32>> {
+    ) -> IndexMap<Expr<Vec2<u32>>, IndexMap<Expr<u32>, BufferMapping<V>, Expr<Vec2<u32>>>, Cell>
+    {
         IndexMap::new(
             self.index,
             self.encoder
@@ -165,8 +203,26 @@ impl GridDomain {
                 ),
         )
     }
-    pub fn create_buffer<V: Value>(&self, device: &Device) -> impl AMapping<V, Vec2<i32>> {
-        self.map_buffer(device.create_buffer((self.size()[0] * self.size()[1]) as usize))
+    pub fn map_buffer<V: Value>(
+        &self,
+        buffer: impl IntoHandled<H = HandledBuffer<V>>,
+    ) -> impl AMapping<V, Cell> {
+        self._map_buffer_typed(buffer)
+    }
+    #[allow(clippy::type_complexity)]
+    fn _create_buffer_typed<V: Value>(
+        &self,
+        device: &Device,
+    ) -> IndexMap<Expr<Vec2<u32>>, IndexMap<Expr<u32>, BufferMapping<V>, Expr<Vec2<u32>>>, Cell>
+    {
+        self._map_buffer_typed(device.create_buffer((self.size()[0] * self.size()[1]) as usize))
+    }
+    pub fn create_buffer<V: Value>(&self, device: &Device) -> impl AMapping<V, Cell> {
+        self._create_buffer_typed(device)
+    }
+
+    pub fn dual(&self) -> DualGrid {
+        DualGrid::new(self.clone())
     }
 
     pub fn checkerboard(&self) -> CheckerboardPattern {
@@ -193,9 +249,9 @@ impl GridDomain {
     }
 
     #[tracked]
-    pub fn on_adjacent(&self, el: &Element<Expr<Vec2<i32>>>, f: impl Fn(Element<Expr<Vec2<i32>>>)) {
-        for dir in [Vec2::x(), Vec2::y(), -Vec2::x(), -Vec2::y()] {
-            let el = el.at(**el + dir);
+    pub fn on_adjacent(&self, el: &Element<Cell>, f: impl Fn(Element<Cell>)) {
+        for dir in GridDirection::iter_all() {
+            let el = el.at(**el + dir.as_vec());
             let within = self.contains(&el);
             let cell = StdCell::new(Some(el));
             if within {

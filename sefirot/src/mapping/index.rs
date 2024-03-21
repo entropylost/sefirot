@@ -18,13 +18,13 @@ impl<
     > Mapping<X, I> for IndexMap<J, M, I>
 where
     M: Mapping<X, J>,
-    IndexMap<J, M, I>: ListMapping<L, I>,
+    Self: ListMapping<L, I>,
 {
-    fn access(&self, index: &I, ctx: &mut Context, binding: FieldId) -> X {
+    fn access(&self, index: &I, ctx: &mut Context, binding: FieldBinding) -> X {
         let index = self.index.id.at_opt(index, ctx).unwrap();
         self.mapping.access(&index, ctx, binding)
     }
-    fn save(&self, ctx: &mut Context, binding: FieldId) {
+    fn save(&self, ctx: &mut Context, binding: FieldBinding) {
         self.mapping.save(ctx, binding);
     }
 }

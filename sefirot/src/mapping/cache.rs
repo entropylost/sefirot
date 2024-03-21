@@ -16,12 +16,12 @@ pub fn get_value<'a, V: Value, I: FieldIndex, M: SimpleExprMapping<V, I>>(
     this: &'a M,
     index: &I,
     ctx: &'a mut Context,
-    binding: FieldId,
+    binding: FieldBinding,
 ) -> Var<V> {
     ctx.get_cache_or_insert_with::<VarCache<V, I>, _>(
-        binding,
+        &binding,
         |ctx| {
-            let value = this.get_expr(index, ctx, binding).var();
+            let value = this.get_expr(index, ctx).var();
             VarCache {
                 value,
                 index: index.clone(),
@@ -33,33 +33,33 @@ pub fn get_value<'a, V: Value, I: FieldIndex, M: SimpleExprMapping<V, I>>(
 pub fn save_cache<'a, V: Value, I: FieldIndex, M: SimpleExprMapping<V, I>>(
     this: &'a M,
     ctx: &'a mut Context,
-    binding: FieldId,
+    binding: FieldBinding,
 ) {
-    let cache = ctx.get_cache::<VarCache<V, I>>(binding).unwrap().clone();
-
-    this.set_expr(&cache.index, **cache.value, ctx, binding);
+    if let Some(cache) = ctx.get_cache::<VarCache<V, I>>(&binding).cloned() {
+        this.set_expr(&cache.index, **cache.value, ctx);
+    }
 }
 
 /// A trait describing a way of getting and setting a value given an index.
 /// See [`CachedMapping`] for use.
 pub trait SimpleExprMapping<V: Value, I: FieldIndex>: Send + Sync + 'static {
-    fn get_expr(&self, index: &I, ctx: &mut Context, binding: FieldId) -> Expr<V>;
-    fn set_expr(&self, index: &I, value: Expr<V>, ctx: &mut Context, binding: FieldId);
+    fn get_expr(&self, index: &I, ctx: &mut Context) -> Expr<V>;
+    fn set_expr(&self, index: &I, value: Expr<V>, ctx: &mut Context);
 }
 
 #[macro_export]
 macro_rules! impl_cache_mapping {
     ($([ $($t:tt)* ])? Mapping[$V:ty, $I:ty] for $X:ty $(where $($where_clause:tt)*)?) => {
         impl $(<$($t)*>)? $crate::mapping::Mapping<Expr<$V>, $I> for $X $(where $($where_clause)*)? {
-            fn access(&self, index: &$I, ctx: &mut $crate::element::Context, binding: $crate::field::FieldId) -> Expr<$V> {
+            fn access(&self, index: &$I, ctx: &mut $crate::element::Context, binding: $crate::element::FieldBinding) -> Expr<$V> {
                 **$crate::mapping::cache::get_value(self, index, ctx, binding)
             }
         }
         impl $(<$($t)*>)? $crate::mapping::Mapping<Var<$V>, $I> for $X $(where $($where_clause)*)? {
-            fn access(&self, index: &$I, ctx: &mut $crate::element::Context, binding: $crate::field::FieldId) -> Var<$V> {
+            fn access(&self, index: &$I, ctx: &mut $crate::element::Context, binding: $crate::element::FieldBinding) -> Var<$V> {
                 $crate::mapping::cache::get_value(self, index, ctx, binding)
             }
-            fn save(&self, ctx: &mut $crate::element::Context, binding: $crate::field::FieldId) {
+            fn save(&self, ctx: &mut $crate::element::Context, binding: $crate::element::FieldBinding) {
                 $crate::mapping::cache::save_cache(self, ctx, binding);
             }
         }

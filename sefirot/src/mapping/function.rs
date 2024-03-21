@@ -32,7 +32,7 @@ impl<
 where
     F: Fn(&I, &mut Context) -> X,
 {
-    fn access(&self, index: &I, ctx: &mut Context, _binding: FieldId) -> X {
+    fn access(&self, index: &I, ctx: &mut Context, _binding: FieldBinding) -> X {
         (self.f)(index, ctx)
     }
 }
@@ -66,7 +66,7 @@ impl<
 where
     F: Fn(&I, &mut Context) -> X,
 {
-    fn access(&self, index: &I, ctx: &mut Context, binding: FieldId) -> X {
-        ctx.get_cache_or_insert_with::<X, _>(binding, |ctx| (self.f)(index, ctx), |v| v.clone())
+    fn access(&self, index: &I, ctx: &mut Context, binding: FieldBinding) -> X {
+        ctx.get_cache_or_insert_with::<X, _>(&binding, |ctx| (self.f)(index, ctx), |v| v.clone())
     }
 }

@@ -5,7 +5,6 @@ use sefirot::luisa::lang::types::AtomicRef;
 use sefirot::mapping::buffer::{HandledBuffer, IntoHandled, StaticDomain};
 use sefirot::mapping::function::CachedFnMapping;
 use sefirot::mapping::index::IndexMap;
-use sefirot::mapping::AMapping;
 
 #[derive(Debug)]
 pub struct LinearEncoder {
@@ -112,19 +111,19 @@ pub trait StaticDomainExt: private::Sealed {
         &self,
         encoder: &LinearEncoder,
         buffer: impl IntoHandled<H = HandledBuffer<V>>,
-    ) -> impl AMapping<V, Vec2<u32>>;
+    ) -> impl AEMapping<V, Vec2<u32>>;
     fn create_buffer_encoded<V: Value>(
         &self,
         encoder: &LinearEncoder,
         device: &Device,
-    ) -> impl AMapping<V, Vec2<u32>>;
+    ) -> impl AEMapping<V, Vec2<u32>>;
 }
 impl StaticDomainExt for StaticDomain<2> {
     fn map_buffer_encoded<V: Value>(
         &self,
         encoder: &LinearEncoder,
         buffer: impl IntoHandled<H = HandledBuffer<V>>,
-    ) -> impl AMapping<V, Vec2<u32>> {
+    ) -> impl AEMapping<V, Vec2<u32>> {
         debug_assert!(encoder.allowed_size(self.0));
         encoder.encode::<AtomicRef<V>, _>(
             StaticDomain::<1>::new(self.width() * self.height()).map_buffer(buffer),
@@ -134,7 +133,7 @@ impl StaticDomainExt for StaticDomain<2> {
         &self,
         encoder: &LinearEncoder,
         device: &Device,
-    ) -> impl AMapping<V, Vec2<u32>> {
+    ) -> impl AEMapping<V, Vec2<u32>> {
         self.map_buffer_encoded(
             encoder,
             device.create_buffer((self.width() * self.height()) as usize),

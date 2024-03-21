@@ -147,8 +147,47 @@ pub fn __block_input<T, R>(f: impl Fn(T) -> R) -> impl Fn(T) -> R {
     }
 }
 
-pub struct FieldCache {
-    cache_stack: Vec<HashMap<FieldId, Box<dyn Any>>>,
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct FieldBinding {
+    field: FieldId,
+    index: u64,
+    stack: Vec<u64>,
+}
+impl Deref for FieldBinding {
+    type Target = FieldId;
+    fn deref(&self) -> &Self::Target {
+        &self.field
+    }
+}
+impl FieldBinding {
+    pub fn next(&self) -> Self {
+        Self {
+            field: self.field,
+            index: self.index + 1,
+            stack: self.stack.clone(),
+        }
+    }
+    pub fn push(&self, value: impl Into<u64>) -> Self {
+        let mut stack = self.stack.clone();
+        stack.push(self.index);
+        stack.push(value.into());
+        Self {
+            field: self.field,
+            index: 0,
+            stack,
+        }
+    }
+    pub(crate) fn new(field: FieldId) -> Self {
+        Self {
+            field,
+            index: 0,
+            stack: vec![],
+        }
+    }
+}
+
+struct FieldCache {
+    cache_stack: Vec<HashMap<FieldBinding, Box<dyn Any>>>,
 }
 impl FieldCache {
     pub fn new() -> Self {
@@ -180,39 +219,39 @@ impl Context {
             context_stack: vec![HashMap::new()],
         }
     }
-    pub fn get_cache<X: 'static>(&mut self, field: FieldId) -> Option<&mut X> {
+    pub fn get_cache<X: 'static>(&mut self, key: &FieldBinding) -> Option<&mut X> {
         for cache in self.cache.cache_stack.iter_mut().rev() {
-            if let Some(value) = cache.get_mut(&field) {
+            if let Some(value) = cache.get_mut(key) {
                 return Some(value.downcast_mut().unwrap());
             }
         }
         None
     }
-    pub fn insert_cache<X: 'static>(&mut self, field: FieldId, value: X) {
+    pub fn insert_cache<X: 'static>(&mut self, key: &FieldBinding, value: X) {
         self.cache
             .cache_stack
             .last_mut()
             .unwrap()
-            .insert(field, Box::new(value));
+            .insert(key.clone(), Box::new(value));
     }
     // TODO: Why can't this work the normal way?
     pub fn get_cache_or_insert_with<X: 'static, R>(
         &mut self,
-        field: FieldId,
+        key: &FieldBinding,
         f: impl FnOnce(&mut Self) -> X,
         ret: impl FnOnce(&mut X) -> R,
     ) -> R {
-        if let Some(value) = self.get_cache(field) {
+        if let Some(value) = self.get_cache(key) {
             return ret(value);
         }
         let value = f(self);
-        self.insert_cache(field, value);
+        self.insert_cache(key, value);
         ret(self
             .cache
             .cache_stack
             .last_mut()
             .unwrap()
-            .get_mut(&field)
+            .get_mut(key)
             .unwrap()
             .downcast_mut()
             .unwrap())
@@ -228,7 +267,7 @@ impl Context {
             access.sort_unstable();
             self.on_mapping(field, |ctx, mapping| {
                 for i in access.into_iter().rev() {
-                    mapping.save_dyn(i, ctx, field);
+                    mapping.save_dyn(i, ctx, FieldBinding::new(field));
                 }
             });
         }

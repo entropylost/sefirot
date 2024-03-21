@@ -245,32 +245,32 @@ impl<V: IoTexel> IntoHandled for Tex3d<V> {
 
 pub struct BufferMapping<V: Value>(pub HandledBuffer<V>);
 impl<V: Value> SimpleExprMapping<V, Expr<u32>> for BufferMapping<V> {
-    fn get_expr(&self, index: &Expr<u32>, _ctx: &mut Context, _binding: FieldId) -> Expr<V> {
+    fn get_expr(&self, index: &Expr<u32>, _ctx: &mut Context) -> Expr<V> {
         self.0.read(*index)
     }
-    fn set_expr(&self, index: &Expr<u32>, value: Expr<V>, _ctx: &mut Context, _binding: FieldId) {
+    fn set_expr(&self, index: &Expr<u32>, value: Expr<V>, _ctx: &mut Context) {
         self.0.write(*index, value);
     }
 }
 impl_cache_mapping!([V: Value] Mapping[V, Expr<u32>] for BufferMapping<V>);
 impl<V: Value> Mapping<AtomicRef<V>, Expr<u32>> for BufferMapping<V> {
-    fn access(&self, index: &Expr<u32>, _ctx: &mut Context, _binding: FieldId) -> AtomicRef<V> {
+    fn access(
+        &self,
+        index: &Expr<u32>,
+        _ctx: &mut Context,
+        _binding: FieldBinding,
+    ) -> AtomicRef<V> {
         self.0.atomic_ref(*index)
     }
+    fn save(&self, _ctx: &mut Context, _binding: FieldBinding) {}
 }
 
 pub struct Tex2dMapping<V: IoTexel>(pub HandledTex2d<V>);
 impl<V: IoTexel> SimpleExprMapping<V, Expr<Vec2<u32>>> for Tex2dMapping<V> {
-    fn get_expr(&self, index: &Expr<Vec2<u32>>, _ctx: &mut Context, _binding: FieldId) -> Expr<V> {
+    fn get_expr(&self, index: &Expr<Vec2<u32>>, _ctx: &mut Context) -> Expr<V> {
         self.0.read(*index)
     }
-    fn set_expr(
-        &self,
-        index: &Expr<Vec2<u32>>,
-        value: Expr<V>,
-        _ctx: &mut Context,
-        _binding: FieldId,
-    ) {
+    fn set_expr(&self, index: &Expr<Vec2<u32>>, value: Expr<V>, _ctx: &mut Context) {
         self.0.write(*index, value);
     }
 }
@@ -278,16 +278,10 @@ impl_cache_mapping!([V: IoTexel] Mapping[V, Expr<Vec2<u32>>] for Tex2dMapping<V>
 
 pub struct Tex3dMapping<V: IoTexel>(pub HandledTex3d<V>);
 impl<V: IoTexel> SimpleExprMapping<V, Expr<Vec3<u32>>> for Tex3dMapping<V> {
-    fn get_expr(&self, index: &Expr<Vec3<u32>>, _ctx: &mut Context, _binding: FieldId) -> Expr<V> {
+    fn get_expr(&self, index: &Expr<Vec3<u32>>, _ctx: &mut Context) -> Expr<V> {
         self.0.read(*index)
     }
-    fn set_expr(
-        &self,
-        index: &Expr<Vec3<u32>>,
-        value: Expr<V>,
-        _ctx: &mut Context,
-        _binding: FieldId,
-    ) {
+    fn set_expr(&self, index: &Expr<Vec3<u32>>, value: Expr<V>, _ctx: &mut Context) {
         self.0.write(*index, value);
     }
 }
