@@ -188,6 +188,15 @@ pub trait IntoHandled {
     type H;
     fn into_handled(self) -> Self::H;
 }
+impl<V: Value> IntoHandled for &Buffer<V> {
+    type H = HandledBuffer<V>;
+    fn into_handled(self) -> Self::H {
+        HandledBuffer {
+            buffer: self.view(..),
+            handle: None,
+        }
+    }
+}
 impl<V: Value> IntoHandled for BufferView<V> {
     type H = HandledBuffer<V>;
     fn into_handled(self) -> Self::H {
@@ -206,6 +215,15 @@ impl<V: Value> IntoHandled for Buffer<V> {
         }
     }
 }
+impl<V: IoTexel> IntoHandled for &Tex2d<V> {
+    type H = HandledTex2d<V>;
+    fn into_handled(self) -> Self::H {
+        HandledTex2d {
+            texture: self.view(0),
+            handle: None,
+        }
+    }
+}
 impl<V: IoTexel> IntoHandled for Tex2dView<V> {
     type H = HandledTex2d<V>;
     fn into_handled(self) -> Self::H {
@@ -221,6 +239,15 @@ impl<V: IoTexel> IntoHandled for Tex2d<V> {
         HandledTex2d {
             texture: self.view(0),
             handle: Some(self),
+        }
+    }
+}
+impl<V: IoTexel> IntoHandled for &Tex3d<V> {
+    type H = HandledTex3d<V>;
+    fn into_handled(self) -> Self::H {
+        HandledTex3d {
+            texture: self.view(0),
+            handle: None,
         }
     }
 }

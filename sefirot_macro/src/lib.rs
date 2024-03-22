@@ -296,11 +296,20 @@ impl VisitMut for TraceVisitor {
             Expr::Return(expr) => {
                 if let Some(expr) = &expr.expr {
                     *node = parse_quote_spanned! {span=>
-                        #flow_path::return_v(#expr)
+                    {
+                        #element_path::__exit_block();
+                        let ret = #flow_path::return_v(#expr);
+                        #element_path::__enter_block();
+                        ret
+                    }
                     };
                 } else {
                     *node = parse_quote_spanned! {span=>
-                        #flow_path::return_()
+                        {
+                            #element_path::__exit_block();
+                            #flow_path::return_();
+                            #element_path::__enter_block();
+                        }
                     };
                 }
             }

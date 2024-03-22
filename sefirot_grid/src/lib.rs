@@ -20,28 +20,29 @@ pub mod patterns;
 
 pub type Cell = Expr<Vec2<i32>>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Value, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
 pub enum GridDirection {
-    Up,
-    Down,
-    Left,
-    Right,
+    Left = 0,
+    Down = 1,
+    Right = 2,
+    Up = 3,
 }
 impl GridDirection {
     pub fn iter_all() -> [GridDirection; 4] {
         [
-            GridDirection::Up,
-            GridDirection::Down,
             GridDirection::Left,
+            GridDirection::Down,
             GridDirection::Right,
+            GridDirection::Up,
         ]
     }
     pub fn sign(&self) -> i32 {
         match self {
-            GridDirection::Up => 1,
-            GridDirection::Down => -1,
             GridDirection::Left => -1,
+            GridDirection::Down => -1,
             GridDirection::Right => 1,
+            GridDirection::Up => 1,
         }
     }
     pub fn signf(&self) -> f32 {
@@ -49,15 +50,31 @@ impl GridDirection {
     }
     pub fn as_vec(&self) -> Vec2<i32> {
         match self {
-            GridDirection::Up => Vec2::new(0, 1),
-            GridDirection::Down => Vec2::new(0, -1),
             GridDirection::Left => Vec2::new(-1, 0),
+            GridDirection::Down => Vec2::new(0, -1),
             GridDirection::Right => Vec2::new(1, 0),
+            GridDirection::Up => Vec2::new(0, 1),
         }
     }
     pub fn as_vec_f32(&self) -> Vec2<f32> {
         let v = self.as_vec();
         Vec2::new(v.x as f32, v.y as f32)
+    }
+    pub fn rotate_ccw(&self) -> Self {
+        match self {
+            GridDirection::Left => GridDirection::Down,
+            GridDirection::Down => GridDirection::Right,
+            GridDirection::Right => GridDirection::Up,
+            GridDirection::Up => GridDirection::Left,
+        }
+    }
+    pub fn rotate_cw(&self) -> Self {
+        match self {
+            GridDirection::Left => GridDirection::Up,
+            GridDirection::Down => GridDirection::Left,
+            GridDirection::Right => GridDirection::Down,
+            GridDirection::Up => GridDirection::Right,
+        }
     }
 }
 
