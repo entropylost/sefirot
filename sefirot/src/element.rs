@@ -3,9 +3,9 @@ use std::cell::{RefCell, RefMut};
 use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
 use std::rc::{Rc, Weak};
-use std::sync::Arc;
 
 use generational_arena::{Arena, Index};
+use luisa::runtime::KernelArg;
 
 use crate::field::access::AccessLevel;
 use crate::field::FIELDS;
@@ -14,23 +14,35 @@ use crate::kernel::KernelContext;
 use crate::mapping::{DynMapping, MappingBinding};
 
 pub trait AsKernelContext {
-    fn as_kernel_context(&self) -> Arc<KernelContext>;
+    fn as_kernel_context(&self) -> Rc<KernelContext>;
     fn at<I: FieldIndex>(&self, index: I) -> Element<I> {
         Element::new(index, Context::new(self.as_kernel_context()))
     }
+    fn constant(&self) -> Element<()> {
+        self.at(())
+    }
+    fn bind_arg<T: KernelArg>(&self, f: impl Fn() -> T + Send + 'static) -> T::Parameter {
+        self.as_kernel_context().bind(f)
+    }
+    fn bind_arg_indirect<T: KernelArg, S: Deref<Target = T>>(
+        &self,
+        f: impl Fn() -> S + Send + 'static,
+    ) -> T::Parameter {
+        self.as_kernel_context().bind_indirect(f)
+    }
 }
-impl AsKernelContext for Arc<KernelContext> {
-    fn as_kernel_context(&self) -> Arc<KernelContext> {
+impl AsKernelContext for Rc<KernelContext> {
+    fn as_kernel_context(&self) -> Rc<KernelContext> {
         self.clone()
     }
 }
 impl<I: FieldIndex> AsKernelContext for Element<I> {
-    fn as_kernel_context(&self) -> Arc<KernelContext> {
+    fn as_kernel_context(&self) -> Rc<KernelContext> {
         self.context().kernel.clone()
     }
 }
 impl AsKernelContext for Context {
-    fn as_kernel_context(&self) -> Arc<KernelContext> {
+    fn as_kernel_context(&self) -> Rc<KernelContext> {
         self.kernel.clone()
     }
 }
@@ -207,17 +219,23 @@ pub struct Context {
     pub(crate) bindings: HashMap<FieldId, Box<dyn DynMapping>>,
     // TODO: Find a way that doesn't cause field composers to have issues.
     cache: FieldCache,
-    pub kernel: Arc<KernelContext>,
+    pub kernel: Rc<KernelContext>,
     pub(crate) context_stack: Vec<HashMap<FieldId, HashSet<AccessLevel>>>,
 }
 impl Context {
-    pub fn new(kernel: Arc<KernelContext>) -> Self {
+    pub fn new(kernel: Rc<KernelContext>) -> Self {
         Self {
             bindings: HashMap::new(),
             cache: FieldCache::new(),
             kernel,
             context_stack: vec![HashMap::new()],
         }
+    }
+    pub fn get_cache_global<X: 'static>(&mut self, key: &FieldBinding) -> Option<RefMut<X>> {
+        RefMut::filter_map(self.kernel.global_cache.borrow_mut(), |cache| {
+            cache.get_mut(key).map(|x| x.downcast_mut().unwrap())
+        })
+        .ok()
     }
     pub fn get_cache<X: 'static>(&mut self, key: &FieldBinding) -> Option<&mut X> {
         for cache in self.cache.cache_stack.iter_mut().rev() {
@@ -232,6 +250,12 @@ impl Context {
             .cache_stack
             .last_mut()
             .unwrap()
+            .insert(key.clone(), Box::new(value));
+    }
+    pub fn insert_cache_global<X: 'static>(&mut self, key: &FieldBinding, value: X) {
+        self.kernel
+            .global_cache
+            .borrow_mut()
             .insert(key.clone(), Box::new(value));
     }
     // TODO: Why can't this work the normal way?
@@ -251,6 +275,23 @@ impl Context {
             .cache_stack
             .last_mut()
             .unwrap()
+            .get_mut(key)
+            .unwrap()
+            .downcast_mut()
+            .unwrap())
+    }
+    pub fn get_cache_or_insert_with_global<X: 'static, R>(
+        &mut self,
+        key: &FieldBinding,
+        f: impl FnOnce(&mut Self) -> X,
+        ret: impl FnOnce(&mut X) -> R,
+    ) -> R {
+        if let Some(mut value) = self.get_cache_global(key) {
+            return ret(&mut value);
+        }
+        let value = f(self);
+        self.insert_cache_global(key, value);
+        ret(self.cache.cache_stack[0]
             .get_mut(key)
             .unwrap()
             .downcast_mut()

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::rc::Rc;
 
 use luisa::lang::types::vector::Vec2;
 use sefirot::ext_prelude::*;
@@ -18,7 +18,7 @@ impl DomainImpl for CheckerboardPattern {
     #[tracked_nc]
     fn get_element(
         &self,
-        kernel_context: Arc<KernelContext>,
+        kernel_context: Rc<KernelContext>,
         parity: Expr<bool>,
     ) -> Element<Self::Index> {
         let uindex = Vec2::expr(
@@ -66,7 +66,7 @@ impl DomainImpl for MargolusPattern {
     #[tracked_nc]
     fn get_element(
         &self,
-        kernel_context: Arc<KernelContext>,
+        kernel_context: Rc<KernelContext>,
         offset: Expr<Vec2<bool>>,
     ) -> Element<Self::Index> {
         let uindex = dispatch_id().xy() * 2 + offset.cast::<u32>();

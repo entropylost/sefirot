@@ -23,7 +23,7 @@ mod internal_prelude {
     pub use luisa::prelude::*;
     pub use luisa_compute as luisa;
 
-    pub use crate::element::{Context, Element, FieldBinding};
+    pub use crate::element::{AsKernelContext, Context, Element, FieldBinding};
     pub use crate::field::{Access, Field, FieldId, FieldIndex};
     pub use crate::mapping::Mapping;
     pub use crate::utils::Paradox;

@@ -1,5 +1,5 @@
 use std::ops::Deref;
-use std::sync::Arc;
+use std::rc::Rc;
 
 use luisa::lang::types::vector::{Vec2, Vec3};
 use luisa::lang::types::AtomicRef;
@@ -18,6 +18,12 @@ pub use storage::HasPixelStorage;
 // TODO: Offer ways of creating buffers of the correct size.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct StaticDomain<const N: usize>(pub [u32; N]);
+impl StaticDomain<0> {
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        Self([])
+    }
+}
 impl StaticDomain<1> {
     pub fn new(size: u32) -> Self {
         Self([size])
@@ -107,11 +113,26 @@ impl StaticDomain<3> {
     }
 }
 
+impl DomainImpl for StaticDomain<0> {
+    type Args = ();
+    type Index = ();
+    type Passthrough = ();
+    fn get_element(&self, kernel_context: Rc<KernelContext>, _: ()) -> Element<Self::Index> {
+        Element::new((), Context::new(kernel_context))
+    }
+    fn dispatch(&self, _: (), args: KernelDispatch) -> NodeConfigs<'static> {
+        args.dispatch([1, 1, 1])
+    }
+    #[tracked_nc]
+    fn contains_impl(&self, _: &Self::Index) -> Expr<bool> {
+        true.expr()
+    }
+}
 impl DomainImpl for StaticDomain<1> {
     type Args = ();
     type Index = Expr<u32>;
     type Passthrough = ();
-    fn get_element(&self, kernel_context: Arc<KernelContext>, _: ()) -> Element<Self::Index> {
+    fn get_element(&self, kernel_context: Rc<KernelContext>, _: ()) -> Element<Self::Index> {
         Element::new(dispatch_id().x, Context::new(kernel_context))
     }
     fn dispatch(&self, _: (), args: KernelDispatch) -> NodeConfigs<'static> {
@@ -126,7 +147,7 @@ impl DomainImpl for StaticDomain<2> {
     type Args = ();
     type Index = Expr<Vec2<u32>>;
     type Passthrough = ();
-    fn get_element(&self, kernel_context: Arc<KernelContext>, _: ()) -> Element<Self::Index> {
+    fn get_element(&self, kernel_context: Rc<KernelContext>, _: ()) -> Element<Self::Index> {
         Element::new(dispatch_id().xy(), Context::new(kernel_context))
     }
     fn dispatch(&self, _: (), args: KernelDispatch) -> NodeConfigs<'static> {
@@ -141,7 +162,7 @@ impl DomainImpl for StaticDomain<3> {
     type Args = ();
     type Index = Expr<Vec3<u32>>;
     type Passthrough = ();
-    fn get_element(&self, kernel_context: Arc<KernelContext>, _: ()) -> Element<Self::Index> {
+    fn get_element(&self, kernel_context: Rc<KernelContext>, _: ()) -> Element<Self::Index> {
         Element::new(dispatch_id(), Context::new(kernel_context))
     }
     fn dispatch(&self, _: (), args: KernelDispatch) -> NodeConfigs<'static> {

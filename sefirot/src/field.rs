@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::marker::PhantomData;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 
 use dashmap::DashMap;
 use id_newtype::UniqueId;
@@ -218,4 +218,20 @@ pub struct RawField {
 pub struct Static<T: 'static>(pub T);
 impl<T: 'static> Access for Static<T> {
     type Downcast = Paradox;
+}
+impl<T: 'static> Deref for Static<T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl<T: 'static> DerefMut for Static<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+impl<T: 'static> From<T> for Static<T> {
+    fn from(value: T) -> Self {
+        Self(value)
+    }
 }

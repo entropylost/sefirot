@@ -1,5 +1,5 @@
 use std::cell::Cell as StdCell;
-use std::sync::Arc;
+use std::rc::Rc;
 
 use dual::DualGrid;
 use encoder::LinearEncoder;
@@ -104,7 +104,7 @@ impl DomainImpl for GridDomain {
     type Index = Cell;
     type Passthrough = ();
     #[tracked_nc]
-    fn get_element(&self, kernel_context: Arc<KernelContext>, _: ()) -> Element<Self::Index> {
+    fn get_element(&self, kernel_context: Rc<KernelContext>, _: ()) -> Element<Self::Index> {
         let index = dispatch_id().xy().cast_i32() + Vec2::from(self.start);
         let mut context = Context::new(kernel_context);
         context.bind_local(self.index, FnMapping::new(|_el, _ctx| dispatch_id().xy()));

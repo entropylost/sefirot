@@ -1,5 +1,5 @@
 use std::marker::PhantomData;
-use std::sync::Arc;
+use std::rc::Rc;
 
 use dyn_clone::DynClone;
 use luisa::runtime::{KernelArg, KernelParameter};
@@ -22,7 +22,7 @@ pub trait DomainImpl: Clone + Send + Sync + 'static {
     // TODO: Need to be able to pass arguments into this.
     fn get_element(
         &self,
-        kernel_context: Arc<KernelContext>,
+        kernel_context: Rc<KernelContext>,
         passthrough: <Self::Passthrough as KernelArg>::Parameter,
     ) -> Element<Self::Index>;
     fn dispatch(
@@ -39,9 +39,10 @@ where
 {
     type Args = <X as DomainImpl>::Args;
     type Index = <X as DomainImpl>::Index;
-    fn __get_element_erased(&self, kernel_context: Arc<KernelContext>) -> Element<Self::Index> {
-        let passthrough =
-            <X::Passthrough as KernelArg>::Parameter::def_param(&mut kernel_context.builder.lock());
+    fn __get_element_erased(&self, kernel_context: Rc<KernelContext>) -> Element<Self::Index> {
+        let passthrough = <X::Passthrough as KernelArg>::Parameter::def_param(
+            &mut kernel_context.builder.borrow_mut(),
+        );
         self.get_element(kernel_context, passthrough)
     }
     fn __dispatch_async_erased(
@@ -68,7 +69,7 @@ pub trait Domain: DynClone + Send + Sync + 'static {
     fn contains(&self, index: &Self::Index) -> Expr<bool>;
 
     #[doc(hidden)]
-    fn __get_element_erased(&self, kernel_context: Arc<KernelContext>) -> Element<Self::Index>;
+    fn __get_element_erased(&self, kernel_context: Rc<KernelContext>) -> Element<Self::Index>;
     #[doc(hidden)]
     fn __dispatch_async_erased(
         &self,
@@ -81,7 +82,7 @@ dyn_clone::clone_trait_object!(<A: 'static, I: FieldIndex> Domain<Args = A, Inde
 impl<A: 'static, I: FieldIndex> Domain for Box<dyn Domain<Args = A, Index = I>> {
     type Args = A;
     type Index = I;
-    fn __get_element_erased(&self, kernel_context: Arc<KernelContext>) -> Element<I> {
+    fn __get_element_erased(&self, kernel_context: Rc<KernelContext>) -> Element<I> {
         self.as_ref().__get_element_erased(kernel_context)
     }
     fn __dispatch_async_erased(

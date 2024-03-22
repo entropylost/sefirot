@@ -1,4 +1,8 @@
-use std::sync::Arc;
+use std::any::Any;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::ops::Deref;
+use std::rc::Rc;
 
 use luisa::runtime::{AsKernelArg, KernelArg, KernelArgEncoder, KernelBuilder, KernelParameter};
 use parking_lot::Mutex;
@@ -38,7 +42,27 @@ impl AsKernelArg for KernelBindings {
 
 pub struct KernelContext {
     bindings: KernelBindings,
-    pub(crate) builder: Mutex<KernelBuilder>,
+    pub(crate) builder: RefCell<KernelBuilder>,
+    pub(crate) global_cache: RefCell<HashMap<FieldBinding, Box<dyn Any>>>,
+}
+impl KernelContext {
+    pub fn bind_indirect<T: KernelArg, S: Deref<Target = T>>(
+        &self,
+        f: impl Fn() -> S + Send + 'static,
+    ) -> T::Parameter {
+        let mut builder = self.builder.borrow_mut();
+        self.bindings.bindings.lock().push(Box::new(move |encoder| {
+            f().encode(encoder);
+        }));
+        T::Parameter::def_param(&mut builder)
+    }
+    pub fn bind<T: KernelArg>(&self, f: impl Fn() -> T + Send + 'static) -> T::Parameter {
+        let mut builder = self.builder.borrow_mut();
+        self.bindings.bindings.lock().push(Box::new(move |encoder| {
+            f().encode(encoder);
+        }));
+        T::Parameter::def_param(&mut builder)
+    }
 }
 
 pub struct ErasedKernelArg {
@@ -126,16 +150,17 @@ impl<S: KernelSignature, A: 'static> Kernel<S, A> {
         let mut builder = KernelBuilder::new(Some(device.clone()), true);
         let kernel = builder.build_kernel(|builder| {
             take_mut::take(builder, |builder| {
-                let kernel_context = Arc::new(KernelContext {
+                let kernel_context = Rc::new(KernelContext {
                     bindings: KernelBindings::new(),
-                    builder: Mutex::new(builder),
+                    builder: RefCell::new(builder),
+                    global_cache: RefCell::new(HashMap::new()),
                 });
 
                 let element = domain.__get_element_erased(kernel_context.clone());
 
                 f.execute(element);
 
-                let kernel_context = Arc::into_inner(kernel_context).unwrap();
+                let kernel_context = Rc::into_inner(kernel_context).unwrap();
 
                 bindings = Some(kernel_context.bindings);
                 kernel_context.builder.into_inner()
@@ -268,7 +293,7 @@ macro_rules! impl_kernel_function {
             #[allow(unused_variables)]
             fn execute(&self, el: Element<I>) {
                 let kernel_context = el.context().kernel.clone();
-                let mut builder = kernel_context.builder.lock();
+                let mut builder = kernel_context.builder.borrow_mut();
                 let $T0 = <$T0::Parameter as KernelParameter>::def_param(&mut builder);
                 $(let $Tn = <$Tn::Parameter as KernelParameter>::def_param(&mut builder);)*
                 drop(builder);
