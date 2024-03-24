@@ -34,7 +34,11 @@ impl DomainImpl for TileDomain {
         )
     }
     fn dispatch(&self, _: (), args: KernelDispatch) -> NodeConfigs<'static> {
-        args.dispatch([self.array.count_host.read()[self.index as usize], 1, 1])
+        if self.array.count_host.read()[self.index as usize] == 0 {
+            ().into_node_configs()
+        } else {
+            args.dispatch([self.array.count_host.read()[self.index as usize], 1, 1])
+        }
     }
     fn contains_impl(&self, _: &Self::Index) -> Expr<bool> {
         unimplemented!("Tile domain does not support contains.");
