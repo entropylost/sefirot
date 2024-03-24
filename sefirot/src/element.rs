@@ -1,7 +1,9 @@
 use std::any::Any;
 use std::cell::{RefCell, RefMut};
 use std::collections::{HashMap, HashSet};
+use std::mem::ManuallyDrop;
 use std::ops::Deref;
+use std::ptr::addr_of;
 use std::rc::{Rc, Weak};
 
 use generational_arena::{Arena, Index};
@@ -72,6 +74,16 @@ impl<I: FieldIndex> Element<I> {
     }
     pub fn context(&self) -> RefMut<'_, Context> {
         self.context.borrow_mut()
+    }
+    pub fn map_index<J: FieldIndex>(self, f: impl FnOnce(I) -> J) -> Element<J> {
+        let el = ManuallyDrop::new(self);
+        unsafe {
+            Element {
+                index: f(addr_of!(el.index).read()),
+                context: addr_of!(el.context).read(),
+                active_context_index: el.active_context_index,
+            }
+        }
     }
 
     /// Evaluates the field immediately.

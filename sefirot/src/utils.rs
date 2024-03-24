@@ -1,5 +1,7 @@
 use std::ops::Deref;
 
+use luisa_compute::lang::types::AtomicRef;
+
 use crate::graph::{CopyExt, NodeConfigs};
 use crate::luisa::prelude::*;
 
@@ -52,5 +54,8 @@ impl<V: Value> SingletonVar<V> {
     }
     pub fn write(&self, value: Expr<V>) {
         self.0.write(0, value)
+    }
+    pub fn atomic(&self) -> AtomicRef<V> {
+        self.0.atomic_ref(0)
     }
 }

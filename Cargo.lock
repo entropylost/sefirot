@@ -2194,6 +2194,7 @@ name = "sefirot_grid"
 version = "0.1.0"
 dependencies = [
  "luisa_compute",
+ "parking_lot",
  "sefirot",
 ]
 

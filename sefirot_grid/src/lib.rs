@@ -3,6 +3,7 @@ use std::rc::Rc;
 
 use dual::DualGrid;
 use encoder::LinearEncoder;
+use offset::OffsetDomain;
 use patterns::{CheckerboardPattern, MargolusPattern};
 use sefirot::ext_prelude::*;
 use sefirot::field::FieldHandle;
@@ -16,7 +17,9 @@ use sefirot::mapping::index::IndexMap;
 
 pub mod dual;
 pub mod encoder;
+pub mod offset;
 pub mod patterns;
+pub mod tiled;
 
 pub type Cell = Expr<Vec2<i32>>;
 
@@ -107,7 +110,7 @@ impl DomainImpl for GridDomain {
     fn get_element(&self, kernel_context: Rc<KernelContext>, _: ()) -> Element<Self::Index> {
         let index = dispatch_id().xy().cast_i32() + Vec2::from(self.start);
         let mut context = Context::new(kernel_context);
-        context.bind_local(self.index, FnMapping::new(|_el, _ctx| dispatch_id().xy()));
+        context.bind_local(self.index, FnMapping::new(|_idx, _ctx| dispatch_id().xy()));
         Element::new(index, context)
     }
     fn dispatch(&self, _: Self::Args, args: KernelDispatch) -> NodeConfigs<'static> {
@@ -242,6 +245,14 @@ impl GridDomain {
         DualGrid::new(self.clone())
     }
 
+    pub fn offset<D: DomainImpl>(&self, domain: D) -> OffsetDomain<D> {
+        OffsetDomain {
+            domain,
+            offset: Vec2::from(self.start),
+            index: Some(self.index),
+        }
+    }
+
     pub fn checkerboard(&self) -> CheckerboardPattern {
         debug_assert_eq!(self.width() % 2, 0, "Checkerboard pattern needs even size");
         debug_assert_eq!(self.height() % 2, 0, "Checkerboard pattern needs even size");
@@ -266,9 +277,14 @@ impl GridDomain {
     }
 
     #[tracked]
+    pub fn in_dir(&self, el: &Element<Cell>, dir: GridDirection) -> Element<Cell> {
+        el.at(**el + dir.as_vec())
+    }
+
+    #[tracked]
     pub fn on_adjacent(&self, el: &Element<Cell>, f: impl Fn(Element<Cell>)) {
         for dir in GridDirection::iter_all() {
-            let el = el.at(**el + dir.as_vec());
+            let el = self.in_dir(el, dir);
             let within = self.contains(&el);
             let cell = StdCell::new(Some(el));
             if within {

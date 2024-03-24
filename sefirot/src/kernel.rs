@@ -1,11 +1,13 @@
 use std::any::Any;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::ops::Deref;
 use std::rc::Rc;
 
 use luisa::runtime::{AsKernelArg, KernelArg, KernelArgEncoder, KernelBuilder, KernelParameter};
 use parking_lot::Mutex;
+use pretty_type_name::pretty_type_name;
 
 use crate::domain::Domain;
 use crate::graph::{ComputeGraph, NodeConfigs};
@@ -123,6 +125,13 @@ pub struct Kernel<S: KernelSignature, A: 'static = ()> {
     pub(crate) bindings: KernelBindings,
     pub(crate) debug_name: Option<String>,
     pub(crate) device: Device,
+}
+impl<S: KernelSignature, A: 'static> Debug for Kernel<S, A> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct(&pretty_type_name::<Self>())
+            .field("debug_name", &self.debug_name)
+            .finish()
+    }
 }
 impl<S: KernelSignature, A: 'static> Kernel<S, A> {
     pub fn with_name(mut self, name: impl AsRef<str>) -> Self {
