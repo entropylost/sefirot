@@ -4,21 +4,19 @@ use luisa::lang::types::vector::Vec2;
 use luisa::runtime::KernelArg;
 use sefirot::ext_prelude::*;
 use sefirot::mapping::function::FnMapping;
+use sefirot::mapping::index::IndexMap;
 
 use crate::tiled::TileDomain;
 use crate::Cell;
 
 #[derive(Clone)]
-pub struct OffsetDomain<D> {
+pub struct OffsetDomain<D: DomainImpl<Index = Expr<Vec2<u32>>>> {
     pub domain: D,
     pub offset: Vec2<i32>,
     pub index: Option<EField<Vec2<u32>, Cell>>,
 }
 
-impl<D> DomainImpl for OffsetDomain<D>
-where
-    D: DomainImpl<Index = Expr<Vec2<u32>>>,
-{
+impl<D: DomainImpl<Index = Expr<Vec2<u32>>>> DomainImpl for OffsetDomain<D> {
     type Args = D::Args;
     type Index = Cell;
     type Passthrough = D::Passthrough;
@@ -56,5 +54,9 @@ impl OffsetDomain<TileDomain> {
     pub fn activate(&self, el: &Element<Cell>) {
         self.domain
             .activate(&el.at((**el - self.offset).cast_u32()))
+    }
+    #[tracked]
+    pub fn active(&self) -> impl Mapping<Expr<bool>, Expr<Vec2<i32>>> {
+        IndexMap::new(self.index.unwrap(), self.domain.active())
     }
 }

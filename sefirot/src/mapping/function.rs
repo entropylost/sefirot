@@ -1,6 +1,5 @@
 use std::marker::PhantomData;
 
-use super::ListMapping;
 use crate::field::access::{AccessCons, AccessNil};
 use crate::internal_prelude::*;
 

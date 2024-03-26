@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use luisa_compute::resource::{BindlessArray, BindlessArrayVar};
-
 use crate::ext_prelude::*;
 use crate::field::{FieldHandle, Static};
 

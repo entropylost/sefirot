@@ -7,6 +7,7 @@ use parking_lot::{Mutex, RwLock};
 use sefirot::ext_prelude::*;
 use sefirot::field::FieldHandle;
 use sefirot::mapping::buffer::StaticDomain;
+use sefirot::mapping::function::FnMapping;
 
 use crate::encoder::{LinearEncoder, StaticDomainExt};
 
@@ -27,9 +28,12 @@ impl DomainImpl for TileDomain {
     #[tracked_nc]
     fn get_element(&self, kernel_context: Rc<KernelContext>, _: ()) -> Element<Self::Index> {
         Element::new(
-            self.array
-                .active_buffer
-                .read(dispatch_id().x + self.array.max_active_tiles * self.index as u32),
+            dispatch_id().xy()
+                + self.array.tile_size
+                    * self
+                        .array
+                        .active_buffer
+                        .read(dispatch_id().z + self.array.max_active_tiles * self.index as u32),
             Context::new(kernel_context),
         )
     }
@@ -37,7 +41,11 @@ impl DomainImpl for TileDomain {
         if self.array.count_host.read()[self.index as usize] == 0 {
             ().into_node_configs()
         } else {
-            args.dispatch([self.array.count_host.read()[self.index as usize], 1, 1])
+            args.dispatch([
+                self.array.tile_size,
+                self.array.tile_size,
+                self.array.count_host.read()[self.index as usize],
+            ])
         }
     }
     fn contains_impl(&self, _: &Self::Index) -> Expr<bool> {
@@ -51,6 +59,16 @@ impl TileDomain {
             .active_mask
             .atomic(&el.at(**el / self.array.tile_size))
             .fetch_or(1_u64 << self.index);
+    }
+    #[tracked]
+    pub fn active(&self) -> impl Mapping<Expr<bool>, Expr<Vec2<u32>>> {
+        let tile_size = self.array.tile_size;
+        let index = self.index;
+        let active_mask = self.array.active_mask;
+        FnMapping::new(move |idx, ctx| {
+            let idx = idx / tile_size;
+            (**active_mask).at_split(&idx, ctx) & (1_u64 << index) != 0
+        })
     }
 }
 
@@ -67,7 +85,8 @@ pub struct TileArray {
     max_active_tiles: u32,
     _encoder: LinearEncoder,
     _tile_domain: StaticDomain<2>,
-    active_mask: AEField<u64, Vec2<u32>>,
+    // TODO: Expose active masks for each handle.
+    pub active_mask: AEField<u64, Vec2<u32>>,
     _active_mask_handle: FieldHandle,
     active_mask_buffer: Buffer<u64>,
     active_buffer: Buffer<Vec2<u32>>,
@@ -134,15 +153,20 @@ impl TileArray {
             calculate_buffers_kernel,
         })
     }
-    pub fn update(&self) -> NodeConfigs<'static> {
+    // TODO: Is this the most optimal way of doing it?
+    // Probably not; letting the reset be done parallel would be better.
+    pub fn reset(&self) -> NodeConfigs<'static> {
         (
             self.count_buffer.copy_from_vec(vec![0; 64]),
+            self.active_mask_buffer
+                .copy_from_vec(vec![0; self.active_mask_buffer.len()]),
+        )
+            .into_node_configs()
+    }
+    pub fn update(&self) -> NodeConfigs<'static> {
+        (
             self.calculate_buffers_kernel.dispatch(),
-            (
-                self.count_buffer.copy_to_shared(&self.count_host),
-                self.active_mask_buffer
-                    .copy_from_vec(vec![0; self.active_mask_buffer.len()]),
-            ),
+            self.count_buffer.copy_to_shared(&self.count_host),
         )
             .chain()
     }

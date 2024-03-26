@@ -240,7 +240,7 @@ impl<'a> ComputeGraph<'a> {
     }
 
     #[cfg(feature = "trace")]
-    pub fn execute_timings(&mut self) -> Vec<(String, f32)> {
+    pub fn execute_timed(&mut self) -> Vec<(String, f32)> {
         use std::ptr;
 
         use cuda_device_sys::*;
@@ -298,7 +298,7 @@ impl<'a> ComputeGraph<'a> {
     }
     #[cfg(feature = "trace")]
     pub fn execute_trace(&mut self) {
-        let timings = self.execute_timings();
+        let timings = self.execute_timed();
 
         let _guard = tracing::info_span!("graph timings").entered();
 

@@ -245,7 +245,7 @@ impl GridDomain {
         DualGrid::new(self.clone())
     }
 
-    pub fn offset<D: DomainImpl>(&self, domain: D) -> OffsetDomain<D> {
+    pub fn offset<D: DomainImpl<Index = Expr<Vec2<u32>>>>(&self, domain: D) -> OffsetDomain<D> {
         OffsetDomain {
             domain,
             offset: Vec2::from(self.start),

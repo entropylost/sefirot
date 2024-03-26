@@ -18,7 +18,7 @@ fn main() {
     for _ in 0..200 {
         let mut graph = ComputeGraph::new(&device);
         graph.add(kernel.dispatch_async([1920 * 2, 1080 * 2, 1]).debug("copy"));
-        total_time += graph.execute_timings()[0].1;
+        total_time += graph.execute_timed()[0].1;
     }
     println!("Average time: {}", total_time / 200.0);
 }

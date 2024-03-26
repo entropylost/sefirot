@@ -163,6 +163,12 @@ impl MirrorGraph {
         self.reinit();
     }
     #[cfg(feature = "trace")]
+    pub fn execute_timed(&mut self) -> Vec<(String, f32)> {
+        let timings = self.graph.execute_timed();
+        self.reinit();
+        timings
+    }
+    #[cfg(feature = "trace")]
     pub fn execute_trace(&mut self) {
         self.graph.execute_trace();
         self.reinit();

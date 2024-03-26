@@ -18,6 +18,7 @@ impl<X: Access, L: AccessList> AccessList for AccessCons<X, L> {
 pub trait ListAccess {
     type List: AccessList;
     fn level() -> AccessLevel;
+    fn types() -> Vec<TypeId>;
 }
 
 pub trait Access: ListAccess + 'static {
@@ -29,11 +30,19 @@ impl ListAccess for Paradox {
     fn level() -> AccessLevel {
         AccessLevel(0)
     }
+    fn types() -> Vec<TypeId> {
+        vec![]
+    }
 }
 impl<X: Access> ListAccess for X {
     type List = AccessCons<X, <X::Downcast as ListAccess>::List>;
     fn level() -> AccessLevel {
         AccessLevel(X::Downcast::level().0 + 1)
+    }
+    fn types() -> Vec<TypeId> {
+        let mut types = X::Downcast::types();
+        types.push(TypeId::of::<X>());
+        types
     }
 }
 

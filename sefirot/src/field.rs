@@ -76,7 +76,7 @@ impl FieldId {
     }
     pub fn get_typed<X: Access, I: FieldIndex>(self) -> Option<Field<X, I>> {
         let raw = FIELDS.get(&self)?;
-        if raw.access_type == TypeId::of::<X>() && raw.index_type == TypeId::of::<I>() {
+        if raw.access_types.contains(&TypeId::of::<X>()) && raw.index_type == TypeId::of::<I>() {
             Some(Field {
                 id: self,
                 _marker: PhantomData,
@@ -183,7 +183,7 @@ impl<X: Access, I: FieldIndex> Field<X, I> {
             RawField {
                 name: name.as_ref().to_string(),
                 access_type_name: pretty_type_name::<X>(),
-                access_type: TypeId::of::<X>(),
+                access_types: X::types(),
                 index_type_name: pretty_type_name::<I>(),
                 index_type: TypeId::of::<I>(),
                 binding: None,
@@ -241,7 +241,7 @@ impl<T: 'static, I: FieldIndex> Field<Static<T>, I> {
 pub struct RawField {
     pub(crate) name: String,
     pub(crate) access_type_name: String,
-    pub(crate) access_type: TypeId,
+    pub(crate) access_types: Vec<TypeId>,
     pub(crate) index_type_name: String,
     pub(crate) index_type: TypeId,
     pub(crate) binding: Option<Box<dyn DynMapping + Send + Sync>>,
