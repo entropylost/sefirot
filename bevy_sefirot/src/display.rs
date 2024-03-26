@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy::window::{PrimaryWindow, RawHandleWrapper};
 use bevy::winit::WinitWindows;
 use luisa::lang::types::vector::{Vec2, Vec4};
 use sefirot::mapping::buffer::StaticDomain;
@@ -18,6 +19,9 @@ pub struct DisplayTexture {
     _fields: FieldSet,
 }
 
+#[derive(Component, Debug, Copy, Clone, PartialEq, Eq)]
+pub struct LuisaWindow;
+
 #[derive(Deref, Component)]
 pub struct LuisaSwapchain(pub Swapchain);
 
@@ -35,7 +39,7 @@ pub fn setup_display(
     device: Res<Device>,
     settings: Option<Res<LuisaDisplaySettings>>,
     winit_windows: NonSend<WinitWindows>,
-    query: Query<(Entity, &Window)>,
+    query: Query<(Entity, &Window), With<LuisaWindow>>,
 ) {
     let settings = settings.as_deref().copied().unwrap_or_default();
     for (entity, window) in query.iter() {
@@ -56,18 +60,28 @@ pub fn setup_display(
         let mapping = domain.map_tex2d(color_texture.view(0));
         let color = fields.create_bind("display-color-swapchain", mapping);
 
-        commands.entity(entity).insert((
-            LuisaSwapchain(swapchain),
-            DisplayTexture {
-                _fields: fields,
-                domain,
-                color,
-                color_texture,
-            },
-        ));
+        commands
+            .entity(entity)
+            .insert((
+                LuisaSwapchain(swapchain),
+                DisplayTexture {
+                    _fields: fields,
+                    domain,
+                    color,
+                    color_texture,
+                },
+            ))
+            .remove::<RawHandleWrapper>();
     }
 }
 
+pub fn setup_primary(mut commands: Commands, query: Query<Entity, With<PrimaryWindow>>) {
+    for entity in query.iter() {
+        commands.entity(entity).insert(LuisaWindow);
+    }
+}
+
+// TODO: Make this run in parallel with the rest of the things using a separate stream and the ComputeTaskPool.
 pub fn present_swapchain(
     device: Res<Device>,
     query: Query<(&LuisaSwapchain, &DisplayTexture), With<Window>>,
@@ -94,11 +108,23 @@ impl Default for LuisaDisplaySettings {
     }
 }
 
-pub struct DisplayPlugin;
+pub struct DisplayPlugin {
+    activate_primary: bool,
+}
+impl Default for DisplayPlugin {
+    fn default() -> Self {
+        Self {
+            activate_primary: true,
+        }
+    }
+}
 
 impl Plugin for DisplayPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup_display)
             .add_systems(PostUpdate, present_swapchain);
+        if self.activate_primary {
+            app.add_systems(Startup, setup_primary.before(setup_display));
+        }
     }
 }

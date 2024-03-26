@@ -586,6 +586,14 @@ impl<'a> AsNodes<'a> for NodeConfigs<'a> {
         self
     }
 }
+impl<'a, X> AsNodes<'a> for Option<X>
+where
+    X: AsNodes<'a>,
+{
+    fn into_node_configs(self) -> NodeConfigs<'a> {
+        self.map_or_else(|| ().into_node_configs(), |x| x.into_node_configs())
+    }
+}
 impl<'a, X: Tag> AsNodes<'a> for X {
     fn into_node_configs(self) -> NodeConfigs<'a> {
         NodeConfigs::Single {

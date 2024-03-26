@@ -1,3 +1,4 @@
+use std::any::TypeId;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::marker::PhantomData;
@@ -10,10 +11,13 @@ use once_cell::sync::Lazy;
 use pretty_type_name::pretty_type_name;
 
 use crate::internal_prelude::*;
+use crate::mapping::function::FieldMapping;
 use crate::mapping::{DynMapping, MappingBinding};
 
 pub mod access;
 pub use access::Access;
+
+use self::access::{AccessCons, AccessNil};
 
 pub mod set;
 
@@ -70,7 +74,21 @@ impl FieldId {
             None
         }
     }
-    pub fn at_opt<X: Access, I: FieldIndex>(self, index: &I, ctx: &mut Context) -> Option<X> {
+    pub fn get_typed<X: Access, I: FieldIndex>(self) -> Option<Field<X, I>> {
+        let raw = FIELDS.get(&self)?;
+        if raw.access_type == TypeId::of::<X>() && raw.index_type == TypeId::of::<I>() {
+            Some(Field {
+                id: self,
+                _marker: PhantomData,
+            })
+        } else {
+            None
+        }
+    }
+    pub fn as_typed<X: Access, I: FieldIndex>(self) -> Field<X, I> {
+        self.get_typed().unwrap()
+    }
+    pub fn get_at<X: Access, I: FieldIndex>(self, index: &I, ctx: &mut Context) -> Option<X> {
         ctx.context_stack
             .last_mut()
             .unwrap()
@@ -140,7 +158,7 @@ impl<X: Access, T: FieldIndex> Hash for Field<X, T> {
 
 impl<X: Access, I: FieldIndex> Field<X, I> {
     pub fn at_split(&self, index: &I, ctx: &mut Context) -> X {
-        self.id.at_opt::<X, I>(index, ctx).unwrap()
+        self.id.get_at::<X, I>(index, ctx).unwrap()
     }
     pub fn at(&self, el: &Element<I>) -> X {
         self.at_split(el.index(), &mut el.context())
@@ -165,7 +183,9 @@ impl<X: Access, I: FieldIndex> Field<X, I> {
             RawField {
                 name: name.as_ref().to_string(),
                 access_type_name: pretty_type_name::<X>(),
+                access_type: TypeId::of::<X>(),
                 index_type_name: pretty_type_name::<I>(),
+                index_type: TypeId::of::<I>(),
                 binding: None,
             },
         );
@@ -184,6 +204,17 @@ impl<X: Access, I: FieldIndex> Field<X, I> {
         let (field, handle) = Self::create(name);
         field.bind(mapping);
         (field, handle)
+    }
+
+    pub fn map<Y: Access<List = AccessCons<Y, AccessNil>>, F: Fn(X) -> Y + 'static>(
+        &self,
+        f: F,
+    ) -> FieldMapping<X, Y, I, F> {
+        FieldMapping {
+            field: *self,
+            f,
+            _marker: PhantomData,
+        }
     }
 }
 impl<V: Value, I: FieldIndex> Field<Expr<V>, I> {
@@ -210,7 +241,9 @@ impl<T: 'static, I: FieldIndex> Field<Static<T>, I> {
 pub struct RawField {
     pub(crate) name: String,
     pub(crate) access_type_name: String,
+    pub(crate) access_type: TypeId,
     pub(crate) index_type_name: String,
+    pub(crate) index_type: TypeId,
     pub(crate) binding: Option<Box<dyn DynMapping + Send + Sync>>,
 }
 

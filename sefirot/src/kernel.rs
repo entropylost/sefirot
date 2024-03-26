@@ -9,7 +9,7 @@ use luisa::runtime::{AsKernelArg, KernelArg, KernelArgEncoder, KernelBuilder, Ke
 use parking_lot::Mutex;
 use pretty_type_name::pretty_type_name;
 
-use crate::domain::Domain;
+use crate::domain::{Domain, NullDomain};
 use crate::graph::{ComputeGraph, NodeConfigs};
 use crate::internal_prelude::*;
 
@@ -131,6 +131,11 @@ impl<S: KernelSignature, A: 'static> Debug for Kernel<S, A> {
         f.debug_struct(&pretty_type_name::<Self>())
             .field("debug_name", &self.debug_name)
             .finish()
+    }
+}
+impl Kernel<fn()> {
+    pub fn null(device: &Device) -> Self {
+        Self::build(device, &NullDomain, &|_| {})
     }
 }
 impl<S: KernelSignature, A: 'static> Kernel<S, A> {

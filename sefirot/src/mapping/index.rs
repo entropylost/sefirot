@@ -21,7 +21,7 @@ where
     Self: ListMapping<L, I>,
 {
     fn access(&self, index: &I, ctx: &mut Context, binding: FieldBinding) -> X {
-        let index = self.index.id.at_opt(index, ctx).unwrap();
+        let index = self.index.id.get_at(index, ctx).unwrap();
         self.mapping.access(&index, ctx, binding)
     }
     fn save(&self, ctx: &mut Context, binding: FieldBinding) {

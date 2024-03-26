@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+use super::ListMapping;
 use crate::field::access::{AccessCons, AccessNil};
 use crate::internal_prelude::*;
 
@@ -63,10 +64,31 @@ impl<
         I: 'static,
         F: Fn(&I, &mut Context) -> X + 'static,
     > Mapping<X, I> for CachedFnMapping<X, I, F>
-where
-    F: Fn(&I, &mut Context) -> X,
 {
     fn access(&self, index: &I, ctx: &mut Context, binding: FieldBinding) -> X {
         ctx.get_cache_or_insert_with::<X, _>(&binding, |ctx| (self.f)(index, ctx), |v| v.clone())
+    }
+}
+
+pub struct FieldMapping<
+    X: Access,
+    Y: Access<List = AccessCons<Y, AccessNil>>,
+    I: FieldIndex,
+    F: Fn(X) -> Y + 'static,
+> {
+    pub(crate) field: Field<X, I>,
+    pub(crate) f: F,
+    pub(crate) _marker: PhantomData<fn(X) -> Y>,
+}
+impl<
+        X: Access,
+        Y: Access<List = AccessCons<Y, AccessNil>>,
+        I: FieldIndex,
+        F: Fn(X) -> Y + 'static,
+    > Mapping<Y, I> for FieldMapping<X, Y, I, F>
+{
+    fn access(&self, index: &I, ctx: &mut Context, _binding: FieldBinding) -> Y {
+        let value = self.field.at_split(index, ctx);
+        (self.f)(value)
     }
 }

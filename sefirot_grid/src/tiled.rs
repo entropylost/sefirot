@@ -110,10 +110,8 @@ impl TileArray {
             &track!(|el| {
                 let active_mask = active_mask.expr(&el).var();
                 while active_mask != 0 {
-                    // TODO: This entire thing can be replaced with __clzll or __ffsll
-                    let highest = active_mask & active_mask >> 1;
-                    *active_mask ^= highest;
-                    let level = highest.cast_f32().log2().cast_u32();
+                    let level = active_mask.trailing_zeros();
+                    *active_mask ^= 1_u64 << level.cast_u64();
                     let index =
                         count_buffer.atomic_ref(level).fetch_add(1) + level * max_active_tiles;
                     active_buffer.write(index, *el);

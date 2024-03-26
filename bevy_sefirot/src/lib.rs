@@ -103,7 +103,6 @@ impl MirrorGraph {
     }
 
     // TODO: Just copy the graph from bevy over.
-    // Also: Fix the add to graph thing (again) and get the particles example working.
     pub fn init(&mut self, schedule: &Schedule) {
         let graph = &mut self.graph;
         let set_map = &mut self.set_map;

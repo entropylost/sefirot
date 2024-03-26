@@ -12,14 +12,10 @@ use crate::prelude::AsNodes;
 pub trait PassthroughArg: KernelArg + 'static {}
 impl<T: KernelArg + 'static> PassthroughArg for T {}
 
-/// A trait representing a space across which computations may be performed by calling kernels.
-/// This is intentionally very generic, and does not provide any guarantees on how many dispatch calls are generated.
-/// For most purposes, [`IndexDomain`] is a conveinent way to implement this trait if only a single dispatch call is necessary.
 pub trait DomainImpl: Clone + Send + Sync + 'static {
     type Args: 'static;
     type Index: FieldIndex;
     type Passthrough: PassthroughArg;
-    // TODO: Need to be able to pass arguments into this.
     fn get_element(
         &self,
         kernel_context: Rc<KernelContext>,
@@ -151,5 +147,22 @@ impl KernelDispatch<'_> {
     }
     pub fn dispatch(&self, dispatch_size: [u32; 3]) -> NodeConfigs<'static> {
         self.dispatch_with(dispatch_size, ())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct NullDomain;
+impl DomainImpl for NullDomain {
+    type Args = ();
+    type Index = ();
+    type Passthrough = ();
+    fn get_element(&self, kernel_context: Rc<KernelContext>, _: ()) -> Element<()> {
+        Element::new((), Context::new(kernel_context))
+    }
+    fn dispatch(&self, _: (), _: KernelDispatch) -> NodeConfigs<'static> {
+        ().into_node_configs()
+    }
+    fn contains_impl(&self, _: &()) -> Expr<bool> {
+        false.expr()
     }
 }

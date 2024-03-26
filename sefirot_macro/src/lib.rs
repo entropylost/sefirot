@@ -6,10 +6,6 @@ use syn::spanned::Spanned;
 use syn::visit_mut::*;
 use syn::*;
 
-// TODO: Impl let mut -> let = .var() <- Don't
-// TODO: Impl x as f32 -> .cast()  <- Don't
-// TOOD: Impl switch! macro.  <- Don't
-
 struct TraceVisitor {
     trait_path: TokenStream,
     flow_path: TokenStream,
