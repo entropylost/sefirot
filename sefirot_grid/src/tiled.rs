@@ -85,6 +85,8 @@ pub struct TileArray {
     max_active_tiles: u32,
     _encoder: LinearEncoder,
     _tile_domain: StaticDomain<2>,
+    pub edge: EEField<bool, Vec2<u32>>,
+    _edge_handle: FieldHandle,
     // TODO: Expose active masks for each handle.
     pub active_mask: AEField<u64, Vec2<u32>>,
     _active_mask_handle: FieldHandle,
@@ -114,6 +116,16 @@ impl TileArray {
             max_active_tiles,
         } = parameters;
         let tile_domain = StaticDomain(array_size);
+
+        // TODO: Add a separated-kernel invocation which does the edges separately.
+        let (edge, _edge_handle) = EEField::<bool, Vec2<u32>>::create_bind(
+            "tile-array-edge",
+            FnMapping::<_, Expr<Vec2<u32>>, _>::new(track!(move |idx, _| {
+                let idx = idx % tile_size;
+                ((idx == 0) | (idx == tile_size - 1)).any()
+            })),
+        );
+
         let active_mask_buffer = device.create_buffer((array_size[0] * array_size[1]) as usize);
         let (active_mask, _active_mask_handle) = AEField::<u64, Vec2<u32>>::create_bind(
             "tile-array-active-mask",
@@ -143,6 +155,8 @@ impl TileArray {
             max_active_tiles,
             _encoder: encoder,
             _tile_domain: tile_domain,
+            edge,
+            _edge_handle,
             active_mask,
             active_mask_buffer,
             _active_mask_handle,

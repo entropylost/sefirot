@@ -59,6 +59,16 @@ impl GridDirection {
             GridDirection::Up => Vec2::new(0, 1),
         }
     }
+    // TODO: Generalize.
+    #[tracked_nc]
+    pub fn extract(&self, value: Expr<Vec2<f32>>) -> Expr<f32> {
+        match self {
+            GridDirection::Left => -value.x,
+            GridDirection::Down => -value.y,
+            GridDirection::Right => value.x,
+            GridDirection::Up => value.y,
+        }
+    }
     pub fn as_vec_f32(&self) -> Vec2<f32> {
         let v = self.as_vec();
         Vec2::new(v.x as f32, v.y as f32)

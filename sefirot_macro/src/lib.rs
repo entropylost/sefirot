@@ -149,7 +149,7 @@ impl VisitMut for TraceVisitor {
                             #debug_path::with_lineno("for range",
                                 file!(),
                                 line!(),
-                                column!(), ||#range.for_each(#element_path::__block_input(|#pat| #body)))
+                                column!(), ||#range.for_each(|#pat| #body))
                         }
                     } else {
                         *node = parse_quote_spanned! {span=>

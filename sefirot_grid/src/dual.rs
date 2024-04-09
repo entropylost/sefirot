@@ -21,6 +21,32 @@ impl From<Facing> for u64 {
         }
     }
 }
+impl From<GridDirection> for Facing {
+    fn from(dir: GridDirection) -> Facing {
+        match dir {
+            GridDirection::Up | GridDirection::Down => Facing::Horizontal,
+            GridDirection::Left | GridDirection::Right => Facing::Vertical,
+        }
+    }
+}
+impl Facing {
+    pub fn extract(&self, value: Expr<Vec2<f32>>) -> Expr<f32> {
+        match self {
+            Facing::Horizontal => value.y,
+            Facing::Vertical => value.x,
+        }
+    }
+    pub fn as_vec(&self) -> Vec2<i32> {
+        match self {
+            Facing::Horizontal => Vec2::new(0, 1),
+            Facing::Vertical => Vec2::new(1, 0),
+        }
+    }
+    pub fn as_vec_f32(&self) -> Vec2<f32> {
+        let v = self.as_vec();
+        Vec2::new(v.x as f32, v.y as f32)
+    }
+}
 
 #[derive(Copy, Clone)]
 pub struct Edge {
@@ -123,10 +149,7 @@ impl DualGrid {
 
     #[tracked]
     pub fn in_dir(&self, el: &Element<Cell>, dir: GridDirection) -> Element<Edge> {
-        let facing = match dir {
-            GridDirection::Up | GridDirection::Down => Facing::Horizontal,
-            GridDirection::Left | GridDirection::Right => Facing::Vertical,
-        };
+        let facing = Facing::from(dir);
         let offset = match dir {
             GridDirection::Up => Vec2::new(0, 1),
             GridDirection::Right => Vec2::new(1, 0),

@@ -115,3 +115,58 @@ impl DomainImpl for MargolusPattern {
         self.grid.contains(index)
     }
 }
+impl MargolusPattern {
+    pub fn indexed(self) -> MargolusIndexedPattern {
+        MargolusIndexedPattern { grid: self.grid }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct MargolusIndexedPattern {
+    pub(crate) grid: GridDomain,
+}
+
+impl DomainImpl for MargolusIndexedPattern {
+    type Args = u8;
+    type Index = Cell;
+    type Passthrough = Vec2<bool>;
+    #[tracked_nc]
+    fn get_element(
+        &self,
+        kernel_context: Rc<KernelContext>,
+        offset: Expr<Vec2<bool>>,
+    ) -> Element<Self::Index> {
+        let uindex = dispatch_id().xy() * 2 + offset.cast::<u32>();
+        let index = uindex.cast_i32() + Vec2::from(self.grid.start);
+        let mut context = Context::new(kernel_context);
+        context.bind_local(self.grid.index, FnMapping::new(move |_el, _ctx| uindex));
+        Element::new(index, context)
+    }
+    fn dispatch(&self, index: u8, args: KernelDispatch<Self::Passthrough>) -> NodeConfigs<'static> {
+        let prefix = args
+            .kernel_name()
+            .map_or_else(String::new, |name| format!("{}-", name));
+        let [w, h] = self.grid.size();
+        let index = index % 4;
+        let offset = [
+            Vec2::new(false, false),
+            Vec2::new(false, true),
+            Vec2::new(true, true),
+            Vec2::new(true, false),
+        ][index as usize];
+        let name = format!("{}{}{}", prefix, offset.x as u8, offset.y as u8);
+        let size = if self.grid.wrapping {
+            [w / 2, h / 2, 1]
+        } else {
+            [
+                if offset.x { (w - 1) / 2 } else { w / 2 },
+                if offset.y { (h - 1) / 2 } else { h / 2 },
+                1,
+            ]
+        };
+        args.dispatch_with(size, offset).debug(name)
+    }
+    fn contains_impl(&self, index: &Self::Index) -> Expr<bool> {
+        self.grid.contains(index)
+    }
+}

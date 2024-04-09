@@ -1,8 +1,10 @@
 use std::ops::Deref;
+use std::sync::Arc;
 
 use luisa_compute::lang::types::AtomicRef;
+use parking_lot::Mutex;
 
-use crate::graph::{CopyExt, NodeConfigs};
+use crate::graph::{AsNodes, CopyExt, NodeConfigs};
 use crate::luisa::prelude::*;
 
 /// A struct that runs a given function upon drop.
@@ -22,6 +24,7 @@ impl<F: FnOnce() + 'static> Drop for FnRelease<F> {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Paradox {}
 
+#[repr(transparent)]
 pub struct Singleton<V: Value>(pub Buffer<V>);
 impl<V: Value> Deref for Singleton<V> {
     type Target = SingletonVar<V>;
@@ -43,6 +46,17 @@ impl<V: Value> Singleton<V> {
         V: Send,
     {
         self.0.copy_from_vec(vec![value])
+    }
+    pub fn read_to(&self, dst: &Arc<Mutex<V>>) -> NodeConfigs<'static>
+    where
+        V: Send,
+    {
+        let dst = dst.clone();
+        let src = self.0.clone();
+        let mut guard = dst.lock_arc();
+        let dst = unsafe { std::mem::transmute::<&mut V, &'static mut V>(&mut *guard) };
+        let dst_slice = std::slice::from_mut(dst);
+        src.copy_to_async(dst_slice).release(guard)
     }
 }
 

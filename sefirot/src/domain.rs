@@ -9,6 +9,8 @@ use crate::internal_prelude::*;
 use crate::kernel::{ErasedKernelArg, ErasedKernelDispatch, KernelContext};
 use crate::prelude::AsNodes;
 
+pub mod dynamic;
+
 pub trait PassthroughArg: KernelArg + 'static {}
 impl<T: KernelArg + 'static> PassthroughArg for T {}
 
@@ -16,6 +18,7 @@ pub trait DomainImpl: Clone + Send + Sync + 'static {
     type Args: 'static;
     type Index: FieldIndex;
     type Passthrough: PassthroughArg;
+    // TODO: perhaps should allow invoking the kernel multiple times, for example for the dual grid?
     fn get_element(
         &self,
         kernel_context: Rc<KernelContext>,
@@ -26,6 +29,7 @@ pub trait DomainImpl: Clone + Send + Sync + 'static {
         domain_args: Self::Args,
         args: KernelDispatch<Self::Passthrough>,
     ) -> NodeConfigs<'static>;
+    // TODO: Consider making this take in an `Element` so that it's possible to implement dynamic contains using argument passing.
     fn contains_impl(&self, index: &Self::Index) -> Expr<bool>;
 }
 
