@@ -34,7 +34,9 @@ pub struct KernelCell<S: KernelSignature, A: 'static = ()>(OnceLock<Kernel<S, A>
 impl<S: KernelSignature, A: 'static> Deref for KernelCell<S, A> {
     type Target = Kernel<S, A>;
     fn deref(&self) -> &Self::Target {
-        self.0.get().unwrap()
+        self.0
+            .get()
+            .expect("Kernel has not been initialized. Please add the init system to the schedule.")
     }
 }
 impl<S: KernelSignature, A: 'static> KernelCell<S, A> {

@@ -1,3 +1,5 @@
+use std::ops::Not;
+
 use sefirot::ext_prelude::*;
 use sefirot::field::access::{AccessCons, AccessList, ListAccess};
 use sefirot::field::Access;
@@ -45,6 +47,16 @@ impl Facing {
     pub fn as_vec_f32(&self) -> Vec2<f32> {
         let v = self.as_vec();
         Vec2::new(v.x as f32, v.y as f32)
+    }
+}
+
+impl Not for Facing {
+    type Output = Self;
+    fn not(self) -> Self {
+        match self {
+            Facing::Horizontal => Facing::Vertical,
+            Facing::Vertical => Facing::Horizontal,
+        }
     }
 }
 

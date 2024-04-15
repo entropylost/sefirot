@@ -58,6 +58,9 @@ impl<V: Value> Singleton<V> {
         let dst_slice = std::slice::from_mut(dst);
         src.copy_to_async(dst_slice).release(guard)
     }
+    pub fn read_blocking(&self) -> V {
+        self.0.copy_to_vec()[0]
+    }
 }
 
 #[repr(transparent)]
