@@ -7,6 +7,7 @@ extern crate self as sefirot;
 
 pub mod domain;
 pub mod element;
+pub mod extension;
 pub mod field;
 pub mod graph;
 pub mod kernel;

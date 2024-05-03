@@ -22,7 +22,9 @@ impl<H: Hasher + 'static> Eq for DynTag<H> {}
 impl<H: Hasher + 'static> Hash for DynTag<H> {
     fn hash<H1: Hasher>(&self, state: &mut H1) {
         // if TypeId::of::<H1>() == TypeId::of::<H>() {
-        self.tag.hash(unsafe { std::mem::transmute(state) });
+        let state: &mut H = unsafe { std::mem::transmute(state) };
+        self.tag.tyid().hash(state);
+        self.tag.hash(state);
         // } else {
         //     unreachable!("Invalid hasher type.");
         // }
@@ -43,7 +45,7 @@ impl<H: Hasher + 'static> Clone for DynTag<H> {
 
 pub trait SafeTag<H: Hasher + 'static = DefaultHasher>: Debug + Send + Sync + 'static {
     fn hash(&self, hasher: &mut H) -> u64;
-    fn type_id(&self) -> TypeId;
+    fn tyid(&self) -> TypeId;
     fn as_any(&self) -> &dyn Any;
     fn eq(&self, other: &dyn SafeTag<H>) -> bool;
     fn clone_box(&self) -> Box<dyn SafeTag<H>>;
@@ -56,7 +58,7 @@ where
         self.hash(hasher);
         hasher.finish()
     }
-    fn type_id(&self) -> TypeId {
+    fn tyid(&self) -> TypeId {
         TypeId::of::<X>()
     }
     fn as_any(&self) -> &dyn Any {

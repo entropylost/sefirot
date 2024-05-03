@@ -17,6 +17,7 @@ pub struct BindlessMapper {
 
 struct BindlessArrayMapping(Arc<BindlessArray>);
 impl Mapping<Static<BindlessArrayVar>, ()> for BindlessArrayMapping {
+    type Ext = ();
     fn access(
         &self,
         _index: &(),

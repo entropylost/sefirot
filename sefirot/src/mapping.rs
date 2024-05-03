@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 
 use luisa::lang::types::AtomicRef;
 
+use crate::extension::ExtensionList;
 use crate::field::access::{AccessCons, AccessLevel, AccessList, AccessNil, ListAccess};
 use crate::field::Static;
 use crate::internal_prelude::*;
@@ -69,6 +70,7 @@ where
 pub trait Mapping<X: Access, I: 'static>:
     ListMapping<<X as ListAccess>::List, I> + 'static
 {
+    type Ext: ExtensionList<Self>;
     fn access(&self, index: &I, ctx: &mut Context, binding: FieldBinding) -> X;
     /// Saves the value of the field to the context. After this, the cached value should be droppable.
     #[allow(unused_variables)]
@@ -106,16 +108,22 @@ pub trait DynMapping: 'static + private::Sealed {
         binding: FieldBinding,
     ) -> Box<dyn Any>;
     fn save_dyn(&self, level: AccessLevel, ctx: &mut Context, binding: FieldBinding);
+    fn as_any(&self) -> &dyn Any;
+    fn into_any(self: Box<Self>) -> Box<dyn Any>;
+    fn extensions(&self) -> &[Box<dyn Any + Send + Sync>];
 }
 
 pub(crate) struct MappingBinding<X: Access, I: FieldIndex, M: Mapping<X, I>> {
     pub(crate) mapping: M,
+    pub(crate) extensions: Vec<Box<dyn Any + Send + Sync>>,
     pub(crate) _marker: PhantomData<fn() -> (X, I)>,
 }
 impl<X: Access, I: FieldIndex, M: Mapping<X, I>> MappingBinding<X, I, M> {
     pub(crate) fn new(mapping: M) -> Self {
+        let extensions = M::Ext::load_all(&mapping);
         Self {
             mapping,
+            extensions,
             _marker: PhantomData,
         }
     }
@@ -145,5 +153,14 @@ impl<X: Access, I: FieldIndex, M: Mapping<X, I>> DynMapping for MappingBinding<X
             ctx,
             binding,
         );
+    }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }
+    fn extensions(&self) -> &[Box<dyn Any + Send + Sync>] {
+        &self.extensions
     }
 }

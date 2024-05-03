@@ -302,6 +302,7 @@ impl<V: Value> SimpleExprMapping<V, Expr<u32>> for BufferMapping<V> {
 }
 impl_cache_mapping!([V: Value] Mapping[V, Expr<u32>] for BufferMapping<V>);
 impl<V: Value> Mapping<AtomicRef<V>, Expr<u32>> for BufferMapping<V> {
+    type Ext = ();
     fn access(
         &self,
         index: &Expr<u32>,

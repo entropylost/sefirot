@@ -76,3 +76,37 @@ impl<V: Value> SingletonVar<V> {
         self.0.atomic_ref(0)
     }
 }
+
+#[macro_export]
+macro_rules! match_type {
+    ($input:ident {$($rest:tt)* }) => {
+        {
+            let $input = $input as &dyn std::any::Any;
+            match_type!(@input[$input] $($rest)*)
+        }
+    };
+    (@input[$input:ident] _ => $escape:expr) => {
+        $escape
+    };
+    (@input[$input:ident] , $($rest:tt)*) => {
+        match_type!(@input[$input] $($rest)*)
+    };
+    (@input[$input:ident] $t:ty => { $body:expr } $($rest:tt)*) => {
+        if let Some(&input) = $input.downcast_ref::<$t>() {
+            #[allow(unused_variables)]
+            let $input = input;
+            $body
+        } else {
+            match_type!(@input[$input] $($rest)*)
+        }
+    };
+    (@input[$input:ident] $t:ty => $body:expr, $($rest:tt)*) => {
+        if let Some(&input) = $input.downcast_ref::<$t>() {
+            #[allow(unused_variables)]
+            let $input = input;
+            $body
+        } else {
+            match_type!(@input[$input] $($rest)*)
+        }
+    };
+}

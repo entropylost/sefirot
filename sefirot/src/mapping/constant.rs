@@ -10,6 +10,7 @@ pub struct ConstantMapping<V: Value + Send> {
 }
 
 impl<V: Value + Send, I: FieldIndex> Mapping<Expr<V>, I> for ConstantMapping<V> {
+    type Ext = ();
     fn access(&self, _index: &I, ctx: &mut Context, binding: FieldBinding) -> Expr<V> {
         ctx.get_cache_or_insert_with_global(
             &binding,

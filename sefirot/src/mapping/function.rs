@@ -32,6 +32,7 @@ impl<
 where
     F: Fn(&I, &mut Context) -> X,
 {
+    type Ext = ();
     fn access(&self, index: &I, ctx: &mut Context, _binding: FieldBinding) -> X {
         (self.f)(index, ctx)
     }
@@ -64,6 +65,7 @@ impl<
         F: Fn(&I, &mut Context) -> X + 'static,
     > Mapping<X, I> for CachedFnMapping<X, I, F>
 {
+    type Ext = ();
     fn access(&self, index: &I, ctx: &mut Context, binding: FieldBinding) -> X {
         ctx.get_cache_or_insert_with::<X, _>(&binding, |ctx| (self.f)(index, ctx), |v| v.clone())
     }
@@ -86,6 +88,7 @@ impl<
         F: Fn(X) -> Y + 'static,
     > Mapping<Y, I> for FieldMapping<X, Y, I, F>
 {
+    type Ext = ();
     fn access(&self, index: &I, ctx: &mut Context, _binding: FieldBinding) -> Y {
         let value = self.field.at_split(index, ctx);
         (self.f)(value)

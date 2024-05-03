@@ -95,6 +95,7 @@ where
     M: Mapping<X, Cell>,
     Self: ListMapping<L, Edge>,
 {
+    type Ext = ();
     fn access(&self, index: &Edge, ctx: &mut Context, binding: FieldBinding) -> X {
         match index.facing {
             Facing::Horizontal => {

@@ -51,11 +51,13 @@ pub trait SimpleExprMapping<V: Value, I: FieldIndex>: Send + Sync + 'static {
 macro_rules! impl_cache_mapping {
     ($([ $($t:tt)* ])? Mapping[$V:ty, $I:ty] for $X:ty $(where $($where_clause:tt)*)?) => {
         impl $(<$($t)*>)? $crate::mapping::Mapping<Expr<$V>, $I> for $X $(where $($where_clause)*)? {
+            type Ext = ();
             fn access(&self, index: &$I, ctx: &mut $crate::element::Context, binding: $crate::element::FieldBinding) -> Expr<$V> {
                 **$crate::mapping::cache::get_value(self, index, ctx, binding)
             }
         }
         impl $(<$($t)*>)? $crate::mapping::Mapping<Var<$V>, $I> for $X $(where $($where_clause)*)? {
+            type Ext = ();
             fn access(&self, index: &$I, ctx: &mut $crate::element::Context, binding: $crate::element::FieldBinding) -> Var<$V> {
                 $crate::mapping::cache::get_value(self, index, ctx, binding)
             }

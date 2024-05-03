@@ -20,6 +20,7 @@ where
     M: Mapping<X, J>,
     Self: ListMapping<L, I>,
 {
+    type Ext = ();
     fn access(&self, index: &I, ctx: &mut Context, binding: FieldBinding) -> X {
         let index = self.index.id.get_at(index, ctx).unwrap();
         self.mapping.access(&index, ctx, binding)
