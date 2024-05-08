@@ -15,45 +15,72 @@ pub struct BindlessMapper {
     next_buffer: usize,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-#[repr(transparent)]
 // TODO: Make a `Var` version of this, wrapping the index probably.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+// The array stores a strong reference to the buffer so there's no need to hold it.
 pub struct BindlessBufferHandle<V: Value> {
-    index: u32,
+    pub index: u32,
     _marker: PhantomData<fn() -> V>,
 }
 
+impl<V: Value> BindlessHandle for BindlessBufferHandle<V> {
+    type Dim = usize;
+}
+
+pub trait BindlessHandle {
+    type Dim;
+}
+
 pub trait Emplace {
-    type Index;
-    fn emplace_self(self, mapper: &mut BindlessMapper) -> Self::Index;
+    type H: BindlessHandle;
+    fn emplace_self(self, mapper: &mut BindlessMapper) -> Self::H;
+    fn dim(&self) -> <Self::H as BindlessHandle>::Dim;
 }
 
-pub trait Remove {
-    fn remove_self(self, mapper: &mut BindlessMapper);
+impl<V: Value> Emplace for Buffer<V> {
+    type H = BindlessBufferHandle<V>;
+    fn emplace_self(self, mapper: &mut BindlessMapper) -> Self::H {
+        let index = mapper.next_buffer();
+        mapper.array.emplace_buffer_async(index, &self);
+        BindlessBufferHandle {
+            index: index as u32,
+            _marker: PhantomData,
+        }
+    }
+    fn dim(&self) -> <Self::H as BindlessHandle>::Dim {
+        self.len()
+    }
 }
-
 impl<V: Value> Emplace for &Buffer<V> {
-    type Index = BindlessBufferHandle<V>;
-    fn emplace_self(self, mapper: &mut BindlessMapper) -> Self::Index {
-        let buffer = mapper.next_buffer();
-        mapper
-            .array
-            .emplace_buffer_async(buffer.index as usize, self);
-        buffer
+    type H = BindlessBufferHandle<V>;
+    fn emplace_self(self, mapper: &mut BindlessMapper) -> Self::H {
+        let index = mapper.next_buffer();
+        mapper.array.emplace_buffer_async(index, self);
+        BindlessBufferHandle {
+            index: index as u32,
+            _marker: PhantomData,
+        }
+    }
+    fn dim(&self) -> <Self::H as BindlessHandle>::Dim {
+        self.len()
     }
 }
 impl<V: Value> Emplace for &BufferView<V> {
-    type Index = BindlessBufferHandle<V>;
-    fn emplace_self(self, mapper: &mut BindlessMapper) -> Self::Index {
-        let buffer = mapper.next_buffer();
-        mapper
-            .array
-            .emplace_buffer_view_async(buffer.index as usize, self);
-        buffer
+    type H = BindlessBufferHandle<V>;
+    fn emplace_self(self, mapper: &mut BindlessMapper) -> Self::H {
+        let index = mapper.next_buffer();
+        mapper.array.emplace_buffer_view_async(index, self);
+        BindlessBufferHandle {
+            index: index as u32,
+            _marker: PhantomData,
+        }
+    }
+    fn dim(&self) -> <Self::H as BindlessHandle>::Dim {
+        self.len()
     }
 }
 
-// TODO: Add the dynamic version as well.. will require switching the field to u32 as well?
+// TODO: Add the dynamic version as well.. will require switching the field to Expr<u32> as well.
 pub struct BindlessBufferMapping<V: Value> {
     buffer_field: SField<BindlessBufferVar<V>, ()>,
     _buffer_field_handle: FieldHandle,
@@ -101,21 +128,17 @@ impl BindlessMapper {
             next_buffer: 0,
         }
     }
-    pub fn next_buffer<V: Value>(&mut self) -> BindlessBufferHandle<V> {
-        let index = self.free_buffers.pop().unwrap_or_else(|| {
+    pub fn next_buffer(&mut self) -> usize {
+        self.free_buffers.pop().unwrap_or_else(|| {
             let index = self.next_buffer;
             self.next_buffer += 1;
             index
-        }) as u32;
-        BindlessBufferHandle {
-            index,
-            _marker: PhantomData,
-        }
+        })
     }
-    pub fn emplace_async<T: Emplace>(&mut self, data: T) -> T::Index {
+    pub fn emplace<T: Emplace>(&mut self, data: T) -> T::H {
         data.emplace_self(self)
     }
-    pub fn emplace<T: Emplace>(&mut self, data: T) -> T::Index {
+    pub fn emplace_blocking<T: Emplace>(&mut self, data: T) -> T::H {
         let index = data.emplace_self(self);
         self.update();
         index
@@ -123,7 +146,7 @@ impl BindlessMapper {
     pub fn update(&self) {
         self.array.update();
     }
-    pub fn mappingd<V: Value>(&self, handle: BindlessBufferHandle<V>) -> BindlessBufferMapping<V> {
+    pub fn mapping<V: Value>(&self, handle: BindlessBufferHandle<V>) -> BindlessBufferMapping<V> {
         let array_field = self.field;
         let (buffer_field, buffer_field_handle) = Field::create_bind(
             "bindless-buffer-field",
@@ -136,5 +159,12 @@ impl BindlessMapper {
             buffer_field,
             _buffer_field_handle: buffer_field_handle,
         }
+    }
+    pub fn emplace_map<V: Value>(
+        &mut self,
+        data: impl Emplace<H = BindlessBufferHandle<V>>,
+    ) -> BindlessBufferMapping<V> {
+        let handle = self.emplace(data);
+        self.mapping(handle)
     }
 }

@@ -9,6 +9,9 @@ use sefirot::ext_prelude::*;
 use sefirot::field::FieldHandle;
 use sefirot::luisa::lang::types::vector::Vec2;
 use sefirot::luisa::lang::types::AtomicRef;
+use sefirot::mapping::bindless::{
+    BindlessBufferHandle, BindlessBufferMapping, BindlessMapper, Emplace,
+};
 use sefirot::mapping::buffer::{
     BufferMapping, HandledBuffer, HandledTex2d, HasPixelStorage, IntoHandled, StaticDomain,
 };
@@ -249,6 +252,57 @@ impl GridDomain {
     }
     pub fn create_buffer<V: Value>(&self, device: &Device) -> impl AMapping<V, Cell> {
         self._create_buffer_typed(device)
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn _map_bindless_buffer_typed<V: Value>(
+        &self,
+        bindless: &mut BindlessMapper,
+        buffer: impl Emplace<H = BindlessBufferHandle<V>>,
+    ) -> IndexMap<
+        Expr<Vec2<u32>>,
+        IndexMap<Expr<u32>, BindlessBufferMapping<V>, Expr<Vec2<u32>>>,
+        Cell,
+    > {
+        IndexMap::new(
+            self.index,
+            self.encoder
+                .as_ref()
+                .expect("Mapping a buffer needs a LinearEncoder")
+                .encode::<Var<V>, _>(
+                    StaticDomain::<1>::new(self.size()[0] * self.size()[1])
+                        .map_bindless_buffer(bindless, buffer),
+                ),
+        )
+    }
+    pub fn map_bindless_buffer<V: Value>(
+        &self,
+        bindless: &mut BindlessMapper,
+        buffer: impl Emplace<H = BindlessBufferHandle<V>>,
+    ) -> impl VMapping<V, Cell> {
+        self._map_bindless_buffer_typed(bindless, buffer)
+    }
+    #[allow(clippy::type_complexity)]
+    fn _create_bindless_buffer_typed<V: Value>(
+        &self,
+        bindless: &mut BindlessMapper,
+        device: &Device,
+    ) -> IndexMap<
+        Expr<Vec2<u32>>,
+        IndexMap<Expr<u32>, BindlessBufferMapping<V>, Expr<Vec2<u32>>>,
+        Cell,
+    > {
+        self._map_bindless_buffer_typed(
+            bindless,
+            device.create_buffer((self.size()[0] * self.size()[1]) as usize),
+        )
+    }
+    pub fn create_bindless_buffer<V: Value>(
+        &self,
+        bindless: &mut BindlessMapper,
+        device: &Device,
+    ) -> impl VMapping<V, Cell> {
+        self._create_bindless_buffer_typed(bindless, device)
     }
 
     pub fn dual(&self) -> DualGrid {

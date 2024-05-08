@@ -4,6 +4,7 @@ use std::rc::Rc;
 use luisa::lang::types::vector::{Vec2, Vec3};
 use luisa::lang::types::AtomicRef;
 
+use super::bindless::{BindlessBufferHandle, BindlessBufferMapping, BindlessMapper, Emplace};
 use super::cache::SimpleExprMapping;
 use crate::domain::{DomainImpl, KernelDispatch};
 use crate::graph::NodeConfigs;
@@ -36,9 +37,25 @@ impl StaticDomain<1> {
         debug_assert_eq!(buffer.len() as u32, self.len());
         BufferMapping(buffer)
     }
+    pub fn map_bindless_buffer<V: Value>(
+        &self,
+        bindless: &mut BindlessMapper,
+        buffer: impl Emplace<H = BindlessBufferHandle<V>>,
+    ) -> BindlessBufferMapping<V> {
+        debug_assert_eq!(buffer.dim() as u32, self.len());
+        bindless.emplace_map(buffer)
+    }
     pub fn create_buffer<V: Value>(&self, device: &Device) -> BufferMapping<V> {
         let buffer = device.create_buffer::<V>(self.len() as usize);
         self.map_buffer(buffer)
+    }
+    pub fn create_bindless_buffer<V: Value>(
+        &self,
+        bindless: &mut BindlessMapper,
+        device: &Device,
+    ) -> BindlessBufferMapping<V> {
+        let buffer = device.create_buffer::<V>(self.len() as usize);
+        bindless.emplace_map(buffer)
     }
     #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> u32 {
