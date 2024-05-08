@@ -15,6 +15,69 @@ pub struct BindlessMapper {
     next_tex3d: usize,
 }
 
+#[derive(Value, Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct BindlessBuffer {
+    index: u32,
+}
+
+#[derive(Value, Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct BindlessTex2d {
+    index: u32,
+}
+
+#[derive(Value, Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct BindlessTex3d {
+    index: u32,
+}
+
+pub trait Emplace {
+    type Index;
+    fn emplace_self(self, mapper: &mut BindlessMapper) -> Self::Index;
+}
+
+pub trait Remove {
+    fn remove_self(self, mapper: &mut BindlessMapper);
+}
+
+impl<V: Value> Emplace for &Buffer<V> {
+    type Index = BindlessBuffer;
+    fn emplace_self(self, mapper: &mut BindlessMapper) -> Self::Index {
+        let buffer = mapper.next_buffer();
+        mapper
+            .array
+            .emplace_buffer_async(buffer.index as usize, self);
+        buffer
+    }
+}
+impl<V: Value> Emplace for &BufferView<V> {
+    type Index = BindlessBuffer;
+    fn emplace_self(self, mapper: &mut BindlessMapper) -> Self::Index {
+        let buffer = mapper.next_buffer();
+        mapper
+            .array
+            .emplace_buffer_view_async(buffer.index as usize, self);
+        buffer
+    }
+}
+impl<V: IoTexel> Emplace for &Tex2d<V> {
+    type Index = BindlessTex2d;
+    fn emplace_self(self, mapper: &mut BindlessMapper) -> Self::Index {
+        let texture = mapper.next_tex2d();
+        mapper.array.emplace_tex2d_async(
+            texture.index as usize,
+            self,
+            Sampler {
+                filter: SamplerFilter::Point,
+                address: SamplerAddress::Repeat,
+            },
+        );
+        texture
+    }
+}
+
 struct BindlessArrayMapping(Arc<BindlessArray>);
 impl Mapping<Static<BindlessArrayVar>, ()> for BindlessArrayMapping {
     type Ext = ();
@@ -50,5 +113,40 @@ impl BindlessMapper {
             next_tex2d: 0,
             next_tex3d: 0,
         }
+    }
+    pub fn next_buffer(&mut self) -> BindlessBuffer {
+        let index = self.free_buffers.pop().unwrap_or_else(|| {
+            let index = self.next_buffer;
+            self.next_buffer += 1;
+            index
+        }) as u32;
+        BindlessBuffer { index }
+    }
+    pub fn next_tex2d(&mut self) -> BindlessTex2d {
+        let index = self.free_tex2ds.pop().unwrap_or_else(|| {
+            let index = self.next_tex2d;
+            self.next_tex2d += 1;
+            index
+        }) as u32;
+        BindlessTex2d { index }
+    }
+    pub fn next_tex3d(&mut self) -> BindlessTex3d {
+        let index = self.free_tex3ds.pop().unwrap_or_else(|| {
+            let index = self.next_tex3d;
+            self.next_tex3d += 1;
+            index
+        }) as u32;
+        BindlessTex3d { index }
+    }
+    pub fn emplace_async<T: Emplace>(&mut self, data: T) -> T::Index {
+        data.emplace_self(self)
+    }
+    pub fn emplace<T: Emplace>(&mut self, data: T) -> T::Index {
+        let index = data.emplace_self(self);
+        self.update();
+        index
+    }
+    pub fn update(&self) {
+        self.array.update();
     }
 }
