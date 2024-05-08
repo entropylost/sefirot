@@ -1,36 +1,26 @@
+use std::marker::PhantomData;
 use std::sync::Arc;
 
+use super::cache::SimpleExprMapping;
+use super::function::CachedFnMapping;
 use crate::ext_prelude::*;
 use crate::field::{FieldHandle, Static};
+use crate::impl_cache_mapping;
 
 pub struct BindlessMapper {
     array: Arc<BindlessArray>,
     field: SField<BindlessArrayVar, ()>,
     _handle: FieldHandle,
     free_buffers: Vec<usize>,
-    free_tex2ds: Vec<usize>,
-    free_tex3ds: Vec<usize>,
     next_buffer: usize,
-    next_tex2d: usize,
-    next_tex3d: usize,
 }
 
-#[derive(Value, Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
-pub struct BindlessBuffer {
+// TODO: Make a `Var` version of this, wrapping the index probably.
+pub struct BindlessBufferHandle<V: Value> {
     index: u32,
-}
-
-#[derive(Value, Debug, Copy, Clone, PartialEq, Eq, Hash)]
-#[repr(transparent)]
-pub struct BindlessTex2d {
-    index: u32,
-}
-
-#[derive(Value, Debug, Copy, Clone, PartialEq, Eq, Hash)]
-#[repr(transparent)]
-pub struct BindlessTex3d {
-    index: u32,
+    _marker: PhantomData<fn() -> V>,
 }
 
 pub trait Emplace {
@@ -43,7 +33,7 @@ pub trait Remove {
 }
 
 impl<V: Value> Emplace for &Buffer<V> {
-    type Index = BindlessBuffer;
+    type Index = BindlessBufferHandle<V>;
     fn emplace_self(self, mapper: &mut BindlessMapper) -> Self::Index {
         let buffer = mapper.next_buffer();
         mapper
@@ -53,7 +43,7 @@ impl<V: Value> Emplace for &Buffer<V> {
     }
 }
 impl<V: Value> Emplace for &BufferView<V> {
-    type Index = BindlessBuffer;
+    type Index = BindlessBufferHandle<V>;
     fn emplace_self(self, mapper: &mut BindlessMapper) -> Self::Index {
         let buffer = mapper.next_buffer();
         mapper
@@ -62,21 +52,22 @@ impl<V: Value> Emplace for &BufferView<V> {
         buffer
     }
 }
-impl<V: IoTexel> Emplace for &Tex2d<V> {
-    type Index = BindlessTex2d;
-    fn emplace_self(self, mapper: &mut BindlessMapper) -> Self::Index {
-        let texture = mapper.next_tex2d();
-        mapper.array.emplace_tex2d_async(
-            texture.index as usize,
-            self,
-            Sampler {
-                filter: SamplerFilter::Point,
-                address: SamplerAddress::Repeat,
-            },
-        );
-        texture
+
+// TODO: Add the dynamic version as well.. will require switching the field to u32 as well?
+pub struct BindlessBufferMapping<V: Value> {
+    buffer_field: SField<BindlessBufferVar<V>, ()>,
+    _buffer_field_handle: FieldHandle,
+}
+
+impl<V: Value> SimpleExprMapping<V, Expr<u32>> for BindlessBufferMapping<V> {
+    fn get_expr(&self, index: &Expr<u32>, ctx: &mut Context) -> Expr<V> {
+        self.buffer_field.at_split(&(), ctx).read(*index)
+    }
+    fn set_expr(&self, index: &Expr<u32>, value: Expr<V>, ctx: &mut Context) {
+        self.buffer_field.at_split(&(), ctx).write(*index, value);
     }
 }
+impl_cache_mapping!([V: Value] Mapping[V, Expr<u32>] for BindlessBufferMapping<V>);
 
 struct BindlessArrayMapping(Arc<BindlessArray>);
 impl Mapping<Static<BindlessArrayVar>, ()> for BindlessArrayMapping {
@@ -107,36 +98,19 @@ impl BindlessMapper {
             field,
             _handle,
             free_buffers: Vec::new(),
-            free_tex2ds: Vec::new(),
-            free_tex3ds: Vec::new(),
             next_buffer: 0,
-            next_tex2d: 0,
-            next_tex3d: 0,
         }
     }
-    pub fn next_buffer(&mut self) -> BindlessBuffer {
+    pub fn next_buffer<V: Value>(&mut self) -> BindlessBufferHandle<V> {
         let index = self.free_buffers.pop().unwrap_or_else(|| {
             let index = self.next_buffer;
             self.next_buffer += 1;
             index
         }) as u32;
-        BindlessBuffer { index }
-    }
-    pub fn next_tex2d(&mut self) -> BindlessTex2d {
-        let index = self.free_tex2ds.pop().unwrap_or_else(|| {
-            let index = self.next_tex2d;
-            self.next_tex2d += 1;
-            index
-        }) as u32;
-        BindlessTex2d { index }
-    }
-    pub fn next_tex3d(&mut self) -> BindlessTex3d {
-        let index = self.free_tex3ds.pop().unwrap_or_else(|| {
-            let index = self.next_tex3d;
-            self.next_tex3d += 1;
-            index
-        }) as u32;
-        BindlessTex3d { index }
+        BindlessBufferHandle {
+            index,
+            _marker: PhantomData,
+        }
     }
     pub fn emplace_async<T: Emplace>(&mut self, data: T) -> T::Index {
         data.emplace_self(self)
@@ -148,5 +122,19 @@ impl BindlessMapper {
     }
     pub fn update(&self) {
         self.array.update();
+    }
+    pub fn mappingd<V: Value>(&self, handle: BindlessBufferHandle<V>) -> BindlessBufferMapping<V> {
+        let array_field = self.field;
+        let (buffer_field, buffer_field_handle) = Field::create_bind(
+            "bindless-buffer-field",
+            CachedFnMapping::new(move |_, ctx| {
+                let array = array_field.at_split(&(), ctx);
+                Static(array.buffer(handle.index))
+            }),
+        );
+        BindlessBufferMapping {
+            buffer_field,
+            _buffer_field_handle: buffer_field_handle,
+        }
     }
 }

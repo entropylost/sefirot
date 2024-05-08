@@ -43,6 +43,7 @@ pub fn save_cache<'a, V: Value, I: FieldIndex, M: SimpleExprMapping<V, I>>(
 /// A trait describing a way of getting and setting a value given an index.
 /// See [`CachedMapping`] for use.
 pub trait SimpleExprMapping<V: Value, I: FieldIndex>: Send + Sync + 'static {
+    // TODO: type Ext: ExtensionList<Self>;
     fn get_expr(&self, index: &I, ctx: &mut Context) -> Expr<V>;
     fn set_expr(&self, index: &I, value: Expr<V>, ctx: &mut Context);
 }
