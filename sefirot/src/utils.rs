@@ -7,6 +7,8 @@ use parking_lot::Mutex;
 use crate::graph::{AsNodes, CopyExt, NodeConfigs};
 use crate::luisa::prelude::*;
 
+pub mod tag;
+
 /// A struct that runs a given function upon drop.
 #[derive(Debug, Clone)]
 pub struct FnRelease<F: FnOnce() + 'static>(Option<F>);

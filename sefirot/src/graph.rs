@@ -1,5 +1,3 @@
-use std::any::Any;
-use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Exclusive;
 
@@ -9,12 +7,10 @@ use petgraph::graphmap::DiGraphMap;
 use petgraph::Direction;
 use static_assertions::assert_impl_all;
 
-use self::tag::{DynTag, Tag, TagMap};
 use crate::prelude::*;
 use crate::utils::FnRelease;
 
 pub mod copy;
-pub mod tag;
 pub use copy::CopyExt;
 
 pub fn dot_graph(compute: &ComputeGraph<'_>, graph: &DiGraphMap<NodeHandle, ()>) -> String {
@@ -70,7 +66,6 @@ pub struct ContainerNode {
     derive(bevy_ecs::prelude::Resource, bevy_ecs::prelude::Component)
 )]
 pub struct ComputeGraph<'a> {
-    tags: TagMap<NodeHandle>,
     commands: Vec<CommandNode<'a>>,
     containers: Vec<ContainerNode>,
     hierarchy: DiGraphMap<NodeHandle, ()>,
@@ -95,7 +90,6 @@ impl Clone for ComputeGraph<'_> {
         assert!(self.commands.is_empty());
         assert!(self.release.is_empty());
         Self {
-            tags: self.tags.clone(),
             commands: Vec::new(),
             containers: self.containers.clone(),
             hierarchy: self.hierarchy.clone(),
@@ -108,7 +102,6 @@ impl Clone for ComputeGraph<'_> {
 impl<'a> ComputeGraph<'a> {
     pub fn new(device: &Device) -> Self {
         Self {
-            tags: TagMap::new(),
             commands: Vec::new(),
             containers: Vec::new(),
             hierarchy: DiGraphMap::new(),
@@ -323,10 +316,6 @@ impl<'a> ComputeGraph<'a> {
         *self = Self::new(&self.device);
     }
 
-    pub fn handle(&self, tag: impl Tag) -> Option<NodeHandle> {
-        self.tags.get(tag).copied()
-    }
-
     fn set_debug(&mut self, handle: NodeHandle, name: String) {
         match handle {
             NodeHandle::Container(idx) => {
@@ -350,12 +339,6 @@ impl<'a> ComputeGraph<'a> {
                         });
                         handle
                     } else {
-                        if let Some(tag) = config.tag.clone() {
-                            if let Some(handle) = self.tags.get_dyn(tag) {
-                                config.tag = None;
-                                return *handle;
-                            }
-                        }
                         let handle = NodeHandle::Container(self.containers.len());
                         self.containers.push(ContainerNode {
                             debug_name: String::new(),
@@ -364,12 +347,6 @@ impl<'a> ComputeGraph<'a> {
                     }
                 });
                 config.handle = Some(handle);
-                if let Some(tag) = config.tag.take() {
-                    assert!(
-                        self.tags.insert_dyn(tag.clone(), handle)
-                            || handle == *self.tags.get_dyn(tag).unwrap()
-                    );
-                }
                 if let Some(name) = config.debug_name.take() {
                     self.set_debug(handle, name);
                 }
@@ -465,7 +442,6 @@ pub enum Constraint {
 #[derive(Default)]
 pub struct SingleConfig<'a> {
     pub handle: Option<NodeHandle>,
-    pub tag: Option<DynTag>,
     pub debug_name: Option<String>,
     pub command: Option<Command<'a, 'a>>,
     pub release: Option<Exclusive<Box<dyn Send>>>,
@@ -534,18 +510,6 @@ pub trait AsNodes<'a>: Sized {
         *chain = true;
         cfg
     }
-    fn tag(self, tag: impl Tag) -> NodeConfigs<'a> {
-        let mut cfg = self.into_node_configs();
-        let NodeConfigs::Single {
-            config: SingleConfig { tag: t, .. },
-            ..
-        } = &mut cfg
-        else {
-            panic!("Cannot tag a tuple node.");
-        };
-        *t = Some(DynTag::new(tag));
-        cfg
-    }
     fn debug(self, name: impl AsRef<str>) -> NodeConfigs<'a> {
         let mut cfg = self.into_node_configs();
         let NodeConfigs::Single {
@@ -592,17 +556,6 @@ where
 {
     fn into_node_configs(self) -> NodeConfigs<'a> {
         self.map_or_else(|| ().into_node_configs(), |x| x.into_node_configs())
-    }
-}
-impl<'a, X: Tag> AsNodes<'a> for X {
-    fn into_node_configs(self) -> NodeConfigs<'a> {
-        NodeConfigs::Single {
-            config: SingleConfig {
-                tag: Some(DynTag::new(self)),
-                ..Default::default()
-            },
-            constraints: Vec::new(),
-        }
     }
 }
 impl<'a> AsNodes<'a> for Command<'a, 'a> {

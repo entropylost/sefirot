@@ -1,9 +1,10 @@
-use std::any::TypeId;
+use std::any::{Any, TypeId};
+use std::collections::HashMap;
+use std::fmt::Debug;
 use std::hash::{BuildHasher, DefaultHasher, Hash, Hasher, RandomState};
 
-use super::*;
-
 pub trait Tag: Debug + Eq + Hash + Copy + Clone + Send + Sync + 'static {}
+impl<T> Tag for T where T: Debug + Eq + Hash + Copy + Clone + Send + Sync + 'static {}
 
 pub struct DynTag<H: Hasher + 'static = DefaultHasher> {
     tag: Box<dyn SafeTag<H>>,
@@ -23,7 +24,7 @@ impl<H: Hasher + 'static> Hash for DynTag<H> {
     fn hash<H1: Hasher>(&self, state: &mut H1) {
         // if TypeId::of::<H1>() == TypeId::of::<H>() {
         let state: &mut H = unsafe { std::mem::transmute(state) };
-        self.tag.tyid().hash(state);
+        Hash::hash(&self.tag.tyid(), state);
         self.tag.hash(state);
         // } else {
         //     unreachable!("Invalid hasher type.");
