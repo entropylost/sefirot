@@ -16,6 +16,8 @@ use crate::tracked_nc;
 mod storage;
 pub use storage::HasPixelStorage;
 
+pub mod dynamic;
+
 // TODO: Offer ways of creating buffers of the correct size.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct StaticDomain<const N: usize>(pub [u32; N]);
@@ -141,7 +143,7 @@ impl DomainImpl for StaticDomain<0> {
         args.dispatch([1, 1, 1])
     }
     #[tracked_nc]
-    fn contains_impl(&self, _: &Self::Index) -> Expr<bool> {
+    fn contains_impl(&self, _: &Element<Self::Index>) -> Expr<bool> {
         true.expr()
     }
 }
@@ -156,8 +158,8 @@ impl DomainImpl for StaticDomain<1> {
         args.dispatch([self.0[0], 1, 1])
     }
     #[tracked_nc]
-    fn contains_impl(&self, index: &Self::Index) -> Expr<bool> {
-        *index < self.0[0]
+    fn contains_impl(&self, index: &Element<Self::Index>) -> Expr<bool> {
+        **index < self.0[0]
     }
 }
 impl DomainImpl for StaticDomain<2> {
@@ -171,8 +173,8 @@ impl DomainImpl for StaticDomain<2> {
         args.dispatch([self.0[0], self.0[1], 1])
     }
     #[tracked_nc]
-    fn contains_impl(&self, index: &Self::Index) -> Expr<bool> {
-        (index < Vec2::from(self.0)).all()
+    fn contains_impl(&self, index: &Element<Self::Index>) -> Expr<bool> {
+        (**index < Vec2::from(self.0)).all()
     }
 }
 impl DomainImpl for StaticDomain<3> {
@@ -186,8 +188,8 @@ impl DomainImpl for StaticDomain<3> {
         args.dispatch(self.0)
     }
     #[tracked_nc]
-    fn contains_impl(&self, index: &Self::Index) -> Expr<bool> {
-        (index < Vec3::from(self.0)).all()
+    fn contains_impl(&self, index: &Element<Self::Index>) -> Expr<bool> {
+        (**index < Vec3::from(self.0)).all()
     }
 }
 

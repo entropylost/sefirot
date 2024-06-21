@@ -1,9 +1,11 @@
 use std::cell::Cell as StdCell;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use dual::DualGrid;
 use encoder::LinearEncoder;
 use offset::OffsetDomain;
+use parking_lot::RwLock;
 use patterns::{CheckerboardPattern, MargolusPattern};
 use sefirot::ext_prelude::*;
 use sefirot::field::FieldHandle;
@@ -15,6 +17,7 @@ use sefirot::mapping::bindless::{
 use sefirot::mapping::buffer::{
     BufferMapping, HandledBuffer, HandledTex2d, HasPixelStorage, IntoHandled, StaticDomain,
 };
+use sefirot::mapping::constant::ConstantMapping;
 use sefirot::mapping::function::{CachedFnMapping, FnMapping};
 use sefirot::mapping::index::IndexMap;
 
@@ -99,7 +102,10 @@ pub struct GridDomain {
     index: EField<Vec2<u32>, Cell>,
     _index_handle: Option<FieldHandle>,
     encoder: Option<LinearEncoder>,
-    start: [i32; 2],
+    offset: Arc<RwLock<Vec2<i32>>>,
+    offset_field: EField<Vec2<i32>, ()>,
+    _offset_handle: Option<FieldHandle>,
+
     shifted_domain: StaticDomain<2>,
     wrapping: bool,
 }
@@ -109,7 +115,9 @@ impl Clone for GridDomain {
             index: self.index,
             _index_handle: None,
             encoder: self.encoder.clone(),
-            start: self.start,
+            offset: self.offset.clone(),
+            offset_field: self.offset_field,
+            _offset_handle: None,
             shifted_domain: self.shifted_domain,
             wrapping: self.wrapping,
         }
@@ -121,8 +129,8 @@ impl DomainImpl for GridDomain {
     type Passthrough = ();
     #[tracked_nc]
     fn get_element(&self, kernel_context: Rc<KernelContext>, _: ()) -> Element<Self::Index> {
-        let index = dispatch_id().xy().cast_i32() + Vec2::from(self.start);
         let mut context = Context::new(kernel_context);
+        let index = dispatch_id().xy().cast_i32() + self.offset_field.at_split(&(), &mut context);
         context.bind_local(self.index, FnMapping::new(|_idx, _ctx| dispatch_id().xy()));
         Element::new(index, context)
     }
@@ -130,11 +138,13 @@ impl DomainImpl for GridDomain {
         args.dispatch([self.size()[0], self.size()[1], 1])
     }
     #[tracked_nc]
-    fn contains_impl(&self, index: &Self::Index) -> Expr<bool> {
+    fn contains_impl(&self, index: &Element<Self::Index>) -> Expr<bool> {
         if self.wrapping {
             true.expr()
         } else {
-            (index >= Vec2::from(self.start)).all() && (index < Vec2::from(self.end())).all()
+            let offset = self.offset_field.at_global(index);
+            (**index >= offset).all()
+                && (**index < Vec2::from(self.size().map(|x| x as i32)) + offset).all()
         }
     }
 }
@@ -146,38 +156,45 @@ impl GridDomain {
     pub fn new_wrapping(start: [i32; 2], size: [u32; 2]) -> Self {
         Self::new_with_wrapping(start, size, true)
     }
-    pub fn new_with_wrapping(start: [i32; 2], size: [u32; 2], wrapping: bool) -> Self {
-        let (index, handle) = Field::create_bind(
+    pub fn new_with_wrapping(starting_offset: [i32; 2], size: [u32; 2], wrapping: bool) -> Self {
+        let offset = Arc::new(RwLock::new(Vec2::from(starting_offset)));
+        let (offset_field, offset_handle) =
+            Field::create_bind("grid-offset", ConstantMapping::new(offset.clone()));
+
+        let (index, index_handle) = Field::create_bind(
             "grid-index",
-            CachedFnMapping::<Expr<Vec2<u32>>, Cell, _>::new(track_nc!(move |index, _ctx| {
+            CachedFnMapping::<Expr<Vec2<u32>>, Cell, _>::new(track_nc!(move |index, ctx| {
+                let offset = offset_field.at_split(&(), ctx);
                 if wrapping {
                     let size = Vec2::new(size[0] as i32, size[1] as i32);
-                    (index - Vec2::from(start)).rem_euclid(size).cast_u32()
+                    (index - offset).rem_euclid(size).cast_u32()
                 } else {
-                    (index - Vec2::from(start)).cast_u32()
+                    (index - offset).cast_u32()
                 }
             })),
         );
         Self {
             index,
-            _index_handle: Some(handle),
+            _index_handle: Some(index_handle),
             encoder: None,
-            start,
+            offset,
+            offset_field,
+            _offset_handle: Some(offset_handle),
             shifted_domain: StaticDomain(size),
             wrapping,
         }
     }
-    pub fn start(&self) -> [i32; 2] {
-        self.start
-    }
     pub fn size(&self) -> [u32; 2] {
         self.shifted_domain.0
     }
+    // These can change.
+    pub fn start(&self) -> [i32; 2] {
+        (*self.offset.read()).into()
+    }
     pub fn end(&self) -> [i32; 2] {
-        [
-            self.start[0] + self.shifted_domain.0[0] as i32,
-            self.start[1] + self.shifted_domain.0[1] as i32,
-        ]
+        let start = self.start();
+        let size = self.size();
+        [start[0] + size[0] as i32, start[1] + size[1] as i32]
     }
     pub fn width(&self) -> u32 {
         self.size()[0]
@@ -312,7 +329,7 @@ impl GridDomain {
     pub fn offset<D: DomainImpl<Index = Expr<Vec2<u32>>>>(&self, domain: D) -> OffsetDomain<D> {
         OffsetDomain {
             domain,
-            offset: Vec2::from(self.start),
+            offset: self.offset_field,
             index: Some(self.index),
         }
     }

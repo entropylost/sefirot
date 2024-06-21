@@ -30,6 +30,29 @@ where
     }
 }
 
+pub struct UnitMap<M> {
+    pub mapping: M,
+}
+impl<M> UnitMap<M> {
+    pub fn new(mapping: M) -> Self {
+        Self { mapping }
+    }
+}
+impl<L: AccessList, X: Access + ListAccess<List = AccessCons<X, L>>, M, I: FieldIndex> Mapping<X, I>
+    for UnitMap<M>
+where
+    M: Mapping<X, ()>,
+    Self: ListMapping<L, I>,
+{
+    type Ext = ();
+    fn access(&self, _index: &I, ctx: &mut Context, binding: FieldBinding) -> X {
+        self.mapping.access(&(), ctx, binding)
+    }
+    fn save(&self, ctx: &mut Context, binding: FieldBinding) {
+        self.mapping.save(ctx, binding);
+    }
+}
+
 #[allow(dead_code)]
 mod test {
     use luisa::lang::types::vector::{Vec2, Vec4};

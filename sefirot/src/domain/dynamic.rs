@@ -31,7 +31,8 @@ impl DomainImpl for DynamicDomain {
     fn dispatch(&self, _: (), args: KernelDispatch) -> NodeConfigs<'static> {
         args.dispatch([*self.len.lock(), 1, 1])
     }
-    fn contains_impl(&self, _index: &Self::Index) -> Expr<bool> {
+    fn contains_impl(&self, _index: &Element<Self::Index>) -> Expr<bool> {
+        // TODO: Can use ConstantAccessor here.
         unimplemented!("Cannot check if an index is contained in the domain");
     }
 }

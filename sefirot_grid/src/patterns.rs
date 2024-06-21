@@ -47,7 +47,7 @@ impl DomainImpl for CheckerboardPattern {
         )
             .chain()
     }
-    fn contains_impl(&self, index: &Self::Index) -> Expr<bool> {
+    fn contains_impl(&self, index: &Element<Self::Index>) -> Expr<bool> {
         self.grid.contains(index)
     }
 }
@@ -111,7 +111,7 @@ impl DomainImpl for MargolusPattern {
                 .chain()
         }
     }
-    fn contains_impl(&self, index: &Self::Index) -> Expr<bool> {
+    fn contains_impl(&self, index: &Element<Self::Index>) -> Expr<bool> {
         self.grid.contains(index)
     }
 }
@@ -166,7 +166,7 @@ impl DomainImpl for MargolusIndexedPattern {
         };
         args.dispatch_with(size, offset).debug(name)
     }
-    fn contains_impl(&self, index: &Self::Index) -> Expr<bool> {
+    fn contains_impl(&self, index: &Element<Self::Index>) -> Expr<bool> {
         self.grid.contains(index)
     }
 }

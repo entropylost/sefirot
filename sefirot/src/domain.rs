@@ -29,8 +29,7 @@ pub trait DomainImpl: Clone + Send + Sync + 'static {
         domain_args: Self::Args,
         args: KernelDispatch<Self::Passthrough>,
     ) -> NodeConfigs<'static>;
-    // TODO: Consider making this take in an `Element` so that it's possible to implement dynamic contains using argument passing.
-    fn contains_impl(&self, index: &Self::Index) -> Expr<bool>;
+    fn contains_impl(&self, index: &Element<Self::Index>) -> Expr<bool>;
 }
 
 impl<X: DomainImpl> Domain for X
@@ -58,7 +57,7 @@ where
             },
         )
     }
-    fn contains(&self, index: &Self::Index) -> Expr<bool> {
+    fn contains(&self, index: &Element<Self::Index>) -> Expr<bool> {
         <Self as DomainImpl>::contains_impl(self, index)
     }
 }
@@ -66,7 +65,7 @@ where
 pub trait Domain: DynClone + Send + Sync + 'static {
     type Args: 'static;
     type Index: FieldIndex;
-    fn contains(&self, index: &Self::Index) -> Expr<bool>;
+    fn contains(&self, index: &Element<Self::Index>) -> Expr<bool>;
 
     #[doc(hidden)]
     fn __get_element_erased(&self, kernel_context: Rc<KernelContext>) -> Element<Self::Index>;
@@ -92,7 +91,7 @@ impl<A: 'static, I: FieldIndex> Domain for Box<dyn Domain<Args = A, Index = I>> 
     ) -> NodeConfigs<'static> {
         self.as_ref().__dispatch_async_erased(domain_args, args)
     }
-    fn contains(&self, index: &I) -> Expr<bool> {
+    fn contains(&self, index: &Element<I>) -> Expr<bool> {
         self.as_ref().contains(index)
     }
 }
@@ -166,7 +165,7 @@ impl DomainImpl for NullDomain {
     fn dispatch(&self, _: (), _: KernelDispatch) -> NodeConfigs<'static> {
         ().into_node_configs()
     }
-    fn contains_impl(&self, _: &()) -> Expr<bool> {
+    fn contains_impl(&self, _: &Element<()>) -> Expr<bool> {
         false.expr()
     }
 }

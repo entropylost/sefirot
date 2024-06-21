@@ -12,7 +12,7 @@ use crate::Cell;
 #[derive(Clone)]
 pub struct OffsetDomain<D: DomainImpl<Index = Expr<Vec2<u32>>>> {
     pub domain: D,
-    pub offset: Vec2<i32>,
+    pub offset: EField<Vec2<i32>, ()>,
     pub index: Option<EField<Vec2<u32>, Cell>>,
 }
 
@@ -27,6 +27,7 @@ impl<D: DomainImpl<Index = Expr<Vec2<u32>>>> DomainImpl for OffsetDomain<D> {
         passthrough: <Self::Passthrough as KernelArg>::Parameter,
     ) -> Element<Self::Index> {
         let el = self.domain.get_element(kernel_context, passthrough);
+        let offset = self.offset.at_global(&el);
         if let Some(index) = self.index {
             let idx = *el;
             el.context().bind_local(
@@ -34,7 +35,7 @@ impl<D: DomainImpl<Index = Expr<Vec2<u32>>>> DomainImpl for OffsetDomain<D> {
                 FnMapping::<Expr<Vec2<u32>>, Cell, _>::new(move |_, _| idx),
             );
         }
-        el.map_index(|idx| idx.cast_i32() + self.offset)
+        el.map_index(|idx| idx.cast_i32() + offset)
     }
     fn dispatch(
         &self,
@@ -44,16 +45,18 @@ impl<D: DomainImpl<Index = Expr<Vec2<u32>>>> DomainImpl for OffsetDomain<D> {
         self.domain.dispatch(domain_args, args)
     }
     #[tracked_nc]
-    fn contains_impl(&self, index: &Self::Index) -> Expr<bool> {
-        (index >= self.offset).all() && self.domain.contains_impl(&(index - self.offset).cast_u32())
+    fn contains_impl(&self, index: &Element<Self::Index>) -> Expr<bool> {
+        let offset = self.offset.at_global(index);
+        (**index >= offset).all() && self.domain.contains_impl(&(**index - offset).cast_u32())
     }
 }
 
 impl OffsetDomain<TileDomain> {
     #[tracked]
     pub fn activate(&self, el: &Element<Cell>) {
-        self.domain
-            .activate(&el.at((**el - self.offset).cast_u32()))
+        let offset = self.offset.at_global(el);
+
+        self.domain.activate(&el.at((**el - offset).cast_u32()))
     }
     #[tracked]
     pub fn active(&self) -> impl Mapping<Expr<bool>, Expr<Vec2<i32>>> {

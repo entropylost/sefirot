@@ -217,6 +217,11 @@ impl<X: Access, I: FieldIndex> Field<X, I> {
         }
     }
 }
+impl<X: Access> Field<X, ()> {
+    pub fn at_global<I: FieldIndex>(&self, element: &Element<I>) -> X {
+        self.at_split(&(), &mut element.context())
+    }
+}
 impl<V: Value, I: FieldIndex> Field<Expr<V>, I> {
     pub fn expr(&self, el: &Element<I>) -> Expr<V> {
         self.at(el)

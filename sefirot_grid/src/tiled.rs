@@ -48,7 +48,7 @@ impl DomainImpl for TileDomain {
             ])
         }
     }
-    fn contains_impl(&self, _: &Self::Index) -> Expr<bool> {
+    fn contains_impl(&self, _: &Element<Self::Index>) -> Expr<bool> {
         unimplemented!("Tile domain does not support contains.");
     }
 }
