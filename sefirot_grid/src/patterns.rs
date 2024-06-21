@@ -25,8 +25,8 @@ impl DomainImpl for CheckerboardPattern {
             dispatch_id().x,
             dispatch_id().y * 2 + (dispatch_id().x + parity.cast::<u32>()) % 2,
         );
-        let index = uindex.cast_i32() + Vec2::from(self.grid.start);
         let mut context = Context::new(kernel_context);
+        let index = uindex.cast_i32() + self.grid.offset_field.at_split(&(), &mut context);
         context.bind_local(self.grid.index, FnMapping::new(move |_el, _ctx| uindex));
         Element::new(index, context)
     }
@@ -47,8 +47,8 @@ impl DomainImpl for CheckerboardPattern {
         )
             .chain()
     }
-    fn contains_impl(&self, index: &Element<Self::Index>) -> Expr<bool> {
-        self.grid.contains(index)
+    fn contains_impl(&self, el: &Element<Self::Index>) -> Expr<bool> {
+        self.grid.contains(el)
     }
 }
 
@@ -70,8 +70,8 @@ impl DomainImpl for MargolusPattern {
         offset: Expr<Vec2<bool>>,
     ) -> Element<Self::Index> {
         let uindex = dispatch_id().xy() * 2 + offset.cast::<u32>();
-        let index = uindex.cast_i32() + Vec2::from(self.grid.start);
         let mut context = Context::new(kernel_context);
+        let index = uindex.cast_i32() + self.grid.offset_field.at_split(&(), &mut context);
         context.bind_local(self.grid.index, FnMapping::new(move |_el, _ctx| uindex));
         Element::new(index, context)
     }
@@ -137,8 +137,8 @@ impl DomainImpl for MargolusIndexedPattern {
         offset: Expr<Vec2<bool>>,
     ) -> Element<Self::Index> {
         let uindex = dispatch_id().xy() * 2 + offset.cast::<u32>();
-        let index = uindex.cast_i32() + Vec2::from(self.grid.start);
         let mut context = Context::new(kernel_context);
+        let index = uindex.cast_i32() + self.grid.offset_field.at_split(&(), &mut context);
         context.bind_local(self.grid.index, FnMapping::new(move |_el, _ctx| uindex));
         Element::new(index, context)
     }

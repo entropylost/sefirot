@@ -1,9 +1,7 @@
 use std::any::Any;
 use std::cell::{RefCell, RefMut};
 use std::collections::{HashMap, HashSet};
-use std::mem::ManuallyDrop;
 use std::ops::Deref;
-use std::ptr::addr_of;
 use std::rc::{Rc, Weak};
 
 use generational_arena::{Arena, Index};
@@ -49,10 +47,22 @@ impl AsKernelContext for Context {
     }
 }
 
+struct ActiveContext {
+    index: Index,
+}
+impl Drop for ActiveContext {
+    fn drop(&mut self) {
+        ACTIVE_CONTEXTS.with(|active_contexts| {
+            active_contexts.borrow_mut().contexts.remove(self.index);
+        });
+    }
+}
+
+#[derive(Clone)]
 pub struct Element<I: FieldIndex> {
     index: I,
+    active_context_index: Rc<ActiveContext>,
     context: Rc<RefCell<Context>>,
-    active_context_index: Index,
 }
 impl<I: FieldIndex> Element<I> {
     pub fn new(index: I, context: Context) -> Self {
@@ -66,7 +76,9 @@ impl<I: FieldIndex> Element<I> {
         Self {
             index,
             context,
-            active_context_index,
+            active_context_index: Rc::new(ActiveContext {
+                index: active_context_index,
+            }),
         }
     }
     pub fn index(&self) -> &I {
@@ -75,15 +87,12 @@ impl<I: FieldIndex> Element<I> {
     pub fn context(&self) -> RefMut<'_, Context> {
         self.context.borrow_mut()
     }
-    // TODO: Make each context be weak / multiple element pointers into it.
-    pub fn replace_index<J: FieldIndex>(self, index: J) -> Element<J> {
-        let el = ManuallyDrop::new(self);
-        unsafe {
-            Element {
-                index,
-                context: addr_of!(el.context).read(),
-                active_context_index: el.active_context_index,
-            }
+    /// Changes the index of the Element, inheriting the context.
+    pub fn with_index<J: FieldIndex>(&self, index: J) -> Element<J> {
+        Element {
+            index,
+            context: self.context.clone(),
+            active_context_index: self.active_context_index.clone(),
         }
     }
 
@@ -115,16 +124,6 @@ impl<I: FieldIndex> Deref for Element<I> {
     type Target = I;
     fn deref(&self) -> &Self::Target {
         &self.index
-    }
-}
-impl<I: FieldIndex> Drop for Element<I> {
-    fn drop(&mut self) {
-        ACTIVE_CONTEXTS.with(|active_contexts| {
-            active_contexts
-                .borrow_mut()
-                .contexts
-                .remove(self.active_context_index);
-        });
     }
 }
 

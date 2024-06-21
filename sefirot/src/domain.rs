@@ -29,7 +29,7 @@ pub trait DomainImpl: Clone + Send + Sync + 'static {
         domain_args: Self::Args,
         args: KernelDispatch<Self::Passthrough>,
     ) -> NodeConfigs<'static>;
-    fn contains_impl(&self, index: &Element<Self::Index>) -> Expr<bool>;
+    fn contains_impl(&self, el: &Element<Self::Index>) -> Expr<bool>;
 }
 
 impl<X: DomainImpl> Domain for X

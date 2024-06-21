@@ -138,13 +138,13 @@ impl DomainImpl for GridDomain {
         args.dispatch([self.size()[0], self.size()[1], 1])
     }
     #[tracked_nc]
-    fn contains_impl(&self, index: &Element<Self::Index>) -> Expr<bool> {
+    fn contains_impl(&self, el: &Element<Self::Index>) -> Expr<bool> {
         if self.wrapping {
             true.expr()
         } else {
-            let offset = self.offset_field.at_global(index);
-            (**index >= offset).all()
-                && (**index < Vec2::from(self.size().map(|x| x as i32)) + offset).all()
+            let offset = self.offset_field.at_global(el);
+            (**el >= offset).all()
+                && (**el < Vec2::from(self.size().map(|x| x as i32)) + offset).all()
         }
     }
 }

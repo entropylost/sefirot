@@ -35,7 +35,7 @@ impl<D: DomainImpl<Index = Expr<Vec2<u32>>>> DomainImpl for OffsetDomain<D> {
                 FnMapping::<Expr<Vec2<u32>>, Cell, _>::new(move |_, _| idx),
             );
         }
-        el.map_index(|idx| idx.cast_i32() + offset)
+        el.with_index(el.cast_i32() + offset)
     }
     fn dispatch(
         &self,
@@ -45,9 +45,12 @@ impl<D: DomainImpl<Index = Expr<Vec2<u32>>>> DomainImpl for OffsetDomain<D> {
         self.domain.dispatch(domain_args, args)
     }
     #[tracked_nc]
-    fn contains_impl(&self, index: &Element<Self::Index>) -> Expr<bool> {
-        let offset = self.offset.at_global(index);
-        (**index >= offset).all() && self.domain.contains_impl(&(**index - offset).cast_u32())
+    fn contains_impl(&self, el: &Element<Self::Index>) -> Expr<bool> {
+        let offset = self.offset.at_global(el);
+        (**el >= offset).all()
+            && self
+                .domain
+                .contains_impl(&el.with_index((**el - offset).cast_u32()))
     }
 }
 
