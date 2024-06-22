@@ -303,7 +303,10 @@ impl Context {
         }
         let value = f(self);
         self.insert_cache_global(key, value);
-        ret(self.cache.cache_stack[0]
+        ret(self
+            .kernel
+            .global_cache
+            .borrow_mut()
             .get_mut(key)
             .unwrap()
             .downcast_mut()
