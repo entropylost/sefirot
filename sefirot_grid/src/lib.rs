@@ -17,7 +17,6 @@ use sefirot::mapping::bindless::{
 use sefirot::mapping::buffer::{
     BufferMapping, HandledBuffer, HandledTex2d, HasPixelStorage, IntoHandled, StaticDomain,
 };
-use sefirot::mapping::constant::ConstantMapping;
 use sefirot::mapping::function::{CachedFnMapping, FnMapping};
 use sefirot::mapping::index::IndexMap;
 
