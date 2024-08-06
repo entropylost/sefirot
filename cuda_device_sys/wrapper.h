@@ -1,1 +1,1 @@
-#include "/usr/local/cuda-12.4/include/cuda.h"
+#include "/usr/local/cuda/include/cuda.h"

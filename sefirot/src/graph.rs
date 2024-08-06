@@ -207,14 +207,17 @@ impl<'a> ComputeGraph<'a> {
 
     // TODO: This currently does not parallelize anything.
     /// Consumes the graph, executing it.
-    pub fn execute(&mut self) {
+    pub fn execute_in(&mut self, scope: &Scope) {
         let mut this = std::mem::replace(self, Self::new(&self.device));
 
         let commands = this.commands_order();
-        let scope = this.device.default_stream().scope();
         scope.submit_with_callback(commands.into_iter().map(|c| c.command.into_inner()), || {
             drop(this.release);
         });
+    }
+
+    pub fn execute(&mut self) {
+        self.execute_in(&self.device.default_stream().scope());
     }
 
     /// Executes the graph without parallelism, printing debug information.

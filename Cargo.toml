@@ -5,7 +5,7 @@ members = [
     "bevy_sefirot",
     "id_newtype",
     "sefirot_grid",
-    "sefirot_macro", "cuda_device_sys",
+    "sefirot_macro", "cuda_device_sys", "testbed",
 ]
 resolver = "2"
 

@@ -158,8 +158,11 @@ impl GridDomain {
     }
     pub fn new_with_wrapping(starting_offset: [i32; 2], size: [u32; 2], wrapping: bool) -> Self {
         let offset = Arc::new(RwLock::new(Vec2::from(starting_offset)));
-        let (offset_field, offset_handle) =
-            Field::create_bind("grid-offset", ConstantMapping::new(offset.clone()));
+        // TODO: Go back to ConstantMapping when it isn't broken.
+        let (offset_field, offset_handle) = Field::create_bind(
+            "grid-offset",
+            FnMapping::new(move |_, _| Vec2::from(starting_offset).expr()),
+        );
 
         let (index, index_handle) = Field::create_bind(
             "grid-index",

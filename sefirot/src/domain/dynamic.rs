@@ -13,6 +13,7 @@ pub struct DynamicDomain {
     pub len: Arc<Mutex<u32>>,
 }
 
+// TODO: Also allow using dispatch args. Also 2d, 3d versions.
 impl DynamicDomain {
     pub fn new(len: u32) -> Self {
         DynamicDomain {

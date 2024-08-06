@@ -2,7 +2,7 @@ use std::env;
 use std::path::PathBuf;
 
 fn main() {
-    println!("cargo:rustc-link-search=/usr/local/cuda-12.4/targets/x86_64-linux/lib/stubs");
+    println!("cargo:rustc-link-search=/usr/local/cuda/targets/x86_64-linux/lib/stubs");
     println!("cargo:rustc-link-lib=cuda");
 
     let bindings = bindgen::Builder::default()

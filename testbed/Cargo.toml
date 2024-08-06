@@ -1,11 +1,11 @@
 [package]
-name = "sefirot_grid"
+name = "sefirot_testbed"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-parking_lot = "0.12.1"
 sefirot = { path = "../sefirot" }
+winit = "0.29.15"
 
 [dependencies.luisa_compute]
 git = "https://github.com/LuisaGroup/luisa-compute-rs"
