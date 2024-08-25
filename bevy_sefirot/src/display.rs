@@ -36,7 +36,6 @@ impl Default for ClearColor {
 // TODO: Perhaps add an update_dipslay somewhere?
 pub fn setup_display(
     mut commands: Commands,
-    device: Res<Device>,
     settings: Option<Res<LuisaDisplaySettings>>,
     winit_windows: NonSend<WinitWindows>,
     query: Query<(Entity, &Window), With<LuisaWindow>>,
@@ -46,16 +45,16 @@ pub fn setup_display(
         let mut fields = FieldSet::new();
         let w = window.resolution.physical_width();
         let h = window.resolution.physical_height();
-        let swapchain = device.create_swapchain(
-            winit_windows.get_window(entity).unwrap(),
-            &device.default_stream(),
+        let swapchain = device().create_swapchain(
+            &**winit_windows.get_window(entity).unwrap(),
+            &device().default_stream(),
             w,
             h,
             settings.allow_hdr,
             settings.vsync,
             settings.back_buffer_size,
         );
-        let color_texture = device.create_tex2d::<Vec4<f32>>(swapchain.pixel_storage(), w, h, 1);
+        let color_texture = device().create_tex2d::<Vec4<f32>>(swapchain.pixel_storage(), w, h, 1);
         let domain = StaticDomain::<2>::new(w, h);
         let mapping = domain.map_tex2d(color_texture.view(0));
         let color = fields.create_bind("display-color-swapchain", mapping);
@@ -82,11 +81,8 @@ pub fn setup_primary(mut commands: Commands, query: Query<Entity, With<PrimaryWi
 }
 
 // TODO: Make this run in parallel with the rest of the things using a separate stream and the ComputeTaskPool.
-pub fn present_swapchain(
-    device: Res<Device>,
-    query: Query<(&LuisaSwapchain, &DisplayTexture), With<Window>>,
-) {
-    let scope = device.default_stream().scope();
+pub fn present_swapchain(query: Query<(&LuisaSwapchain, &DisplayTexture), With<Window>>) {
+    let scope = device().default_stream().scope();
     for (swapchain, display) in query.iter() {
         scope.present(swapchain, &display.color_texture);
     }

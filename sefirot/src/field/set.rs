@@ -16,6 +16,7 @@ impl Debug for FieldSetId {
 pub struct FieldSet {
     pub(crate) id: FieldSetId,
     pub(crate) fields: HashSet<FieldHandle>,
+    pub(crate) prefix: String,
 }
 impl Debug for FieldSet {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -45,7 +46,17 @@ impl FieldSet {
         Self {
             id: FieldSetId::unique(),
             fields: HashSet::new(),
+            prefix: "".to_string(),
         }
+    }
+    pub fn prefix(self, prefix: impl AsRef<str>) -> Self {
+        Self {
+            prefix: prefix.as_ref().to_string(),
+            ..self
+        }
+    }
+    pub fn get_prefix(&self) -> &str {
+        &self.prefix
     }
     pub fn id(&self) -> FieldSetId {
         self.id
@@ -60,6 +71,7 @@ impl FieldSet {
         name: impl AsRef<str>,
         mapping: impl Mapping<X, I> + Send + Sync,
     ) -> Field<X, I> {
-        self.create::<X, I>(name).bind(mapping)
+        self.create::<X, I>(self.prefix.clone() + name.as_ref())
+            .bind(mapping)
     }
 }

@@ -1,4 +1,3 @@
-use std::env::current_exe;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
@@ -11,8 +10,6 @@ use crate::prelude::*;
 #[test]
 fn test_context_stack_if() {
     luisa::init_logger();
-    let ctx = Context::new(current_exe().unwrap());
-    let device = ctx.create_device("cuda");
 
     let mut fields = FieldSet::new();
 
@@ -30,7 +27,6 @@ fn test_context_stack_if() {
     );
 
     let _kernel = Kernel::<fn()>::build(
-        &device,
         &domain,
         track!(&|el| {
             let x = 0_u32.var();
@@ -45,7 +41,6 @@ fn test_context_stack_if() {
     assert_eq!(*num_accesses.lock(), 2);
 
     let _kernel = Kernel::<fn()>::build(
-        &device,
         &domain,
         track!(&|el| {
             let x = 0_u32.var();

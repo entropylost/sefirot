@@ -6,7 +6,3 @@ edition = "2021"
 [dependencies]
 sefirot = { path = "../sefirot" }
 winit = "0.29.15"
-
-[dependencies.luisa_compute]
-git = "https://github.com/LuisaGroup/luisa-compute-rs"
-branch = "main"

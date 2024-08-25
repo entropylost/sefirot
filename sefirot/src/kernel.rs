@@ -124,7 +124,6 @@ pub struct Kernel<S: KernelSignature, A: 'static = ()> {
     pub(crate) raw: LuisaKernel<S>,
     pub(crate) bindings: KernelBindings,
     pub(crate) debug_name: Option<String>,
-    pub(crate) device: Device,
 }
 impl<S: KernelSignature, A: 'static> Debug for Kernel<S, A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -134,8 +133,8 @@ impl<S: KernelSignature, A: 'static> Debug for Kernel<S, A> {
     }
 }
 impl Kernel<fn()> {
-    pub fn null(device: &Device) -> Self {
-        Self::build(device, &NullDomain, &|_| {})
+    pub fn null() -> Self {
+        Self::build(&NullDomain, &|_| {})
     }
 }
 impl<S: KernelSignature, A: 'static> Kernel<S, A> {
@@ -147,21 +146,19 @@ impl<S: KernelSignature, A: 'static> Kernel<S, A> {
         self.debug_name.as_deref()
     }
     pub fn build<I: FieldIndex>(
-        device: &Device,
         domain: &impl Domain<Index = I, Args = A>,
         f: S::Function<'_, I>,
     ) -> Self {
-        Self::build_with_options(device, default_kernel_build_options(), domain, f)
+        Self::build_with_options(default_kernel_build_options(), domain, f)
     }
     pub fn build_with_options<I: FieldIndex>(
-        device: &Device,
         options: KernelBuildOptions,
         domain: &impl Domain<Index = I, Args = A>,
         f: S::Function<'_, I>,
     ) -> Self {
         let domain = dyn_clone::clone(domain);
         let mut bindings = None;
-        let mut builder = KernelBuilder::new(Some(device.clone()), true);
+        let mut builder = KernelBuilder::new(Some(device().clone()), true);
         let kernel = builder.build_kernel(|builder| {
             take_mut::take(builder, |builder| {
                 let kernel_context = Rc::new(KernelContext {
@@ -184,10 +181,9 @@ impl<S: KernelSignature, A: 'static> Kernel<S, A> {
         // TODO: Fix the name - F is generally boring, or a closure inside so can grab the container name.
         Kernel {
             domain,
-            raw: device.compile_kernel_def_with_options(&kernel, options),
+            raw: device().compile_kernel_def_with_options(&kernel, options),
             bindings: bindings.unwrap(),
             debug_name: None,
-            device: device.clone(),
         }
     }
 }
@@ -203,7 +199,7 @@ macro_rules! impl_kernel {
         }
         impl<A: 'static> Kernel<fn(), A> {
             pub fn dispatch_blocking_with(&self, domain_args: A) {
-                let mut graph = ComputeGraph::new(&self.device);
+                let mut graph = ComputeGraph::new();
                 graph.add(self.dispatch_with(domain_args));
                 graph.execute();
             }
@@ -239,7 +235,7 @@ macro_rules! impl_kernel {
             #[allow(clippy::too_many_arguments)]
             pub fn dispatch_blocking_with<$S0: AsKernelArg<Output = $T0> $(, $Sn: AsKernelArg<Output = $Tn>)*>
                 (&self, domain_args: A, $S0: &$S0 $(, $Sn: &$Sn)*) {
-                let mut graph = ComputeGraph::new(&self.device);
+                let mut graph = ComputeGraph::new();
                 graph.add(self.dispatch_with(domain_args, $S0 $(, $Sn)*));
                 graph.execute();
             }

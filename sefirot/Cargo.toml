@@ -20,12 +20,12 @@ sefirot_macro = { path = "../sefirot_macro" }
 cuda_device_sys = { path = "../cuda_device_sys", optional = true }
 
 [dependencies.luisa_compute]
-git = "https://github.com/LuisaGroup/luisa-compute-rs"
+git = "https://github.com/iMplode-nZ/luisa-compute-rs"
 branch = "main"
 
 [dev-dependencies]
 rand = "0.8.5"
-winit = "0.29.14"
+winit = "0.30.5"
 
 [dependencies.bevy_ecs]
 version = "0.14.1"

@@ -73,23 +73,17 @@ impl<A: KernelArg + Send + Sync + 'static> ArgumentMapping<A> {
 
 #[test]
 fn test_scope_loss() {
-    use std::env::current_exe;
-
-    use luisa::DeviceType;
     use sefirot_macro::track_nc;
 
     use super::buffer::StaticDomain;
     use crate::field::set::FieldSet;
     use crate::field::EEField;
     use crate::kernel::Kernel;
-    let context = luisa::Context::new(current_exe().unwrap());
-    let device = context.create_device(DeviceType::Cuda);
     let domain = StaticDomain::<1>::new(10);
     let mut fields = FieldSet::new();
     let constant: EEField<f32, u32> =
         fields.create_bind("constant", ConstantMapping::with_value(10.0));
     let _kernel = Kernel::<fn()>::build(
-        &device,
         &domain,
         track_nc!(&|el| {
             let cond = true.expr();

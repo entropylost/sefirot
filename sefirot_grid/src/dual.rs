@@ -131,32 +131,31 @@ impl DualGrid {
         }
     }
 
-    pub fn create_texture<V: HasPixelStorage>(&self, device: &Device) -> impl VMapping<V, Edge> {
-        self.create_texture_with_storage(device, V::storage())
+    pub fn create_texture<V: HasPixelStorage>(&self) -> impl VMapping<V, Edge> {
+        self.create_texture_with_storage(V::storage())
     }
     pub fn create_texture_with_storage<V: IoTexel>(
         &self,
-        device: &Device,
         storage: PixelStorage,
     ) -> impl VMapping<V, Edge> {
         DualMapping {
             horizontal: IndexMap::new(
                 self.grid.index,
-                self.horizontal.create_tex2d_with_storage(device, storage),
+                self.horizontal.create_tex2d_with_storage(storage),
             ),
             vertical: IndexMap::new(
                 self.grid.index,
-                self.vertical.create_tex2d_with_storage(device, storage),
+                self.vertical.create_tex2d_with_storage(storage),
             ),
         }
     }
-    pub fn create_buffer<V: Value>(&self, device: &Device) -> impl AMapping<V, Edge> {
+    pub fn create_buffer<V: Value>(&self) -> impl AMapping<V, Edge> {
         if !self.grid.wrapping {
             panic!("Cannot create buffer for non-wrapping dual grid.");
         }
         DualMapping {
-            horizontal: self.grid._create_buffer_typed(device),
-            vertical: self.grid._create_buffer_typed(device),
+            horizontal: self.grid._create_buffer_typed(),
+            vertical: self.grid._create_buffer_typed(),
         }
     }
 

@@ -65,12 +65,12 @@ pub struct ContainerNode {
     feature = "bevy",
     derive(bevy_ecs::prelude::Resource, bevy_ecs::prelude::Component)
 )]
+#[derive(Default)]
 pub struct ComputeGraph<'a> {
     commands: Vec<CommandNode<'a>>,
     containers: Vec<ContainerNode>,
     hierarchy: DiGraphMap<NodeHandle, ()>,
     dependency: DiGraphMap<NodeHandle, ()>,
-    device: Device,
     // Resources to be released after the graph is executed.
     release: Vec<Exclusive<Box<dyn Send>>>,
 }
@@ -94,21 +94,13 @@ impl Clone for ComputeGraph<'_> {
             containers: self.containers.clone(),
             hierarchy: self.hierarchy.clone(),
             dependency: self.dependency.clone(),
-            device: self.device.clone(),
             release: Vec::new(),
         }
     }
 }
 impl<'a> ComputeGraph<'a> {
-    pub fn new(device: &Device) -> Self {
-        Self {
-            commands: Vec::new(),
-            containers: Vec::new(),
-            hierarchy: DiGraphMap::new(),
-            dependency: DiGraphMap::new(),
-            device: device.clone(),
-            release: Vec::new(),
-        }
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn set_dependency(&mut self, dependency: DiGraphMap<NodeHandle, ()>) {
@@ -123,9 +115,6 @@ impl<'a> ComputeGraph<'a> {
     }
     pub fn hierarchy(&self) -> &DiGraphMap<NodeHandle, ()> {
         &self.hierarchy
-    }
-    pub fn device(&self) -> &Device {
-        &self.device
     }
 
     fn order(&self) -> Vec<NodeHandle> {
@@ -208,7 +197,7 @@ impl<'a> ComputeGraph<'a> {
     // TODO: This currently does not parallelize anything.
     /// Consumes the graph, executing it.
     pub fn execute_in(&mut self, scope: &Scope) {
-        let mut this = std::mem::replace(self, Self::new(&self.device));
+        let mut this = std::mem::replace(self, Self::new());
 
         let commands = this.commands_order();
         scope.submit_with_callback(commands.into_iter().map(|c| c.command.into_inner()), || {
@@ -217,7 +206,7 @@ impl<'a> ComputeGraph<'a> {
     }
 
     pub fn execute(&mut self) {
-        self.execute_in(&self.device.default_stream().scope());
+        self.execute_in(&device().default_stream().scope());
     }
 
     /// Executes the graph without parallelism, printing debug information.
@@ -225,12 +214,12 @@ impl<'a> ComputeGraph<'a> {
     pub fn execute_dbg(&mut self) {
         use tracing::info;
 
-        let mut this = std::mem::replace(self, Self::new(&self.device));
+        let mut this = std::mem::replace(self, Self::new());
 
         let commands = this.commands_order();
         for command in commands {
             info!("Executing {:?}", command.debug_name);
-            let scope = this.device.default_stream().scope();
+            let scope = device().default_stream().scope();
             scope.submit(std::iter::once(command.command.into_inner()));
         }
     }
@@ -241,14 +230,14 @@ impl<'a> ComputeGraph<'a> {
 
         use cuda_device_sys::*;
 
-        let mut this = std::mem::replace(self, Self::new(&self.device));
+        let mut this = std::mem::replace(self, Self::new());
 
         let mut timings = vec![];
 
-        let stream = this.device.default_stream().native_handle() as CUstream;
+        let stream = device().default_stream().native_handle() as CUstream;
 
         let mut context: CUcontext =
-            unsafe { std::mem::transmute::<*mut _, CUcontext>(this.device.native_handle()) };
+            unsafe { std::mem::transmute::<*mut _, CUcontext>(device().native_handle()) };
 
         unsafe {
             assert_eq!(cuCtxPushCurrent_v2(context), 0);
@@ -268,7 +257,7 @@ impl<'a> ComputeGraph<'a> {
                 assert_eq!(cuEventRecord(start, stream), 0);
             }
 
-            let scope = this.device.default_stream().scope();
+            let scope = device().default_stream().scope();
             scope.submit(std::iter::once(command.command.into_inner()));
 
             let mut elapsed_time: f32 = 0.0;
@@ -316,7 +305,7 @@ impl<'a> ComputeGraph<'a> {
     }
 
     pub fn clear(&mut self) {
-        *self = Self::new(&self.device);
+        *self = Self::new();
     }
 
     fn set_debug(&mut self, handle: NodeHandle, name: String) {
@@ -542,8 +531,8 @@ pub trait AsNodes<'a>: Sized {
     fn release_fn(self, release: impl FnOnce() + Send + 'static) -> NodeConfigs<'a> {
         self.release(FnRelease::new(release))
     }
-    fn execute(self, device: &Device) {
-        let mut graph = ComputeGraph::new(device);
+    fn execute(self) {
+        let mut graph = ComputeGraph::new();
         graph.add(self);
         graph.execute();
     }

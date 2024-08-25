@@ -73,7 +73,6 @@ impl TileDomain {
 }
 
 pub struct TileArrayParameters {
-    pub device: Device,
     pub tile_size: u32,
     pub array_size: [u32; 2],
     pub max_active_tiles: u32,
@@ -110,7 +109,6 @@ impl TileArray {
     }
     pub fn new_with_encoder(parameters: TileArrayParameters, encoder: LinearEncoder) -> Arc<Self> {
         let TileArrayParameters {
-            device,
             tile_size,
             array_size,
             max_active_tiles,
@@ -126,17 +124,16 @@ impl TileArray {
             })),
         );
 
-        let active_mask_buffer = device.create_buffer((array_size[0] * array_size[1]) as usize);
+        let active_mask_buffer = device().create_buffer((array_size[0] * array_size[1]) as usize);
         let (active_mask, _active_mask_handle) = AEField::<u64, Vec2<u32>>::create_bind(
             "tile-array-active-mask",
             tile_domain.map_buffer_encoded(&encoder, active_mask_buffer.view(..)),
         );
-        let active_buffer = device.create_buffer(64 * max_active_tiles as usize);
-        let count_buffer: Buffer<u32> = device.create_buffer(64);
+        let active_buffer = device().create_buffer(64 * max_active_tiles as usize);
+        let count_buffer: Buffer<u32> = device().create_buffer(64);
         let freelist = Mutex::new((0..64).collect());
 
         let calculate_buffers_kernel = Kernel::<fn()>::build(
-            &device,
             &tile_domain,
             &track!(|el| {
                 let active_mask = active_mask.expr(&el).var();

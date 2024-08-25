@@ -1,3 +1,6 @@
+use std::fmt::Debug;
+use std::sync::Arc;
+
 use sefirot::ext_prelude::*;
 use sefirot::field::{Access, FieldHandle};
 use sefirot::luisa::lang::types::vector::Vec2;
@@ -6,24 +9,44 @@ use sefirot::mapping::buffer::{HandledBuffer, IntoHandled, StaticDomain};
 use sefirot::mapping::function::CachedFnMapping;
 use sefirot::mapping::index::IndexMap;
 
-#[derive(Debug)]
 pub struct LinearEncoder {
     index: EEField<u32, Vec2<u32>>,
     _handle: Option<FieldHandle>,
-    max_size: u32,
+    size_test: Arc<Box<dyn Fn([u32; 2]) -> bool + Send + Sync>>,
+}
+impl Debug for LinearEncoder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LinearEncoder")
+            .field("index", &self.index)
+            .field("_handle", &self._handle)
+            .finish()
+    }
 }
 impl Clone for LinearEncoder {
     fn clone(&self) -> Self {
         Self {
             index: self.index,
             _handle: None,
-            max_size: self.max_size,
+            size_test: self.size_test.clone(),
         }
     }
 }
 impl LinearEncoder {
     pub fn index(&self) -> EEField<u32, Vec2<u32>> {
         self.index
+    }
+    pub fn row_major(x_size: u32) -> Self {
+        let (index, handle) = Field::create_bind(
+            "linear-encoder-row-major",
+            CachedFnMapping::<Expr<u32>, Expr<Vec2<u32>>, _>::new(track_nc!(move |index, _ctx| {
+                index.x * x_size + index.y
+            })),
+        );
+        Self {
+            index,
+            _handle: Some(handle),
+            size_test: Arc::new(Box::new(move |size| size[0] == x_size)),
+        }
     }
     pub fn morton() -> Self {
         let (index, handle) = Field::create_bind(
@@ -51,7 +74,9 @@ impl LinearEncoder {
         Self {
             index,
             _handle: Some(handle),
-            max_size: 1 << 16,
+            size_test: Arc::new(Box::new(move |size| {
+                size[0] == size[1] && size[0] <= 1 << 16 && size[0].is_power_of_two()
+            })),
         }
     }
     // Requires the inputs to be within 0..256.
@@ -74,25 +99,26 @@ impl LinearEncoder {
         Self {
             index,
             _handle: Some(handle),
-            max_size: 1 << 8,
+            size_test: Arc::new(Box::new(move |size| {
+                size[0] == size[1] && size[0] <= 1 << 8 && size[0].is_power_of_two()
+            })),
         }
     }
     pub fn from_lut(texture: Tex2d<u32>) -> Self {
-        debug_assert_eq!(texture.width(), texture.height());
-        let size = texture.width();
-        debug_assert!(size.is_power_of_two());
+        let w = texture.width();
+        let h = texture.height();
         let (index, handle) = Field::create_bind(
             "linear-encoder-lookup",
-            StaticDomain::<2>::new(size, size).map_tex2d(texture),
+            StaticDomain::<2>::new(w, h).map_tex2d(texture),
         );
         Self {
             index,
             _handle: Some(handle),
-            max_size: size,
+            size_test: Arc::new(Box::new(move |size| size[0] == w && size[1] == h)),
         }
     }
     pub fn allowed_size(&self, size: [u32; 2]) -> bool {
-        size[0] == size[1] && size[0] <= self.max_size && size[0].is_power_of_two()
+        (self.size_test)(size)
     }
     pub fn encode<X: Access, M: Mapping<X, Expr<u32>>>(
         &self,
@@ -115,7 +141,6 @@ pub trait StaticDomainExt: private::Sealed {
     fn create_buffer_encoded<V: Value>(
         &self,
         encoder: &LinearEncoder,
-        device: &Device,
     ) -> impl AEMapping<V, Vec2<u32>>;
 }
 impl StaticDomainExt for StaticDomain<2> {
@@ -132,11 +157,10 @@ impl StaticDomainExt for StaticDomain<2> {
     fn create_buffer_encoded<V: Value>(
         &self,
         encoder: &LinearEncoder,
-        device: &Device,
     ) -> impl AEMapping<V, Vec2<u32>> {
         self.map_buffer_encoded(
             encoder,
-            device.create_buffer((self.width() * self.height()) as usize),
+            device().create_buffer((self.width() * self.height()) as usize),
         )
     }
 }

@@ -229,15 +229,14 @@ impl GridDomain {
     ) -> impl VEMapping<V, Vec2<i32>> {
         IndexMap::new(self.index, self.shifted_domain.map_tex2d(texture))
     }
-    pub fn create_texture<V: HasPixelStorage>(&self, device: &Device) -> impl VMapping<V, Cell> {
-        self.create_texture_with_storage(device, V::storage())
+    pub fn create_texture<V: HasPixelStorage>(&self) -> impl VMapping<V, Cell> {
+        self.create_texture_with_storage(V::storage())
     }
     pub fn create_texture_with_storage<V: IoTexel>(
         &self,
-        device: &Device,
         storage: PixelStorage,
     ) -> impl VMapping<V, Cell> {
-        self.map_texture(device.create_tex2d(storage, self.size()[0], self.size()[1], 1))
+        self.map_texture(device().create_tex2d(storage, self.size()[0], self.size()[1], 1))
     }
     #[allow(clippy::type_complexity)]
     fn _map_buffer_typed<V: Value>(
@@ -264,13 +263,12 @@ impl GridDomain {
     #[allow(clippy::type_complexity)]
     fn _create_buffer_typed<V: Value>(
         &self,
-        device: &Device,
     ) -> IndexMap<Expr<Vec2<u32>>, IndexMap<Expr<u32>, BufferMapping<V>, Expr<Vec2<u32>>>, Cell>
     {
-        self._map_buffer_typed(device.create_buffer((self.size()[0] * self.size()[1]) as usize))
+        self._map_buffer_typed(device().create_buffer((self.size()[0] * self.size()[1]) as usize))
     }
-    pub fn create_buffer<V: Value>(&self, device: &Device) -> impl AMapping<V, Cell> {
-        self._create_buffer_typed(device)
+    pub fn create_buffer<V: Value>(&self) -> impl AMapping<V, Cell> {
+        self._create_buffer_typed()
     }
 
     #[allow(clippy::type_complexity)]
@@ -305,7 +303,6 @@ impl GridDomain {
     fn _create_bindless_buffer_typed<V: Value>(
         &self,
         bindless: &mut BindlessMapper,
-        device: &Device,
     ) -> IndexMap<
         Expr<Vec2<u32>>,
         IndexMap<Expr<u32>, BindlessBufferMapping<V>, Expr<Vec2<u32>>>,
@@ -313,15 +310,14 @@ impl GridDomain {
     > {
         self._map_bindless_buffer_typed(
             bindless,
-            device.create_buffer((self.size()[0] * self.size()[1]) as usize),
+            device().create_buffer((self.size()[0] * self.size()[1]) as usize),
         )
     }
     pub fn create_bindless_buffer<V: Value>(
         &self,
         bindless: &mut BindlessMapper,
-        device: &Device,
     ) -> impl VMapping<V, Cell> {
-        self._create_bindless_buffer_typed(bindless, device)
+        self._create_bindless_buffer_typed(bindless)
     }
 
     pub fn dual(&self) -> DualGrid {

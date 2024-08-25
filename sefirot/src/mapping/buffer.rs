@@ -47,16 +47,15 @@ impl StaticDomain<1> {
         debug_assert_eq!(buffer.dim() as u32, self.len());
         bindless.emplace_map(buffer)
     }
-    pub fn create_buffer<V: Value>(&self, device: &Device) -> BufferMapping<V> {
-        let buffer = device.create_buffer::<V>(self.len() as usize);
+    pub fn create_buffer<V: Value>(&self) -> BufferMapping<V> {
+        let buffer = device().create_buffer::<V>(self.len() as usize);
         self.map_buffer(buffer)
     }
     pub fn create_bindless_buffer<V: Value>(
         &self,
         bindless: &mut BindlessMapper,
-        device: &Device,
     ) -> BindlessBufferMapping<V> {
-        let buffer = device.create_buffer::<V>(self.len() as usize);
+        let buffer = device().create_buffer::<V>(self.len() as usize);
         bindless.emplace_map(buffer)
     }
     #[allow(clippy::len_without_is_empty)]
@@ -79,15 +78,11 @@ impl StaticDomain<2> {
         debug_assert_eq!(texture.size()[0..2], self.0);
         Tex2dMapping(texture)
     }
-    pub fn create_tex2d<V: HasPixelStorage>(&self, device: &Device) -> Tex2dMapping<V> {
-        self.create_tex2d_with_storage(device, V::storage())
+    pub fn create_tex2d<V: HasPixelStorage>(&self) -> Tex2dMapping<V> {
+        self.create_tex2d_with_storage(V::storage())
     }
-    pub fn create_tex2d_with_storage<V: IoTexel>(
-        &self,
-        device: &Device,
-        storage: PixelStorage,
-    ) -> Tex2dMapping<V> {
-        let texture = device.create_tex2d::<V>(storage, self.width(), self.height(), 1);
+    pub fn create_tex2d_with_storage<V: IoTexel>(&self, storage: PixelStorage) -> Tex2dMapping<V> {
+        let texture = device().create_tex2d::<V>(storage, self.width(), self.height(), 1);
         self.map_tex2d(texture)
     }
     pub fn width(&self) -> u32 {
@@ -109,16 +104,12 @@ impl StaticDomain<3> {
         debug_assert_eq!(texture.size(), self.0);
         Tex3dMapping(texture)
     }
-    pub fn create_tex3d<V: HasPixelStorage>(&self, device: &Device) -> Tex3dMapping<V> {
-        self.create_tex3d_with_storage(device, V::storage())
+    pub fn create_tex3d<V: HasPixelStorage>(&self) -> Tex3dMapping<V> {
+        self.create_tex3d_with_storage(V::storage())
     }
-    pub fn create_tex3d_with_storage<V: IoTexel>(
-        &self,
-        device: &Device,
-        storage: PixelStorage,
-    ) -> Tex3dMapping<V> {
+    pub fn create_tex3d_with_storage<V: IoTexel>(&self, storage: PixelStorage) -> Tex3dMapping<V> {
         let texture =
-            device.create_tex3d::<V>(storage, self.width(), self.height(), self.depth(), 1);
+            device().create_tex3d::<V>(storage, self.width(), self.height(), self.depth(), 1);
         self.map_tex3d(texture)
     }
     pub fn width(&self) -> u32 {

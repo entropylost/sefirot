@@ -386,7 +386,7 @@ pub fn track(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         let path = crate_path.path;
         quote!(#path)
     } else {
-        quote!(::sefirot)
+        quote!(sefirot)
     };
     let input = quote!({ #body });
     let input = proc_macro::TokenStream::from(input);

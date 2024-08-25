@@ -7,11 +7,8 @@ use bevy::ecs::schedule::{NodeId, ScheduleLabel, SystemTypeSet};
 use bevy::ecs::system::FunctionSystem;
 use bevy::prelude::*;
 use bevy::utils::HashMap;
-use luisa::LuisaDevice;
-use luisa_compute::runtime::Device;
 use sefirot::graph::{AsNodes, ComputeGraph, NodeHandle};
 use sefirot::kernel::{Kernel, KernelSignature};
-use sefirot::luisa as luisa_compute;
 
 #[cfg(feature = "display")]
 pub mod display;
@@ -26,7 +23,7 @@ pub mod prelude {
     pub use sefirot::luisa::DeviceType;
     pub use sefirot::prelude::*;
 
-    pub use crate::luisa::{InitKernel, LuisaDevice as Device, LuisaPlugin};
+    pub use crate::luisa::{InitKernel, LuisaPlugin};
 }
 
 pub struct KernelCell<S: KernelSignature, A: 'static = ()>(OnceLock<Kernel<S, A>>);
@@ -68,18 +65,16 @@ pub struct MirrorGraph {
 
 impl MirrorGraph {
     pub fn from_world(schedule: impl ScheduleLabel, world: &mut World) -> Self {
-        world.schedule_scope(schedule, |world, schedule| {
-            Self::new(world.resource::<LuisaDevice>(), schedule)
-        })
+        world.schedule_scope(schedule, |_world, schedule| Self::new(schedule))
     }
-    pub fn new(device: &Device, schedule: &Schedule) -> Self {
-        let mut graph = Self::null(device);
+    pub fn new(schedule: &Schedule) -> Self {
+        let mut graph = Self::null();
         graph.init(schedule);
         graph
     }
-    pub fn null(device: &Device) -> Self {
+    pub fn null() -> Self {
         Self {
-            graph: ComputeGraph::new(device),
+            graph: ComputeGraph::new(),
             cached_graph: None,
             set_map: HashMap::new(),
             system_type_map: HashMap::new(),

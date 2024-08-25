@@ -6,7 +6,3 @@ edition = "2021"
 [dependencies]
 parking_lot = "0.12.1"
 sefirot = { path = "../sefirot" }
-
-[dependencies.luisa_compute]
-git = "https://github.com/LuisaGroup/luisa-compute-rs"
-branch = "main"

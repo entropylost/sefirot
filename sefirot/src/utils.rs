@@ -4,6 +4,7 @@ use std::sync::Arc;
 use luisa_compute::lang::types::AtomicRef;
 use parking_lot::Mutex;
 
+use crate::device;
 use crate::graph::{AsNodes, CopyExt, NodeConfigs};
 use crate::luisa::prelude::*;
 
@@ -40,8 +41,9 @@ impl<V: Value> Deref for Singleton<V> {
     }
 }
 impl<V: Value> Singleton<V> {
-    pub fn new(device: &Device) -> Self {
-        Self(device.create_buffer::<V>(1))
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        Self(device().create_buffer::<V>(1))
     }
     pub fn write_host(&self, value: V) -> NodeConfigs<'static>
     where
@@ -71,8 +73,8 @@ impl<V: Value> SingletonVar<V> {
     pub fn read(&self) -> Expr<V> {
         self.0.read(0)
     }
-    pub fn write(&self, value: Expr<V>) {
-        self.0.write(0, value)
+    pub fn write(&self, value: impl AsExpr<Value = V>) {
+        self.0.write(0, value.as_expr())
     }
     pub fn atomic(&self) -> AtomicRef<V> {
         self.0.atomic_ref(0)
