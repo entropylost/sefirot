@@ -153,6 +153,14 @@ pub fn __exit_block() {
     });
 }
 #[doc(hidden)]
+pub fn __exit_diverging() {
+    ACTIVE_CONTEXTS.with(|active_contexts| {
+        for (_, context) in active_contexts.borrow().contexts.iter() {
+            context.upgrade().unwrap().borrow_mut().exit_diverging();
+        }
+    });
+}
+#[doc(hidden)]
 pub fn __block<R>(f: impl Fn() -> R) -> impl Fn() -> R {
     move || {
         __enter_block();
@@ -328,6 +336,19 @@ impl Context {
             });
         }
         self.cache.cache_stack.pop().unwrap();
+    }
+    pub(crate) fn exit_diverging(&mut self) {
+        for context in self.context_stack.clone().into_iter().rev() {
+            for (field, access) in context {
+                let mut access = access.into_iter().collect::<Vec<_>>();
+                access.sort_unstable();
+                self.on_mapping(field, |ctx, mapping| {
+                    for i in access.into_iter().rev() {
+                        mapping.save_dyn(i, ctx, FieldBinding::new(field));
+                    }
+                });
+            }
+        }
     }
     pub fn bind_local<X: Access, I: FieldIndex>(
         &mut self,

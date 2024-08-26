@@ -206,7 +206,7 @@ impl<'a> ComputeGraph<'a> {
     }
 
     pub fn execute(&mut self) {
-        self.execute_in(&device().default_stream().scope());
+        self.execute_in(&DEVICE.default_stream().scope());
     }
 
     /// Executes the graph without parallelism, printing debug information.
@@ -219,7 +219,7 @@ impl<'a> ComputeGraph<'a> {
         let commands = this.commands_order();
         for command in commands {
             info!("Executing {:?}", command.debug_name);
-            let scope = device().default_stream().scope();
+            let scope = DEVICE.default_stream().scope();
             scope.submit(std::iter::once(command.command.into_inner()));
         }
     }
@@ -234,10 +234,10 @@ impl<'a> ComputeGraph<'a> {
 
         let mut timings = vec![];
 
-        let stream = device().default_stream().native_handle() as CUstream;
+        let stream = DEVICE.default_stream().native_handle() as CUstream;
 
         let mut context: CUcontext =
-            unsafe { std::mem::transmute::<*mut _, CUcontext>(device().native_handle()) };
+            unsafe { std::mem::transmute::<*mut _, CUcontext>(DEVICE.native_handle()) };
 
         unsafe {
             assert_eq!(cuCtxPushCurrent_v2(context), 0);
@@ -257,7 +257,7 @@ impl<'a> ComputeGraph<'a> {
                 assert_eq!(cuEventRecord(start, stream), 0);
             }
 
-            let scope = device().default_stream().scope();
+            let scope = DEVICE.default_stream().scope();
             scope.submit(std::iter::once(command.command.into_inner()));
 
             let mut elapsed_time: f32 = 0.0;

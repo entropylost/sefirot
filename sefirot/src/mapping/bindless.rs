@@ -117,8 +117,8 @@ impl Mapping<Static<BindlessArrayVar>, ()> for BindlessArrayMapping {
 }
 
 impl BindlessMapper {
-    pub fn new(device: &Device, size: usize) -> Self {
-        let array = Arc::new(device.create_bindless_array(size));
+    pub fn new(size: usize) -> Self {
+        let array = Arc::new(DEVICE.create_bindless_array(size));
         let (field, _handle) = Field::create_bind("bindless", BindlessArrayMapping(array.clone()));
         Self {
             array,

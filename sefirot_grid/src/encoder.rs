@@ -160,7 +160,7 @@ impl StaticDomainExt for StaticDomain<2> {
     ) -> impl AEMapping<V, Vec2<u32>> {
         self.map_buffer_encoded(
             encoder,
-            device().create_buffer((self.width() * self.height()) as usize),
+            DEVICE.create_buffer((self.width() * self.height()) as usize),
         )
     }
 }

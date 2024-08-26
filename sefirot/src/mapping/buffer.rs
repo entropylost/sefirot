@@ -48,14 +48,23 @@ impl StaticDomain<1> {
         bindless.emplace_map(buffer)
     }
     pub fn create_buffer<V: Value>(&self) -> BufferMapping<V> {
-        let buffer = device().create_buffer::<V>(self.len() as usize);
+        let buffer = DEVICE.create_buffer::<V>(self.len() as usize);
+        self.map_buffer(buffer)
+    }
+    pub fn create_buffer_from_slice<V: Value>(&self, data: &[V]) -> BufferMapping<V> {
+        debug_assert_eq!(data.len() as u32, self.len());
+        let buffer = DEVICE.create_buffer_from_slice(data);
+        self.map_buffer(buffer)
+    }
+    pub fn create_buffer_from_fn<V: Value>(&self, f: impl FnMut(usize) -> V) -> BufferMapping<V> {
+        let buffer = DEVICE.create_buffer_from_fn(self.len() as usize, f);
         self.map_buffer(buffer)
     }
     pub fn create_bindless_buffer<V: Value>(
         &self,
         bindless: &mut BindlessMapper,
     ) -> BindlessBufferMapping<V> {
-        let buffer = device().create_buffer::<V>(self.len() as usize);
+        let buffer = DEVICE.create_buffer::<V>(self.len() as usize);
         bindless.emplace_map(buffer)
     }
     #[allow(clippy::len_without_is_empty)]
@@ -82,7 +91,7 @@ impl StaticDomain<2> {
         self.create_tex2d_with_storage(V::storage())
     }
     pub fn create_tex2d_with_storage<V: IoTexel>(&self, storage: PixelStorage) -> Tex2dMapping<V> {
-        let texture = device().create_tex2d::<V>(storage, self.width(), self.height(), 1);
+        let texture = DEVICE.create_tex2d::<V>(storage, self.width(), self.height(), 1);
         self.map_tex2d(texture)
     }
     pub fn width(&self) -> u32 {
@@ -109,7 +118,7 @@ impl StaticDomain<3> {
     }
     pub fn create_tex3d_with_storage<V: IoTexel>(&self, storage: PixelStorage) -> Tex3dMapping<V> {
         let texture =
-            device().create_tex3d::<V>(storage, self.width(), self.height(), self.depth(), 1);
+            DEVICE.create_tex3d::<V>(storage, self.width(), self.height(), self.depth(), 1);
         self.map_tex3d(texture)
     }
     pub fn width(&self) -> u32 {

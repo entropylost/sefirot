@@ -293,18 +293,15 @@ impl VisitMut for TraceVisitor {
                 if let Some(expr) = &expr.expr {
                     *node = parse_quote_spanned! {span=>
                     {
-                        #element_path::__exit_block();
-                        let ret = #flow_path::return_v(#expr);
-                        #element_path::__enter_block();
-                        ret
+                        #element_path::__exit_diverging();
+                        #flow_path::return_v(#expr);
                     }
                     };
                 } else {
                     *node = parse_quote_spanned! {span=>
                         {
-                            #element_path::__exit_block();
+                            #element_path::__exit_diverging();
                             #flow_path::return_();
-                            #element_path::__enter_block();
                         }
                     };
                 }

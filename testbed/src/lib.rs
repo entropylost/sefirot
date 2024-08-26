@@ -1,9 +1,7 @@
 use std::collections::HashSet;
-use std::env::current_exe;
 use std::time::Instant;
 
 use luisa_compute::lang::types::vector::{Vec2, Vec3, Vec4};
-use luisa_compute::DeviceType;
 use sefirot::prelude::*;
 use winit::dpi::PhysicalSize;
 pub use winit::event::MouseButton;
@@ -14,7 +12,6 @@ use winit::keyboard::PhysicalKey;
 use winit::window::Window;
 
 pub struct Runtime {
-    device: Device,
     swapchain: Swapchain,
     display_texture: Tex2d<Vec4<f32>>,
     staging_texture: Tex2d<Vec3<f32>>,
@@ -97,7 +94,7 @@ impl App {
                     }
                 }
                 Event::AboutToWait => {
-                    let scope = self.runtime.device.default_stream().scope();
+                    let scope = DEVICE.default_stream().scope();
                     scope.submit([self.runtime.tonemap_display.dispatch_async([
                         self.runtime.staging_texture.width(),
                         self.runtime.staging_texture.height(),
@@ -118,14 +115,9 @@ impl App {
     }
 }
 
-pub fn init(name: impl Into<String>, grid_size: [u32; 2], scale: u32) -> (App, Device) {
+pub fn init(name: impl Into<String>, grid_size: [u32; 2], scale: u32) -> App {
     let w = grid_size[0] * scale;
     let h = grid_size[1] * scale;
-
-    luisa::init_logger();
-
-    let ctx = Context::new(current_exe().unwrap());
-    let device = ctx.create_device(DeviceType::Cuda);
 
     let event_loop = EventLoop::new().unwrap();
     let window = winit::window::WindowBuilder::new()
@@ -136,12 +128,12 @@ pub fn init(name: impl Into<String>, grid_size: [u32; 2], scale: u32) -> (App, D
         .unwrap();
 
     let swapchain =
-        device.create_swapchain(&window, &device.default_stream(), w, h, false, false, 3);
+        DEVICE.create_swapchain(&window, &DEVICE.default_stream(), w, h, false, false, 3);
 
-    let display_texture = device.create_tex2d::<Vec4<f32>>(swapchain.pixel_storage(), w, h, 1);
-    let staging_texture = device.create_tex2d::<Vec3<f32>>(PixelStorage::Float4, w, h, 1);
+    let display_texture = DEVICE.create_tex2d::<Vec4<f32>>(swapchain.pixel_storage(), w, h, 1);
+    let staging_texture = DEVICE.create_tex2d::<Vec3<f32>>(PixelStorage::Float4, w, h, 1);
 
-    let tonemap_display = device.create_kernel_async::<fn()>(&track!(|| {
+    let tonemap_display = DEVICE.create_kernel_async::<fn()>(&track!(|| {
         let value = staging_texture.read(dispatch_id().xy());
         let value = value.powf(2.2_f32).extend(1.0_f32);
         for i in 0..scale {
@@ -151,24 +143,20 @@ pub fn init(name: impl Into<String>, grid_size: [u32; 2], scale: u32) -> (App, D
         }
     }));
 
-    (
-        App {
-            event_loop,
-            window,
-            runtime: Runtime {
-                swapchain,
-                device: device.clone(),
-                display_texture,
-                staging_texture,
-                tonemap_display,
-                pressed_keys: HashSet::new(),
-                pressed_buttons: HashSet::new(),
-                cursor_position: Vec2::new(0.0, 0.0),
-                tick: 0,
-                average_frame_time: 0.016,
-                scale,
-            },
+    App {
+        event_loop,
+        window,
+        runtime: Runtime {
+            swapchain,
+            display_texture,
+            staging_texture,
+            tonemap_display,
+            pressed_keys: HashSet::new(),
+            pressed_buttons: HashSet::new(),
+            cursor_position: Vec2::new(0.0, 0.0),
+            tick: 0,
+            average_frame_time: 0.016,
+            scale,
         },
-        device,
-    )
+    }
 }

@@ -23,10 +23,6 @@ pub use luisa_compute as luisa;
 use luisa_compute::runtime::Device;
 pub use sefirot_macro::{track, track_nc, tracked, tracked_nc};
 
-pub fn device() -> &'static Device {
-    &DEVICE
-}
-
 pub static DEVICE: LazyLock<Device> = LazyLock::new(|| {
     let lib_path = std::env::current_exe().unwrap();
     let ctx = luisa_compute::Context::new(lib_path);
@@ -37,7 +33,7 @@ mod internal_prelude {
     pub use luisa::prelude::*;
     pub use luisa_compute as luisa;
 
-    pub use super::device;
+    pub use super::DEVICE;
     pub use crate::element::{AsKernelContext, Context, Element, FieldBinding};
     pub use crate::field::{Access, Field, FieldId, FieldIndex};
     pub use crate::mapping::Mapping;
@@ -49,8 +45,8 @@ pub mod prelude {
     pub use luisa_compute;
 
     // Since apparently I can't double-import it.
-    pub use super::device;
     pub use super::luisa;
+    pub use super::DEVICE;
     pub use crate::domain::Domain;
     pub use crate::element::{AsKernelContext, Element};
     pub use crate::field::set::FieldSet;

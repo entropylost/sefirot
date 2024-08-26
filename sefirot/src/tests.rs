@@ -9,8 +9,6 @@ use crate::prelude::*;
 
 #[test]
 fn test_context_stack_if() {
-    luisa::init_logger();
-
     let mut fields = FieldSet::new();
 
     let num_accesses = Arc::new(Mutex::new(0));
@@ -53,4 +51,27 @@ fn test_context_stack_if() {
     );
 
     assert_eq!(*num_accesses.lock(), 3);
+}
+
+#[test]
+fn test_return() {
+    let domain = StaticDomain::<1>::new(2);
+    let mut fields = FieldSet::new();
+    let buffer = DEVICE.create_buffer::<u32>(2);
+    let field: AEField<u32, u32> = fields.create_bind("data", domain.map_buffer(&buffer));
+
+    let kernel = Kernel::<fn()>::build(
+        &domain,
+        track!(&|el| {
+            let _ = field.var(&el);
+            if *el == 0 {
+                *field.var(&el) = 1_u32;
+                return;
+            }
+            *field.var(&el) = 2_u32;
+        }),
+    );
+    kernel.dispatch_blocking();
+
+    assert_eq!(buffer.copy_to_vec(), vec![1, 2]);
 }

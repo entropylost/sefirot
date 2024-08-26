@@ -158,7 +158,7 @@ impl<S: KernelSignature, A: 'static> Kernel<S, A> {
     ) -> Self {
         let domain = dyn_clone::clone(domain);
         let mut bindings = None;
-        let mut builder = KernelBuilder::new(Some(device().clone()), true);
+        let mut builder = KernelBuilder::new(Some(DEVICE.clone()), true);
         let kernel = builder.build_kernel(|builder| {
             take_mut::take(builder, |builder| {
                 let kernel_context = Rc::new(KernelContext {
@@ -181,7 +181,7 @@ impl<S: KernelSignature, A: 'static> Kernel<S, A> {
         // TODO: Fix the name - F is generally boring, or a closure inside so can grab the container name.
         Kernel {
             domain,
-            raw: device().compile_kernel_def_with_options(&kernel, options),
+            raw: DEVICE.compile_kernel_def_with_options(&kernel, options),
             bindings: bindings.unwrap(),
             debug_name: None,
         }

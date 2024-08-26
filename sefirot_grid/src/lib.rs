@@ -236,7 +236,7 @@ impl GridDomain {
         &self,
         storage: PixelStorage,
     ) -> impl VMapping<V, Cell> {
-        self.map_texture(device().create_tex2d(storage, self.size()[0], self.size()[1], 1))
+        self.map_texture(DEVICE.create_tex2d(storage, self.size()[0], self.size()[1], 1))
     }
     #[allow(clippy::type_complexity)]
     fn _map_buffer_typed<V: Value>(
@@ -265,7 +265,7 @@ impl GridDomain {
         &self,
     ) -> IndexMap<Expr<Vec2<u32>>, IndexMap<Expr<u32>, BufferMapping<V>, Expr<Vec2<u32>>>, Cell>
     {
-        self._map_buffer_typed(device().create_buffer((self.size()[0] * self.size()[1]) as usize))
+        self._map_buffer_typed(DEVICE.create_buffer((self.size()[0] * self.size()[1]) as usize))
     }
     pub fn create_buffer<V: Value>(&self) -> impl AMapping<V, Cell> {
         self._create_buffer_typed()
@@ -310,7 +310,7 @@ impl GridDomain {
     > {
         self._map_bindless_buffer_typed(
             bindless,
-            device().create_buffer((self.size()[0] * self.size()[1]) as usize),
+            DEVICE.create_buffer((self.size()[0] * self.size()[1]) as usize),
         )
     }
     pub fn create_bindless_buffer<V: Value>(

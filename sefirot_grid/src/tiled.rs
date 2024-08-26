@@ -124,13 +124,13 @@ impl TileArray {
             })),
         );
 
-        let active_mask_buffer = device().create_buffer((array_size[0] * array_size[1]) as usize);
+        let active_mask_buffer = DEVICE.create_buffer((array_size[0] * array_size[1]) as usize);
         let (active_mask, _active_mask_handle) = AEField::<u64, Vec2<u32>>::create_bind(
             "tile-array-active-mask",
             tile_domain.map_buffer_encoded(&encoder, active_mask_buffer.view(..)),
         );
-        let active_buffer = device().create_buffer(64 * max_active_tiles as usize);
-        let count_buffer: Buffer<u32> = device().create_buffer(64);
+        let active_buffer = DEVICE.create_buffer(64 * max_active_tiles as usize);
+        let count_buffer: Buffer<u32> = DEVICE.create_buffer(64);
         let freelist = Mutex::new((0..64).collect());
 
         let calculate_buffers_kernel = Kernel::<fn()>::build(

@@ -4,9 +4,9 @@ use std::sync::Arc;
 use luisa_compute::lang::types::AtomicRef;
 use parking_lot::Mutex;
 
-use crate::device;
 use crate::graph::{AsNodes, CopyExt, NodeConfigs};
 use crate::luisa::prelude::*;
+use crate::DEVICE;
 
 pub mod tag;
 
@@ -27,6 +27,7 @@ impl<F: FnOnce() + 'static> Drop for FnRelease<F> {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Paradox {}
 
+#[derive(Debug)]
 #[repr(transparent)]
 pub struct Singleton<V: Value>(pub Buffer<V>);
 impl<V: Value> Deref for Singleton<V> {
@@ -43,7 +44,7 @@ impl<V: Value> Deref for Singleton<V> {
 impl<V: Value> Singleton<V> {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
-        Self(device().create_buffer::<V>(1))
+        Self(DEVICE.create_buffer::<V>(1))
     }
     pub fn write_host(&self, value: V) -> NodeConfigs<'static>
     where

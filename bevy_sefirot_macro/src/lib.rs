@@ -248,8 +248,8 @@ pub fn kernel(
 fn test_kernel() {
     use quote::quote;
     let f = parse_quote! {
-        fn clear_display_kernel(particles: Res<Emanation<Particles>>, device: LuisaDevice, domain: Res<ArrayIndex>) -> Kernel<fn(Tex2d<Vec4<f32>>, Vec4<f32>)> {
-            Kernel::build(&device, &domain, |el, display, clear_color| {
+        fn clear_display_kernel(particles: Res<Emanation<Particles>>, domain: Res<ArrayIndex>) -> Kernel<fn(Tex2d<Vec4<f32>>, Vec4<f32>)> {
+            Kernel::build(&domain, |el, display, clear_color| {
                 display.write(dispatch_id().xy(), clear_color);
             })
         }
