@@ -472,6 +472,9 @@ impl<'a> NodeConfigs<'a> {
     }
 }
 
+pub trait AsNodesStatic: AsNodes<'static> {}
+impl<X> AsNodesStatic for X where X: AsNodes<'static> {}
+
 pub trait AsNodes<'a>: Sized {
     fn into_node_configs(self) -> NodeConfigs<'a>;
     fn before(self, other: impl AsNodes<'a>) -> NodeConfigs<'a> {

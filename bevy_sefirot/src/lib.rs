@@ -219,6 +219,3 @@ where
 {
     unsafe { std::mem::transmute::<(), SystemTypeSet<FunctionSystem<Marker, F>>>(()) }
 }
-
-pub trait AsNodesStatic: AsNodes<'static> {}
-impl<X> AsNodesStatic for X where X: AsNodes<'static> {}
