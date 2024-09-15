@@ -9,6 +9,29 @@ use crate::graph::NodeConfigs;
 use crate::internal_prelude::*;
 use crate::kernel::KernelContext;
 
+#[derive(Debug, Clone, Copy)]
+pub struct PassthroughDomain;
+
+impl DomainImpl for PassthroughDomain {
+    type Args = [u32; 3];
+    type Index = Expr<Vec3<u32>>;
+    type Passthrough = ();
+    fn get_element(&self, kernel_context: Rc<KernelContext>, _: ()) -> Element<Self::Index> {
+        Element::new(dispatch_id(), Context::new(kernel_context))
+    }
+    fn dispatch(
+        &self,
+        domain_args: Self::Args,
+        args: KernelDispatch<Self::Passthrough>,
+    ) -> NodeConfigs<'static> {
+        args.dispatch(domain_args)
+    }
+    #[tracked]
+    fn contains_impl(&self, el: &Element<Self::Index>) -> Expr<bool> {
+        (**el < dispatch_size()).all()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct DynamicDomain {
     pub len: Arc<Mutex<u32>>,
@@ -33,9 +56,9 @@ impl DomainImpl for DynamicDomain {
     fn dispatch(&self, _: (), args: KernelDispatch) -> NodeConfigs<'static> {
         args.dispatch([*self.len.lock(), 1, 1])
     }
-    fn contains_impl(&self, _el: &Element<Self::Index>) -> Expr<bool> {
-        // TODO: Can use ConstantAccessor here.
-        unimplemented!("Cannot check if an index is contained in the domain");
+    #[tracked]
+    fn contains_impl(&self, el: &Element<Self::Index>) -> Expr<bool> {
+        **el < dispatch_size().x
     }
 }
 
