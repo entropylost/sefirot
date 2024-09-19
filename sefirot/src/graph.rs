@@ -500,7 +500,7 @@ pub trait AsNodes<'a>: Sized {
     fn chain(self) -> NodeConfigs<'a> {
         let mut cfg = self.into_node_configs();
         let NodeConfigs::Multiple { chain, .. } = &mut cfg else {
-            panic!("Cannot chain a single node.");
+            return cfg;
         };
         *chain = true;
         cfg
@@ -538,6 +538,24 @@ pub trait AsNodes<'a>: Sized {
         let mut graph = ComputeGraph::new();
         graph.add(self);
         graph.execute();
+    }
+    #[cfg(feature = "debug")]
+    fn execute_dbg(self) {
+        let mut graph = ComputeGraph::new();
+        graph.add(self);
+        graph.execute_dbg();
+    }
+    #[cfg(feature = "trace")]
+    fn execute_timed(self) -> Vec<(String, f32)> {
+        let mut graph = ComputeGraph::new();
+        graph.add(self);
+        graph.execute_timed()
+    }
+    #[cfg(feature = "trace")]
+    fn execute_trace(self) {
+        let mut graph = ComputeGraph::new();
+        graph.add(self);
+        graph.execute_trace();
     }
 }
 impl<'a> AsNodes<'a> for NodeConfigs<'a> {
