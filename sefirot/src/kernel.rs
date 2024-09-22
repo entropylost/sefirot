@@ -145,6 +145,21 @@ impl<S: KernelSignature, A: 'static> Kernel<S, A> {
     pub fn debug_name(&self) -> Option<&str> {
         self.debug_name.as_deref()
     }
+    pub fn build_named<I: FieldIndex>(
+        name: impl AsRef<str>,
+        domain: &impl Domain<Index = I, Args = A>,
+        f: S::Function<'_, I>,
+    ) -> Self {
+        Self::build_with_options(
+            KernelBuildOptions {
+                name: Some(name.as_ref().to_string()),
+                ..default_kernel_build_options()
+            },
+            domain,
+            f,
+        )
+        .with_name(name)
+    }
     pub fn build<I: FieldIndex>(
         domain: &impl Domain<Index = I, Args = A>,
         f: S::Function<'_, I>,

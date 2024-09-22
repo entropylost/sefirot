@@ -65,7 +65,8 @@ fn kernel_impl(f: ItemFn, attributes: Attributes) -> TokenStream {
         }) = &mut **func
         {
             if segments.len() == 2
-                && ["build", "build_with_options"].contains(&&*segments[1].ident.to_string())
+                && ["build", "build_named", "build_with_options"]
+                    .contains(&&*segments[1].ident.to_string())
                 && segments[0].ident == "Kernel"
             {
                 if segments[0].arguments == PathArguments::None {
@@ -78,19 +79,22 @@ fn kernel_impl(f: ItemFn, attributes: Attributes) -> TokenStream {
                 *ac = parse_quote! {
                     ::sefirot::prelude::track!(#ac)
                 };
-                if !build_options.is_empty() {
+                if !build_options.is_empty() || segments[1].ident != "build_named" {
                     assert!(segments[1].ident == "build");
-                    assert!(args.len() == 3);
+                    assert!(args.len() == 2);
                     let build_options = build_options.into_iter().collect::<Vec<_>>();
                     let keys = build_options.iter().map(|(k, _)| k);
                     let values = build_options.iter().map(|(_, v)| v);
                     let kernel_build_options: Expr = parse_quote! {
                         ::sefirot::luisa::runtime::KernelBuildOptions {
                             #(#keys: #values,)*
-                            ..::sefirot::kernel::default_kernel_build_options()
+                            ..::sefirot::luisa::runtime::KernelBuildOptions {
+                                name: Some(stringify!(#kernel_name).to_string()),
+                                ..::sefirot::kernel::default_kernel_build_options()
+                            }
                         }
                     };
-                    args.insert(2, kernel_build_options);
+                    args.insert(0, kernel_build_options);
                     segments[1].ident = Ident::new("build_with_options", segments[1].ident.span());
                 }
                 last_stmt = Stmt::Expr(
@@ -248,16 +252,19 @@ pub fn kernel(
 fn test_kernel() {
     use quote::quote;
     let f = parse_quote! {
-        fn clear_display_kernel(particles: Res<Emanation<Particles>>, domain: Res<ArrayIndex>) -> Kernel<fn(Tex2d<Vec4<f32>>, Vec4<f32>)> {
-            Kernel::build(&domain, |el, display, clear_color| {
-                display.write(dispatch_id().xy(), clear_color);
+        pub fn compute_offset_kernel(grid: Res<Grid>) -> Kernel<fn()> {
+            Kernel::build(&grid.domain, &|index| {
+                let count = grid.count.read(*index);
+                grid.offset
+                    .write(*index, grid.next_block.atomic_ref(0).fetch_add(count));
+                grid.count.write(*index, 0);
             })
         }
     };
     let f = kernel_impl(
         f,
         parse_attrs(quote!(
-            init(pub), run(pub) = "foo", enable_fast_math = true
+            init(pub)
         ))
         .unwrap(),
     );
