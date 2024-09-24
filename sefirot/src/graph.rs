@@ -539,6 +539,11 @@ pub trait AsNodes<'a>: Sized {
         graph.add(self);
         graph.execute();
     }
+    fn execute_in(self, scope: &Scope) {
+        let mut graph = ComputeGraph::new();
+        graph.add(self);
+        graph.execute_in(scope);
+    }
     #[cfg(feature = "debug")]
     fn execute_dbg(self) {
         let mut graph = ComputeGraph::new();
