@@ -20,6 +20,7 @@ pub struct Runtime {
     display_texture: Tex2d<Vec4<f32>>,
     staging_texture: Tex2d<Vec3<f32>>,
     tonemap_display: luisa::runtime::Kernel<fn()>,
+    pub mouse_scroll: Vec2<f32>,
     pub pressed_keys: HashSet<KeyCode>,
     pub just_pressed_keys: HashSet<KeyCode>,
     pub pressed_buttons: HashSet<MouseButton>,
@@ -156,6 +157,16 @@ impl App {
                                 }
                             }
                         }
+                        WindowEvent::MouseWheel { delta, .. } => match delta {
+                            winit::event::MouseScrollDelta::LineDelta(x, y) => {
+                                runtime.mouse_scroll.x += x as f32;
+                                runtime.mouse_scroll.y += y as f32;
+                            }
+                            winit::event::MouseScrollDelta::PixelDelta(position) => {
+                                runtime.mouse_scroll.x += position.x as f32;
+                                runtime.mouse_scroll.y += position.y as f32;
+                            }
+                        },
                         WindowEvent::RedrawRequested => {
                             self.window.request_redraw();
                             let scope = DEVICE.default_stream().scope();
@@ -174,6 +185,7 @@ impl App {
 
                             runtime.just_pressed_keys.clear();
                             runtime.just_pressed_buttons.clear();
+                            runtime.mouse_scroll = Vec2::splat(0.0);
 
                             #[cfg(feature = "video")]
                             if let Some((encoder, position)) = &mut runtime.encoder {
@@ -313,7 +325,8 @@ impl AppBuilder {
                 just_pressed_keys: HashSet::new(),
                 pressed_buttons: HashSet::new(),
                 just_pressed_buttons: HashSet::new(),
-                cursor_position: Vec2::new(0.0, 0.0),
+                cursor_position: Vec2::splat(0.0),
+                mouse_scroll: Vec2::splat(0.0),
                 tick: 0,
                 average_frame_time: 0.016,
                 scale,
