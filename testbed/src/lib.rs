@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 use std::time::Instant;
 
 use agx::AgXParameters;
@@ -28,6 +28,8 @@ pub struct Runtime {
     pub tick: u32,
     pub average_frame_time: f32,
     pub scale: u32,
+    #[cfg(feature = "video")]
+    pub encoder: Option<(video_rs::Encoder, video_rs::Time)>,
 }
 
 impl Runtime {
@@ -51,8 +53,47 @@ impl Runtime {
     pub fn just_pressed_button(&self, button: MouseButton) -> bool {
         self.just_pressed_buttons.contains(&button)
     }
+    pub fn final_display(&self) -> &Tex2d<Vec4<f32>> {
+        &self.display_texture
+    }
     pub fn display(&self) -> &Tex2d<Vec3<f32>> {
         &self.staging_texture
+    }
+
+    #[cfg(feature = "video")]
+    pub fn finish_recording(&mut self) {
+        if let Some((mut encoder, _)) = self.encoder.take() {
+            encoder.finish().unwrap();
+        } else {
+            eprintln!("Warning: Haven't started recording yet.");
+        }
+    }
+
+    #[cfg(feature = "video")]
+    pub fn begin_recording(&mut self, path: Option<&str>, realtime: bool) {
+        if self.encoder.is_some() {
+            self.finish_recording();
+        }
+        let settings = video_rs::encode::Settings::preset_h264_yuv420p(
+            self.display_texture.width() as usize,
+            self.display_texture.height() as usize,
+            realtime,
+        );
+        let path = path.map_or_else(
+            || {
+                std::path::Path::new(&format!(
+                    "recording-{}.mp4",
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .expect("Temporal anomaly detected.")
+                        .as_millis()
+                ))
+                .to_path_buf()
+            },
+            |p| std::path::PathBuf::from(p),
+        );
+        let encoder = video_rs::Encoder::new(path, settings).unwrap();
+        self.encoder = Some((encoder, video_rs::Time::zero()));
     }
 }
 
@@ -69,9 +110,15 @@ impl Deref for App {
         &self.runtime
     }
 }
+impl DerefMut for App {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.runtime
+    }
+}
 
 impl App {
-    pub fn run(mut self, mut update: impl FnMut(&Runtime, Scope)) {
+    pub fn run(mut self, mut update: impl FnMut(&mut Runtime, Scope)) {
+        let runtime = &mut self.runtime;
         self.event_loop.set_control_flow(ControlFlow::Poll);
         self.event_loop
             .run(move |event, elwt| match event {
@@ -81,18 +128,18 @@ impl App {
                             elwt.exit();
                         }
                         WindowEvent::CursorMoved { position, .. } => {
-                            self.runtime.cursor_position = Vec2::new(
-                                position.x as f32 / self.runtime.scale as f32,
-                                position.y as f32 / self.runtime.scale as f32,
+                            runtime.cursor_position = Vec2::new(
+                                position.x as f32 / runtime.scale as f32,
+                                position.y as f32 / runtime.scale as f32,
                             );
                         }
                         WindowEvent::MouseInput { button, state, .. } => match state {
                             ElementState::Pressed => {
-                                self.runtime.pressed_buttons.insert(button);
-                                self.runtime.just_pressed_buttons.insert(button);
+                                runtime.pressed_buttons.insert(button);
+                                runtime.just_pressed_buttons.insert(button);
                             }
                             ElementState::Released => {
-                                self.runtime.pressed_buttons.remove(&button);
+                                runtime.pressed_buttons.remove(&button);
                             }
                         },
                         WindowEvent::KeyboardInput { event, .. } => {
@@ -101,33 +148,63 @@ impl App {
                             };
                             match event.state {
                                 ElementState::Pressed => {
-                                    self.runtime.pressed_keys.insert(key);
-                                    self.runtime.just_pressed_keys.insert(key);
+                                    runtime.pressed_keys.insert(key);
+                                    runtime.just_pressed_keys.insert(key);
                                 }
                                 ElementState::Released => {
-                                    self.runtime.pressed_keys.remove(&key);
+                                    runtime.pressed_keys.remove(&key);
                                 }
                             }
                         }
                         WindowEvent::RedrawRequested => {
                             self.window.request_redraw();
                             let scope = DEVICE.default_stream().scope();
-                            scope.submit([self.runtime.tonemap_display.dispatch_async([
-                                self.runtime.staging_texture.width(),
-                                self.runtime.staging_texture.height(),
+                            scope.submit([runtime.tonemap_display.dispatch_async([
+                                runtime.staging_texture.width(),
+                                runtime.staging_texture.height(),
                                 1,
                             ])]);
-                            scope.present(&self.runtime.swapchain, &self.runtime.display_texture);
+                            scope.present(&runtime.swapchain, &runtime.display_texture);
                             let start = Instant::now();
-                            update(&self.runtime, scope);
+                            update(runtime, scope);
                             let delta = start.elapsed().as_secs_f32();
-                            self.runtime.average_frame_time =
-                                self.runtime.average_frame_time * 0.99 + delta * 0.01;
-                            self.window.request_redraw();
-                            self.runtime.tick += 1;
+                            runtime.average_frame_time =
+                                runtime.average_frame_time * 0.99 + delta * 0.01;
+                            runtime.tick += 1;
 
-                            self.runtime.just_pressed_keys.clear();
-                            self.runtime.just_pressed_buttons.clear();
+                            runtime.just_pressed_keys.clear();
+                            runtime.just_pressed_buttons.clear();
+
+                            #[cfg(feature = "video")]
+                            if let Some((encoder, position)) = &mut runtime.encoder {
+                                let frame: Vec<Vec4<u8>> =
+                                    runtime.display_texture.view(0).copy_to_vec();
+
+                                let frame_array = ndarray::Array3::from_shape_fn(
+                                    (
+                                        runtime.display_texture.width() as usize,
+                                        runtime.display_texture.height() as usize,
+                                        3,
+                                    ),
+                                    |(x, y, c)| {
+                                        (<[u8; 4]>::from(
+                                            frame
+                                                [x * runtime.display_texture.height() as usize + y],
+                                        ))[c]
+                                    },
+                                );
+
+                                encoder.encode(&frame_array, *position).unwrap();
+                                *position = position
+                                    .aligned_with(video_rs::Time::from_nth_of_a_second(60))
+                                    .add();
+                            }
+
+                            if runtime.pressed_key(KeyCode::Escape) {
+                                #[cfg(feature = "video")]
+                                runtime.finish_recording();
+                                elwt.exit();
+                            }
                         }
                         _ => (),
                     }
@@ -176,6 +253,9 @@ impl AppBuilder {
         self.init()
     }
     pub fn init(self) -> App {
+        #[cfg(feature = "video")]
+        video_rs::init().unwrap();
+
         let AppBuilder {
             name,
             grid_size,
@@ -237,6 +317,8 @@ impl AppBuilder {
                 tick: 0,
                 average_frame_time: 0.016,
                 scale,
+                #[cfg(feature = "video")]
+                encoder: None,
             },
         }
     }

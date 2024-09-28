@@ -163,7 +163,7 @@ impl DomainImpl for NullDomain {
         Element::new((), Context::new(kernel_context))
     }
     fn dispatch(&self, _: (), _: KernelDispatch) -> NodeConfigs<'static> {
-        ().into_node_configs()
+        NodeConfigs::default()
     }
     fn contains_impl(&self, _: &Element<()>) -> Expr<bool> {
         false.expr()

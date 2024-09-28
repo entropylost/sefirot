@@ -451,6 +451,14 @@ pub enum NodeConfigs<'a> {
         constraints: Vec<(Constraint, NodeConfigs<'a>)>,
     },
 }
+impl<'a> Default for NodeConfigs<'a> {
+    fn default() -> Self {
+        NodeConfigs::Single {
+            config: Default::default(),
+            constraints: Vec::new(),
+        }
+    }
+}
 impl<'a> NodeConfigs<'a> {
     fn add_constraint(&mut self, constraint: Constraint, target: NodeConfigs<'a>) {
         self.constraints_mut().push((constraint, target));
@@ -573,7 +581,7 @@ where
     X: AsNodes<'a>,
 {
     fn into_node_configs(self) -> NodeConfigs<'a> {
-        self.map_or_else(|| ().into_node_configs(), |x| x.into_node_configs())
+        self.map_or_else(|| NodeConfigs::default(), |x| x.into_node_configs())
     }
 }
 impl<'a> AsNodes<'a> for Command<'a, 'a> {
@@ -607,15 +615,6 @@ where
         NodeConfigs::Multiple {
             configs: self.into_iter().map(|x| x.into_node_configs()).collect(),
             chain: false,
-            constraints: Vec::new(),
-        }
-    }
-}
-
-impl<'a> AsNodes<'a> for () {
-    fn into_node_configs(self) -> NodeConfigs<'a> {
-        NodeConfigs::Single {
-            config: Default::default(),
             constraints: Vec::new(),
         }
     }
