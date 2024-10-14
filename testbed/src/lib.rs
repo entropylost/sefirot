@@ -100,7 +100,7 @@ impl Runtime {
 
 pub struct App {
     event_loop: EventLoop<()>,
-    window: Window,
+    pub window: Window,
     pub runtime: Runtime,
 }
 
@@ -159,8 +159,8 @@ impl App {
                         }
                         WindowEvent::MouseWheel { delta, .. } => match delta {
                             winit::event::MouseScrollDelta::LineDelta(x, y) => {
-                                runtime.mouse_scroll.x += x as f32;
-                                runtime.mouse_scroll.y += y as f32;
+                                runtime.mouse_scroll.x += x;
+                                runtime.mouse_scroll.y += y;
                             }
                             winit::event::MouseScrollDelta::PixelDelta(position) => {
                                 runtime.mouse_scroll.x += position.x as f32;
@@ -265,6 +265,8 @@ impl AppBuilder {
         self.init()
     }
     pub fn init(self) -> App {
+        luisa::init_logger();
+
         #[cfg(feature = "video")]
         video_rs::init().unwrap();
 
@@ -300,7 +302,7 @@ impl AppBuilder {
         let tonemap_display = DEVICE.create_kernel_async::<fn()>(&track!(|| {
             let value = staging_texture.read(dispatch_id().xy());
             let value = if let Some(params) = agx {
-                agx::agx_tonemap(value, params)
+                agx::agx_tonemap(value, params).powf(2.2_f32)
             } else {
                 value.powf(2.2_f32)
             };

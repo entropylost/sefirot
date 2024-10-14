@@ -39,7 +39,7 @@ impl DomainImpl for TileDomain {
     }
     fn dispatch(&self, _: (), args: KernelDispatch) -> NodeConfigs<'static> {
         if self.array.count_host.read()[self.index as usize] == 0 {
-            ().into_node_configs()
+            NodeConfigs::default()
         } else {
             args.dispatch([
                 self.array.tile_size,
