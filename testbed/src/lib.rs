@@ -128,6 +128,9 @@ impl App {
                         WindowEvent::CloseRequested => {
                             elwt.exit();
                         }
+                        WindowEvent::CursorLeft { .. } => {
+                            runtime.cursor_position = Vec2::splat(f32::NEG_INFINITY);
+                        }
                         WindowEvent::CursorMoved { position, .. } => {
                             runtime.cursor_position = Vec2::new(
                                 position.x as f32 / runtime.scale as f32,
@@ -249,8 +252,8 @@ impl AppBuilder {
         self.scale = scale;
         self
     }
-    pub fn dpi_override(mut self, dpi_override: f64) -> Self {
-        self.dpi_override = Some(dpi_override);
+    pub fn dpi(mut self, dpi: f64) -> Self {
+        self.dpi_override = Some(dpi);
         self
     }
     pub fn agx(mut self) -> Self {
