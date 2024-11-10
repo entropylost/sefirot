@@ -1,0 +1,32 @@
+[package]
+name = "keter"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cuda_device_sys = { path = "../cuda_device_sys", optional = true }
+parking_lot = { version = "0.12.1", features = ["send_guard", "arc_lock"] }
+petgraph = "0.6.4"
+tracing = { version = "0.1.40", optional = true }
+static_assertions = "1.1.0"
+keter_macro = { path = "../keter_macro" }
+
+[dependencies.luisa_compute]
+git = "https://github.com/entropylost/luisa-compute-rs"
+branch = "main"
+default-features = false
+
+[features]
+default = ["cuda", "wayland"]
+debug = ["dep:tracing"]
+trace = ["dep:tracing", "dep:cuda_device_sys"]
+glam = ["luisa_compute/glam"]
+nalgebra = ["luisa_compute/nalgebra"]
+metal = ["luisa_compute/metal"]
+cuda = ["luisa_compute/cuda"]
+dx = ["luisa_compute/dx"]
+strict = ["luisa_compute/strict"]
+remote = ["luisa_compute/remote"]
+cpu = ["luisa_compute/cpu"]
+oidn = ["luisa_compute/oidn"]
+wayland = ["luisa_compute/wayland"]

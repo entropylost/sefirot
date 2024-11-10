@@ -61,10 +61,6 @@ pub struct ContainerNode {
     pub debug_name: String,
 }
 
-#[cfg_attr(
-    feature = "bevy",
-    derive(bevy_ecs::prelude::Resource, bevy_ecs::prelude::Component)
-)]
 #[derive(Default)]
 pub struct ComputeGraph<'a> {
     commands: Vec<CommandNode<'a>>,

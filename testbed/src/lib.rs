@@ -3,8 +3,8 @@ use std::ops::{Deref, DerefMut};
 use std::time::Instant;
 
 use agx::AgXParameters;
-use luisa_compute::lang::types::vector::{Vec2, Vec3, Vec4};
-use sefirot::prelude::*;
+use keter::lang::types::vector::{Vec2, Vec3, Vec4};
+use keter::prelude::*;
 use winit::dpi::{LogicalSize, PhysicalSize, Size};
 pub use winit::event::MouseButton;
 use winit::event::{ElementState, Event, WindowEvent};
@@ -19,7 +19,7 @@ pub struct Runtime {
     swapchain: Swapchain,
     display_texture: Tex2d<Vec4<f32>>,
     staging_texture: Tex2d<Vec3<f32>>,
-    tonemap_display: luisa::runtime::Kernel<fn()>,
+    tonemap_display: Kernel<fn()>,
     pub mouse_scroll: Vec2<f32>,
     pub pressed_keys: HashSet<KeyCode>,
     pub just_pressed_keys: HashSet<KeyCode>,
@@ -268,7 +268,7 @@ impl AppBuilder {
         self.init()
     }
     pub fn init(self) -> App {
-        luisa::init_logger();
+        keter::init_logger();
 
         #[cfg(feature = "video")]
         video_rs::init().unwrap();
