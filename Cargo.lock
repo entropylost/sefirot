@@ -1498,6 +1498,7 @@ dependencies = [
  "parking_lot",
  "petgraph",
  "static_assertions",
+ "take_mut",
  "tracing",
 ]
 

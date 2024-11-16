@@ -511,14 +511,19 @@ pub trait AsNodes<'a>: Sized {
     }
     fn debug(self, name: impl AsRef<str>) -> NodeConfigs<'a> {
         let mut cfg = self.into_node_configs();
-        let NodeConfigs::Single {
-            config: SingleConfig { debug_name, .. },
-            ..
-        } = &mut cfg
-        else {
-            panic!("Cannot name a tuple node.");
-        };
-        *debug_name = Some(name.as_ref().to_string());
+        match &mut cfg {
+            NodeConfigs::Single {
+                config: SingleConfig { debug_name, .. },
+                ..
+            } => {
+                *debug_name = Some(name.as_ref().to_string());
+            }
+            NodeConfigs::Multiple { configs, .. } => {
+                for (i, cfg) in configs.iter_mut().enumerate() {
+                    take_mut::take(cfg, |cfg| cfg.debug(format!("{}[{}]", name.as_ref(), i)));
+                }
+            }
+        }
         cfg
     }
     fn release(self, release: impl Send + 'static) -> NodeConfigs<'a> {
@@ -577,7 +582,7 @@ where
     X: AsNodes<'a>,
 {
     fn into_node_configs(self) -> NodeConfigs<'a> {
-        self.map_or_else(|| NodeConfigs::default(), |x| x.into_node_configs())
+        self.map_or_else(NodeConfigs::default, |x| x.into_node_configs())
     }
 }
 impl<'a> AsNodes<'a> for Command<'a, 'a> {
