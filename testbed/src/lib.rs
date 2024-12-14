@@ -19,6 +19,7 @@ pub struct Runtime {
     swapchain: Swapchain,
     display_texture: Tex2d<Vec4<f32>>,
     staging_texture: Tex2d<Vec3<f32>>,
+    overlay_texture: Tex2d<Vec4<f32>>,
     tonemap_display: Kernel<fn()>,
     pub mouse_scroll: Vec2<f32>,
     pub pressed_keys: HashSet<KeyCode>,
@@ -59,6 +60,9 @@ impl Runtime {
     }
     pub fn display(&self) -> &Tex2d<Vec3<f32>> {
         &self.staging_texture
+    }
+    pub fn overlay(&self) -> &Tex2d<Vec4<f32>> {
+        &self.overlay_texture
     }
 
     #[cfg(feature = "video")]
@@ -236,6 +240,7 @@ impl App {
             scale: 1,
             dpi_override: None,
             agx: None,
+            gamma: 2.2,
         }
     }
 }
@@ -246,6 +251,7 @@ pub struct AppBuilder {
     pub scale: u32,
     pub dpi_override: Option<f64>,
     pub agx: Option<Option<AgXParameters>>,
+    pub gamma: f32,
 }
 impl AppBuilder {
     pub fn scale(mut self, scale: u32) -> Self {
@@ -264,6 +270,10 @@ impl AppBuilder {
         self.agx = Some(Some(params));
         self
     }
+    pub fn gamma(mut self, gamma: f32) -> Self {
+        self.gamma = gamma;
+        self
+    }
     pub fn finish(self) -> App {
         self.init()
     }
@@ -279,6 +289,7 @@ impl AppBuilder {
             scale,
             dpi_override,
             agx,
+            gamma,
         } = self;
 
         let w = grid_size[0] * scale;
@@ -300,19 +311,23 @@ impl AppBuilder {
             DEVICE.create_swapchain(&window, &DEVICE.default_stream(), w, h, false, false, 3);
 
         let display_texture = DEVICE.create_tex2d::<Vec4<f32>>(swapchain.pixel_storage(), w, h, 1);
-        let staging_texture = DEVICE.create_tex2d::<Vec3<f32>>(PixelStorage::Float4, w, h, 1);
+        let overlay_texture = DEVICE.create_tex2d::<Vec4<f32>>(PixelStorage::Float4, w, h, 1);
+        let staging_texture =
+            DEVICE.create_tex2d::<Vec3<f32>>(PixelStorage::Float4, grid_size[0], grid_size[1], 1);
 
         let tonemap_display = DEVICE.create_kernel_async::<fn()>(&track!(|| {
             let value = staging_texture.read(dispatch_id().xy());
             let value = if let Some(params) = agx {
-                agx::agx_tonemap(value, params).powf(2.2_f32)
+                agx::agx_tonemap(value, params)
             } else {
-                value.powf(2.2_f32)
+                value.powf(1.0 / gamma)
             };
-            let value = value.extend(1.0);
             for i in 0..scale {
                 for j in 0..scale {
-                    display_texture.write(dispatch_id().xy() * scale + Vec2::expr(i, j), value);
+                    let pos = dispatch_id().xy() * scale + Vec2::expr(i, j);
+                    let overlay = overlay_texture.read(pos);
+                    display_texture.write(pos, value.lerp(overlay.xyz(), overlay.w).extend(1.0));
+                    overlay_texture.write(pos, Vec4::splat(0.0));
                 }
             }
             staging_texture.write(dispatch_id().xy(), Vec3::splat(0.0));
@@ -325,6 +340,7 @@ impl AppBuilder {
                 swapchain,
                 display_texture,
                 staging_texture,
+                overlay_texture,
                 tonemap_display,
                 pressed_keys: HashSet::new(),
                 just_pressed_keys: HashSet::new(),

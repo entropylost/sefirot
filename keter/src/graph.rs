@@ -202,6 +202,11 @@ impl<'a> ComputeGraph<'a> {
     }
 
     pub fn execute(&mut self) {
+        let sc = DEVICE.default_stream().scope();
+        self.execute_in(&sc);
+        sc.detach();
+    }
+    pub fn execute_blocking(&mut self) {
         self.execute_in(&DEVICE.default_stream().scope());
     }
 
@@ -547,6 +552,11 @@ pub trait AsNodes<'a>: Sized {
         let mut graph = ComputeGraph::new();
         graph.add(self);
         graph.execute();
+    }
+    fn execute_blocking(self) {
+        let mut graph = ComputeGraph::new();
+        graph.add(self);
+        graph.execute_blocking();
     }
     fn execute_in(self, scope: &Scope) {
         let mut graph = ComputeGraph::new();
