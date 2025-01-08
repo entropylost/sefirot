@@ -12,6 +12,7 @@ use crate::utils::FnRelease;
 
 pub mod copy;
 pub use copy::CopyExt;
+pub mod profile;
 
 pub fn dot_graph(compute: &ComputeGraph<'_>, graph: &DiGraphMap<NodeHandle, ()>) -> String {
     struct StrDbg(String);

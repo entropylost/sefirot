@@ -7,6 +7,7 @@ use luisa_compute::runtime::Device;
 pub use luisa_compute::*;
 
 pub mod graph;
+pub mod pixel_storage;
 pub mod utils;
 
 #[doc(hidden)]
@@ -19,11 +20,12 @@ pub static DEVICE: LazyLock<Device> = LazyLock::new(|| {
 });
 
 pub mod prelude {
+    pub use keter_macro::{track, tracked};
     pub use luisa_compute;
     pub use luisa_compute::prelude::*;
 
     pub use super::DEVICE;
     pub use crate::graph::{AsNodes, CopyExt};
-    pub use crate::utils::Singleton;
-    pub use keter_macro::{track, tracked};
+    pub use crate::pixel_storage::HasPixelStorage;
+    pub use crate::utils::{Angle, Singleton};
 }

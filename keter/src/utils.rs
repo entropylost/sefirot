@@ -1,7 +1,9 @@
 use std::ops::Deref;
 use std::sync::Arc;
 
+use luisa_compute::lang::types::vector::Vec2;
 use luisa_compute::lang::types::AtomicRef;
+use num_traits::Float;
 use parking_lot::Mutex;
 
 use crate::graph::NodeConfigs;
@@ -73,5 +75,36 @@ impl<V: Value> SingletonVar<V> {
     }
     pub fn atomic(&self) -> AtomicRef<V> {
         self.0.atomic_ref(0)
+    }
+}
+
+pub trait Angle {
+    type Output;
+    fn angle(self) -> Self::Output;
+}
+
+impl Angle for Vec2<f32> {
+    type Output = f32;
+    fn angle(self) -> f32 {
+        self.y.atan2(self.x)
+    }
+}
+impl Angle for Vec2<f16> {
+    type Output = f16;
+    fn angle(self) -> f16 {
+        Float::atan2(self.y, self.x)
+    }
+}
+
+impl Angle for Expr<Vec2<f32>> {
+    type Output = Expr<f32>;
+    fn angle(self) -> Expr<f32> {
+        self.y.atan2(self.x)
+    }
+}
+impl Angle for Expr<Vec2<f16>> {
+    type Output = Expr<f16>;
+    fn angle(self) -> Expr<f16> {
+        self.y.atan2(self.x)
     }
 }

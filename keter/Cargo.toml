@@ -11,6 +11,8 @@ tracing = { version = "0.1.40", optional = true }
 static_assertions = "1.1.0"
 keter_macro = { path = "../keter_macro" }
 take_mut = "0.2.2"
+num-traits = "0.2.19"
+indexmap = "2.7.0"
 
 [dependencies.luisa_compute]
 git = "https://github.com/entropylost/luisa-compute-rs"
