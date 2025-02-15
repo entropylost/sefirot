@@ -27,5 +27,5 @@ pub mod prelude {
     pub use super::DEVICE;
     pub use crate::graph::{AsNodes, CopyExt};
     pub use crate::pixel_storage::HasPixelStorage;
-    pub use crate::utils::{Angle, Singleton};
+    pub use crate::utils::{Angle, Direction, Singleton};
 }

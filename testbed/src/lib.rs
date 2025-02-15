@@ -27,6 +27,7 @@ pub struct Runtime {
     pub pressed_buttons: HashSet<MouseButton>,
     pub just_pressed_buttons: HashSet<MouseButton>,
     pub cursor_position: Vec2<f32>,
+    last_cursor_position: Vec2<f32>,
     pub tick: u32,
     pub average_frame_time: f32,
     pub scale: u32,
@@ -63,6 +64,15 @@ impl Runtime {
     }
     pub fn overlay(&self) -> &Tex2d<Vec4<f32>> {
         &self.overlay_texture
+    }
+    pub fn cursor_velocity(&self) -> Vec2<f32> {
+        if self.last_cursor_position == Vec2::splat(f32::NEG_INFINITY)
+            || self.cursor_position == Vec2::splat(f32::NEG_INFINITY)
+        {
+            Vec2::splat(0.0)
+        } else {
+            self.cursor_position - self.last_cursor_position
+        }
     }
 
     #[cfg(feature = "video")]
@@ -136,6 +146,7 @@ impl App {
                             runtime.cursor_position = Vec2::splat(f32::NEG_INFINITY);
                         }
                         WindowEvent::CursorMoved { position, .. } => {
+                            runtime.last_cursor_position = runtime.cursor_position;
                             runtime.cursor_position = Vec2::new(
                                 position.x as f32 / runtime.scale as f32,
                                 position.y as f32 / runtime.scale as f32,
@@ -346,7 +357,8 @@ impl AppBuilder {
                 just_pressed_keys: HashSet::new(),
                 pressed_buttons: HashSet::new(),
                 just_pressed_buttons: HashSet::new(),
-                cursor_position: Vec2::splat(0.0),
+                cursor_position: Vec2::splat(f32::NEG_INFINITY),
+                last_cursor_position: Vec2::splat(f32::NEG_INFINITY),
                 mouse_scroll: Vec2::splat(0.0),
                 tick: 0,
                 average_frame_time: 0.016,

@@ -108,3 +108,33 @@ impl Angle for Expr<Vec2<f16>> {
         self.y.atan2(self.x)
     }
 }
+
+pub trait Direction {
+    type Output;
+    fn direction(self) -> Self::Output;
+}
+
+impl Direction for f32 {
+    type Output = Vec2<f32>;
+    fn direction(self) -> Vec2<f32> {
+        Vec2::new(self.cos(), self.sin())
+    }
+}
+impl Direction for f16 {
+    type Output = Vec2<f16>;
+    fn direction(self) -> Vec2<f16> {
+        Vec2::new(Float::cos(self), Float::sin(self))
+    }
+}
+impl Direction for Expr<f32> {
+    type Output = Expr<Vec2<f32>>;
+    fn direction(self) -> Expr<Vec2<f32>> {
+        Vec2::expr(self.cos(), self.sin())
+    }
+}
+impl Direction for Expr<f16> {
+    type Output = Expr<Vec2<f16>>;
+    fn direction(self) -> Expr<Vec2<f16>> {
+        Vec2::expr(self.cos(), self.sin())
+    }
+}
