@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 keter = { path = "../keter" }
-winit = "0.29.15"
+winit = "0.30.9"
 ndarray = { version = "0.16.1", optional = true }
 video-rs = { version = "0.9.0", features = ["ndarray"], optional = true }
 
