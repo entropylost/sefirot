@@ -23,10 +23,10 @@ pub struct Runtime {
     overlay_texture: Tex2d<Vec4<f32>>,
     tonemap_display: Kernel<fn(Tex2d<Vec4<f32>>)>,
     pub mouse_scroll: Vec2<f32>,
-    pub pressed_keys: HashSet<KeyCode>,
-    pub just_pressed_keys: HashSet<KeyCode>,
-    pub pressed_buttons: HashSet<MouseButton>,
-    pub just_pressed_buttons: HashSet<MouseButton>,
+    pressed_keys: HashSet<KeyCode>,
+    just_pressed_keys: HashSet<KeyCode>,
+    pressed_buttons: HashSet<MouseButton>,
+    just_pressed_buttons: HashSet<MouseButton>,
     pub cursor_position: Vec2<f32>,
     last_cursor_position: Vec2<f32>,
     pub tick: u32,
@@ -54,15 +54,32 @@ impl Runtime {
     pub fn frame_time(&self) -> f64 {
         self.last_frame_time
     }
+    pub fn key_down(&self, key: KeyCode) -> bool {
+        self.pressed_keys.contains(&key)
+    }
+    pub fn key_pressed(&self, key: KeyCode) -> bool {
+        self.just_pressed_keys.contains(&key)
+    }
+    pub fn button_down(&self, button: MouseButton) -> bool {
+        self.pressed_buttons.contains(&button)
+    }
+    pub fn button_pressed(&self, button: MouseButton) -> bool {
+        self.just_pressed_buttons.contains(&button)
+    }
+
+    #[deprecated]
     pub fn pressed_key(&self, key: KeyCode) -> bool {
         self.pressed_keys.contains(&key)
     }
+    #[deprecated]
     pub fn just_pressed_key(&self, key: KeyCode) -> bool {
         self.just_pressed_keys.contains(&key)
     }
+    #[deprecated]
     pub fn pressed_button(&self, button: MouseButton) -> bool {
         self.pressed_buttons.contains(&button)
     }
+    #[deprecated]
     pub fn just_pressed_button(&self, button: MouseButton) -> bool {
         self.just_pressed_buttons.contains(&button)
     }
@@ -287,7 +304,7 @@ impl<F: FnMut(&mut Runtime, Scope)> ApplicationHandler for RunningApp<F> {
                         .add();
                 }
 
-                if runtime.pressed_key(KeyCode::Escape) {
+                if runtime.key_down(KeyCode::Escape) {
                     #[cfg(feature = "video")]
                     runtime.finish_recording();
                     event_loop.exit();
