@@ -11,7 +11,7 @@ fn main() {
             Vec3::expr(0.5 - (value * 2.0).cos() / 2.0, 0.0, value.sin()),
         );
     }));
-    app.run(|rt, scope| {
-        scope.submit([gradient_kernel.dispatch_async(rt.dispatch_size())]);
+    app.run(|rt| {
+        gradient_kernel.dispatch(rt.dispatch_size());
     });
 }

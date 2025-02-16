@@ -36,6 +36,7 @@ pub struct Runtime {
     pub scale: u32,
     resize_time: Option<Instant>,
     resize: bool,
+    just_resized: bool,
     grid_size: [u32; 2],
     #[cfg(feature = "video")]
     pub encoder: Option<(video_rs::Encoder, video_rs::Time)>,
@@ -92,6 +93,9 @@ impl Runtime {
     pub fn overlay(&self) -> &Tex2d<Vec4<f32>> {
         &self.overlay_texture
     }
+    pub fn set_pixel(&self, pos: Expr<Vec2<i32>>, color: Expr<Vec3<f32>>) {
+        self.staging_texture.write(pos.cast_u32(), color);
+    }
     pub fn cursor_velocity(&self) -> Vec2<f32> {
         if self.last_cursor_position == Vec2::splat(f32::NEG_INFINITY)
             || self.cursor_position == Vec2::splat(f32::NEG_INFINITY)
@@ -118,6 +122,10 @@ impl Runtime {
             self.grid_size[0] * self.scale,
             self.grid_size[1] * self.scale,
         ]
+    }
+    // Returns true if the window was resized (or during the first frame).
+    pub fn resized(&self) -> bool {
+        self.just_resized
     }
 
     #[cfg(feature = "video")]
@@ -157,12 +165,12 @@ impl Runtime {
     }
 }
 
-struct RunningApp<F: FnMut(&mut Runtime, Scope)> {
+struct RunningApp<F: FnMut(&mut Runtime)> {
     runtime: Runtime,
     window: Window,
     update_fn: F,
 }
-impl<F: FnMut(&mut Runtime, Scope)> ApplicationHandler for RunningApp<F> {
+impl<F: FnMut(&mut Runtime)> ApplicationHandler for RunningApp<F> {
     fn resumed(&mut self, _event_loop: &ActiveEventLoop) {}
     fn window_event(
         &mut self,
@@ -241,14 +249,17 @@ impl<F: FnMut(&mut Runtime, Scope)> ApplicationHandler for RunningApp<F> {
                     &runtime.display_texture,
                 )]);
                 scope.present(&runtime.swapchain, &runtime.display_texture);
+                scope.detach();
                 let start = Instant::now();
                 runtime.last_frame_time = (start - runtime.last_frame_start_time).as_secs_f64();
                 runtime.last_frame_start_time = start;
-                (self.update_fn)(runtime, scope);
+                (self.update_fn)(runtime);
+                DEVICE.default_stream().scope().synchronize();
                 let delta = start.elapsed().as_secs_f64();
                 runtime.average_frame_time = runtime.average_frame_time * 0.99 + delta * 0.01;
                 runtime.last_frame_time = delta;
                 runtime.tick += 1;
+                runtime.just_resized = false;
 
                 if runtime
                     .resize_time
@@ -274,6 +285,7 @@ impl<F: FnMut(&mut Runtime, Scope)> ApplicationHandler for RunningApp<F> {
                     runtime.swapchain = swapchain;
                     runtime.display_texture = display_texture;
                     runtime.grid_size = [size.width / runtime.scale, size.height / runtime.scale];
+                    runtime.just_resized = true;
                     println!("Resized to {:?}", runtime.grid_size);
                 }
 
@@ -335,7 +347,7 @@ impl DerefMut for App {
 }
 
 impl App {
-    pub fn run(self, update: impl FnMut(&mut Runtime, Scope)) {
+    pub fn run(self, update: impl FnMut(&mut Runtime)) {
         self.event_loop.set_control_flow(ControlFlow::Poll);
         self.event_loop
             .run_app(&mut RunningApp {
@@ -489,6 +501,7 @@ impl AppBuilder {
                 grid_size,
                 resize_time: None,
                 resize,
+                just_resized: resize,
                 #[cfg(feature = "video")]
                 encoder: None,
             },
