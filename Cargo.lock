@@ -1441,6 +1441,7 @@ version = "0.1.0"
 dependencies = [
  "keter",
  "ndarray",
+ "take_mut",
  "video-rs",
  "winit",
 ]

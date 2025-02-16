@@ -13,6 +13,7 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 pub use winit::keyboard::KeyCode;
 use winit::keyboard::PhysicalKey;
 use winit::window::{Window, WindowId};
+use take_mut::take;
 
 pub mod agx;
 
@@ -267,26 +268,32 @@ impl<F: FnMut(&mut Runtime)> ApplicationHandler for RunningApp<F> {
                 {
                     runtime.resize_time = None;
                     let size = window.inner_size();
-                    let swapchain = DEVICE.create_swapchain(
-                        window,
-                        &DEVICE.default_stream(),
-                        size.width,
-                        size.height,
-                        false,
-                        false,
-                        3,
-                    );
+                    // Windows does not allow multiple swapchains.
+                    // It also recreates the actual swapchain and auto-stretches the texture for some reason.
+                    take(&mut runtime.swapchain, |swapchain| {
+                        drop(swapchain);
+
+                        DEVICE.create_swapchain(
+                            window,
+                            &DEVICE.default_stream(),
+                            size.width,
+                            size.height,
+                            false,
+                            false,
+                            3,
+                        )
+                    });
                     let display_texture = DEVICE.create_tex2d::<Vec4<f32>>(
-                        swapchain.pixel_storage(),
+                        runtime.swapchain.pixel_storage(),
                         size.width,
                         size.height,
                         1,
                     );
-                    runtime.swapchain = swapchain;
+                    // runtime.swapchain = swapchain;
                     runtime.display_texture = display_texture;
                     runtime.grid_size = [size.width / runtime.scale, size.height / runtime.scale];
-                    runtime.just_resized = true;
-                    println!("Resized to {:?}", runtime.grid_size);
+                    // runtime.just_resized = true;
+                    // println!("Resized to {:?}", runtime.grid_size);
                 }
 
                 runtime.just_pressed_keys.clear();
