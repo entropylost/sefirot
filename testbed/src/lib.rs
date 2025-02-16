@@ -289,11 +289,10 @@ impl<F: FnMut(&mut Runtime)> ApplicationHandler for RunningApp<F> {
                         size.height,
                         1,
                     );
-                    // runtime.swapchain = swapchain;
                     runtime.display_texture = display_texture;
                     runtime.grid_size = [size.width / runtime.scale, size.height / runtime.scale];
-                    // runtime.just_resized = true;
-                    // println!("Resized to {:?}", runtime.grid_size);
+                    runtime.just_resized = true;
+                    println!("Resized to {:?}", runtime.grid_size);
                 }
 
                 runtime.just_pressed_keys.clear();
