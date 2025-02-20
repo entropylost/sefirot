@@ -379,6 +379,7 @@ impl App {
             agx: None,
             gamma: 2.2,
             resize: false,
+            hide_cursor: false,
         }
     }
 }
@@ -390,6 +391,7 @@ pub struct AppBuilder {
     pub agx: Option<Option<AgXParameters>>,
     pub gamma: f32,
     pub resize: bool,
+    pub hide_cursor: bool,
 }
 impl AppBuilder {
     pub fn scale(mut self, scale: u32) -> Self {
@@ -412,6 +414,10 @@ impl AppBuilder {
         self.resize = true;
         self
     }
+    pub fn hide_cursor(mut self) -> Self {
+        self.hide_cursor = true;
+        self
+    }
     pub fn finish(self) -> App {
         self.init()
     }
@@ -428,6 +434,7 @@ impl AppBuilder {
             agx,
             gamma,
             resize,
+            hide_cursor,
         } = self;
 
         let w = grid_size[0] * scale;
@@ -456,7 +463,14 @@ impl AppBuilder {
         let dpi_diff = dpi / window.scale_factor();
         let _ =
             window.request_inner_size(PhysicalSize::new(w / dpi_diff as u32, h / dpi_diff as u32));
-        window.set_cursor_visible(false);
+        if hide_cursor {
+            window.set_cursor_visible(false);
+        }
+
+        if !resize {
+            max_w = w;
+            max_h = h;
+        }
 
         let swapchain =
             DEVICE.create_swapchain(&window, &DEVICE.default_stream(), w, h, false, false, 3);
