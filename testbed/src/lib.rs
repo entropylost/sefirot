@@ -5,6 +5,7 @@ use std::time::Instant;
 use agx::AgXParameters;
 use keter::lang::types::vector::{Vec2, Vec3, Vec4};
 use keter::prelude::*;
+use take_mut::take;
 use winit::application::ApplicationHandler;
 use winit::dpi::{PhysicalSize, Size};
 pub use winit::event::MouseButton;
@@ -13,7 +14,6 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 pub use winit::keyboard::KeyCode;
 use winit::keyboard::PhysicalKey;
 use winit::window::{Window, WindowId};
-use take_mut::take;
 
 pub mod agx;
 
@@ -39,6 +39,7 @@ pub struct Runtime {
     resize: bool,
     just_resized: bool,
     grid_size: [u32; 2],
+    exiting: bool,
     #[cfg(feature = "video")]
     pub encoder: Option<(video_rs::Encoder, video_rs::Time)>,
 }
@@ -129,6 +130,10 @@ impl Runtime {
         self.just_resized
     }
 
+    pub fn exit(&mut self) {
+        self.exiting = true;
+    }
+
     #[cfg(feature = "video")]
     pub fn finish_recording(&mut self) {
         if let Some((mut encoder, _)) = self.encoder.take() {
@@ -186,6 +191,8 @@ impl<F: FnMut(&mut Runtime)> ApplicationHandler for RunningApp<F> {
         let runtime = &mut self.runtime;
         match event {
             WindowEvent::CloseRequested => {
+                #[cfg(feature = "video")]
+                runtime.finish_recording();
                 event_loop.exit();
             }
             WindowEvent::CursorLeft { .. } => {
@@ -322,7 +329,7 @@ impl<F: FnMut(&mut Runtime)> ApplicationHandler for RunningApp<F> {
                         .add();
                 }
 
-                if runtime.key_down(KeyCode::Escape) {
+                if runtime.exiting {
                     #[cfg(feature = "video")]
                     runtime.finish_recording();
                     event_loop.exit();
@@ -449,6 +456,7 @@ impl AppBuilder {
         let dpi_diff = dpi / window.scale_factor();
         let _ =
             window.request_inner_size(PhysicalSize::new(w / dpi_diff as u32, h / dpi_diff as u32));
+        window.set_cursor_visible(false);
 
         let swapchain =
             DEVICE.create_swapchain(&window, &DEVICE.default_stream(), w, h, false, false, 3);
@@ -508,6 +516,7 @@ impl AppBuilder {
                 resize_time: None,
                 resize,
                 just_resized: resize,
+                exiting: false,
                 #[cfg(feature = "video")]
                 encoder: None,
             },
