@@ -7,7 +7,7 @@ use keter::lang::types::vector::{Vec2, Vec3, Vec4};
 use keter::prelude::*;
 use take_mut::take;
 use winit::application::ApplicationHandler;
-use winit::dpi::{PhysicalSize, Size};
+use winit::dpi::{LogicalSize, PhysicalSize, Size};
 pub use winit::event::MouseButton;
 use winit::event::{ElementState, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
@@ -380,6 +380,7 @@ impl App {
             gamma: 2.2,
             resize: false,
             hide_cursor: false,
+            adjust_dpi: false,
         }
     }
 }
@@ -392,6 +393,7 @@ pub struct AppBuilder {
     pub gamma: f32,
     pub resize: bool,
     pub hide_cursor: bool,
+    pub adjust_dpi: bool,
 }
 impl AppBuilder {
     pub fn scale(mut self, scale: u32) -> Self {
@@ -418,6 +420,10 @@ impl AppBuilder {
         self.hide_cursor = true;
         self
     }
+    pub fn adjust_dpi(mut self) -> Self {
+        self.adjust_dpi = true;
+        self
+    }
     pub fn finish(self) -> App {
         self.init()
     }
@@ -430,21 +436,26 @@ impl AppBuilder {
         let AppBuilder {
             name,
             grid_size,
-            scale,
+            mut scale,
             agx,
             gamma,
             resize,
             hide_cursor,
+            adjust_dpi,
         } = self;
 
-        let w = grid_size[0] * scale;
-        let h = grid_size[1] * scale;
+        let mut w = grid_size[0] * scale;
+        let mut h = grid_size[1] * scale;
 
         let event_loop = EventLoop::new().unwrap();
         let window = Window::default_attributes()
             .with_title(name)
             .with_resizable(resize)
-            .with_inner_size(PhysicalSize::new(w, h))
+            .with_inner_size(if adjust_dpi {
+                Size::Logical(LogicalSize::new(w as f64, h as f64))
+            } else {
+                Size::Physical(PhysicalSize::new(w, h))
+            })
             .with_resize_increments(Size::Physical(PhysicalSize::new(scale, scale)));
         #[expect(deprecated)]
         // Safe since we aren't on android.
@@ -459,6 +470,11 @@ impl AppBuilder {
             max_w = max_w.max(size.width);
             max_h = max_h.max(size.height);
             dpi = dpi.max(monitor.scale_factor());
+        }
+        if adjust_dpi {
+            scale = (scale as f64 * dpi) as u32;
+            w = grid_size[0] * scale;
+            h = grid_size[1] * scale;
         }
         let dpi_diff = dpi / window.scale_factor();
         let _ =
