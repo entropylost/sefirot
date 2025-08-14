@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 use std::ops::Deref;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::LazyLock;
 
 use luisa_compute::prelude::*;
@@ -144,10 +145,10 @@ impl<T: Value> AsKernelArg for BufferHandle<T> {
 
 pub struct Bindless {
     pub array: BindlessArray,
-    next_tex2d: u32,
-    next_tex3d: u32,
-    next_buffer: u32,
-    needs_update: bool,
+    next_tex2d: AtomicU32,
+    next_tex3d: AtomicU32,
+    next_buffer: AtomicU32,
+    needs_update: AtomicBool,
     device: Device,
 }
 pub struct BindlessVar {
@@ -157,54 +158,43 @@ impl Bindless {
     pub fn new(array: BindlessArray, array_device: Device) -> Self {
         Self {
             array,
-            next_tex2d: 0,
-            next_tex3d: 0,
-            next_buffer: 0,
-            needs_update: false,
+            next_tex2d: 0.into(),
+            next_tex3d: 0.into(),
+            next_buffer: 0.into(),
+            needs_update: false.into(),
             device: array_device,
         }
     }
-    pub fn push_tex2d<T: IoTexel>(
-        &mut self,
-        texture: Tex2d<T>,
-        sampler: Sampler,
-    ) -> Tex2dHandle<T> {
-        let index = self.next_tex2d;
+    pub fn push_tex2d<T: IoTexel>(&self, texture: Tex2d<T>, sampler: Sampler) -> Tex2dHandle<T> {
+        let index = self.next_tex2d.fetch_add(1, Ordering::Relaxed);
+        self.needs_update.store(true, Ordering::Relaxed);
         self.array
             .emplace_tex2d_async(index as usize, &texture, sampler);
-        self.next_tex2d += 1;
-        self.needs_update = true;
         Tex2dHandle {
             index,
             texture,
             sampler,
         }
     }
-    pub fn push_tex3d<T: IoTexel>(
-        &mut self,
-        texture: Tex3d<T>,
-        sampler: Sampler,
-    ) -> Tex3dHandle<T> {
-        let index = self.next_tex3d;
+    pub fn push_tex3d<T: IoTexel>(&self, texture: Tex3d<T>, sampler: Sampler) -> Tex3dHandle<T> {
+        let index = self.next_tex3d.fetch_add(1, Ordering::Relaxed);
+        self.needs_update.store(true, Ordering::Relaxed);
         self.array
             .emplace_tex3d_async(index as usize, &texture, sampler);
-        self.next_tex3d += 1;
-        self.needs_update = true;
         Tex3dHandle {
             index,
             texture,
             sampler,
         }
     }
-    pub fn push_buffer<T: Value>(&mut self, buffer: Buffer<T>) -> BufferHandle<T> {
-        let index = self.next_buffer;
+    pub fn push_buffer<T: Value>(&self, buffer: Buffer<T>) -> BufferHandle<T> {
+        let index = self.next_buffer.fetch_add(1, Ordering::Relaxed);
+        self.needs_update.store(true, Ordering::Relaxed);
         self.array.emplace_buffer_async(index as usize, &buffer);
-        self.next_buffer += 1;
-        self.needs_update = true;
         BufferHandle { index, buffer }
     }
     pub fn create_tex2d<T: IoTexel>(
-        &mut self,
+        &self,
         storage: PixelStorage,
         width: u32,
         height: u32,
@@ -215,7 +205,7 @@ impl Bindless {
         self.push_tex2d(texture, sampler)
     }
     pub fn create_tex3d<T: IoTexel>(
-        &mut self,
+        &self,
         storage: PixelStorage,
         width: u32,
         height: u32,
@@ -228,16 +218,16 @@ impl Bindless {
             .create_tex3d(storage, width, height, depth, mips);
         self.push_tex3d(texture, sampler)
     }
-    pub fn create_buffer<T: Value>(&mut self, count: usize) -> BufferHandle<T> {
+    pub fn create_buffer<T: Value>(&self, count: usize) -> BufferHandle<T> {
         let buffer = self.device.create_buffer(count);
         self.push_buffer(buffer)
     }
-    pub fn create_buffer_from_slice<T: Value>(&mut self, slice: &[T]) -> BufferHandle<T> {
+    pub fn create_buffer_from_slice<T: Value>(&self, slice: &[T]) -> BufferHandle<T> {
         let buffer = self.device.create_buffer_from_slice(slice);
         self.push_buffer(buffer)
     }
     pub fn create_buffer_from_fn<T: Value, F: FnMut(usize) -> T>(
-        &mut self,
+        &self,
         count: usize,
         f: F,
     ) -> BufferHandle<T> {
@@ -257,7 +247,7 @@ impl KernelArg for Bindless {
     type Parameter = BindlessVar;
     fn encode(&self, encoder: &mut KernelArgEncoder) {
         debug_assert!(
-            !self.needs_update,
+            !self.needs_update.load(Ordering::Relaxed),
             "Bindless array needs update before encoding"
         );
         self.array.encode(encoder);
