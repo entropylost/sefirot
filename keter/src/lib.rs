@@ -6,6 +6,7 @@ use std::sync::LazyLock;
 use luisa_compute::runtime::Device;
 pub use luisa_compute::*;
 
+pub mod bindless;
 pub mod graph;
 pub mod pixel_storage;
 pub mod utils;

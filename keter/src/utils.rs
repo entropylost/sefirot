@@ -39,8 +39,8 @@ impl<V: Value> Deref for Singleton<V> {
 }
 impl<V: Value> Singleton<V> {
     #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
-        Self(DEVICE.create_buffer::<V>(1))
+    pub fn new(value: V) -> Self {
+        Self(DEVICE.create_buffer_from_slice(&[value]))
     }
     pub fn write_host(&self, value: V) -> NodeConfigs<'static>
     where

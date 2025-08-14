@@ -643,7 +643,7 @@ impl<'a> AsNodes<'a> for String {
         }
     }
 }
-impl<'a, 'b> AsNodes<'a> for &'b str {
+impl<'a> AsNodes<'a> for &str {
     fn into_node_configs(self) -> NodeConfigs<'a> {
         NodeConfigs::Single {
             config: SingleConfig {

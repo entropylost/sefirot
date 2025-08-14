@@ -16,6 +16,8 @@ use winit::keyboard::PhysicalKey;
 use winit::window::{Window, WindowId};
 
 pub mod agx;
+pub mod color;
+pub mod utils;
 
 pub struct Runtime {
     swapchain: Swapchain,
@@ -24,10 +26,10 @@ pub struct Runtime {
     overlay_texture: Tex2d<Vec4<f32>>,
     tonemap_display: Kernel<fn(Tex2d<Vec4<f32>>)>,
     pub mouse_scroll: Vec2<f32>,
-    pressed_keys: HashSet<KeyCode>,
-    just_pressed_keys: HashSet<KeyCode>,
-    pressed_buttons: HashSet<MouseButton>,
-    just_pressed_buttons: HashSet<MouseButton>,
+    pub keys_down: HashSet<KeyCode>,
+    pub keys_pressed: HashSet<KeyCode>,
+    pub buttons_down: HashSet<MouseButton>,
+    pub buttons_pressed: HashSet<MouseButton>,
     pub cursor_position: Vec2<f32>,
     last_cursor_position: Vec2<f32>,
     pub tick: u32,
@@ -54,37 +56,39 @@ impl Runtime {
         }
     }
     // Time of the last frame in seconds.
-    pub fn frame_time(&self) -> f64 {
+    pub fn frame_time_f64(&self) -> f64 {
         self.last_frame_time
     }
+    pub fn frame_time(&self) -> f32 {
+        self.last_frame_time as f32
+    }
     pub fn key_down(&self, key: KeyCode) -> bool {
-        self.pressed_keys.contains(&key)
+        self.keys_down.contains(&key)
     }
     pub fn key_pressed(&self, key: KeyCode) -> bool {
-        self.just_pressed_keys.contains(&key)
+        self.keys_pressed.contains(&key)
     }
     pub fn button_down(&self, button: MouseButton) -> bool {
-        self.pressed_buttons.contains(&button)
+        self.buttons_down.contains(&button)
     }
     pub fn button_pressed(&self, button: MouseButton) -> bool {
-        self.just_pressed_buttons.contains(&button)
+        self.buttons_pressed.contains(&button)
     }
-
     #[deprecated]
     pub fn pressed_key(&self, key: KeyCode) -> bool {
-        self.pressed_keys.contains(&key)
+        self.keys_down.contains(&key)
     }
     #[deprecated]
     pub fn just_pressed_key(&self, key: KeyCode) -> bool {
-        self.just_pressed_keys.contains(&key)
+        self.keys_pressed.contains(&key)
     }
     #[deprecated]
     pub fn pressed_button(&self, button: MouseButton) -> bool {
-        self.pressed_buttons.contains(&button)
+        self.buttons_down.contains(&button)
     }
     #[deprecated]
     pub fn just_pressed_button(&self, button: MouseButton) -> bool {
-        self.just_pressed_buttons.contains(&button)
+        self.buttons_pressed.contains(&button)
     }
     pub fn final_display(&self) -> &Tex2d<Vec4<f32>> {
         &self.display_texture
@@ -148,10 +152,14 @@ impl Runtime {
         if self.encoder.is_some() {
             self.finish_recording();
         }
-        let settings = video_rs::encode::Settings::preset_h264_yuv420p(
+        let settings = video_rs::encode::Settings::preset_h264_custom(
             self.display_texture.width() as usize,
             self.display_texture.height() as usize,
-            realtime,
+            video_rs::frame::PixelFormat::YUV420P,
+            video_rs::Options::from(std::collections::HashMap::from([
+                ("preset".to_string(), "veryslow".to_string()),
+                ("crf".to_string(), "0".to_string()),
+            ])),
         );
         let path = path.map_or_else(
             || {
@@ -207,11 +215,11 @@ impl<F: FnMut(&mut Runtime)> ApplicationHandler for RunningApp<F> {
             }
             WindowEvent::MouseInput { button, state, .. } => match state {
                 ElementState::Pressed => {
-                    runtime.pressed_buttons.insert(button);
-                    runtime.just_pressed_buttons.insert(button);
+                    runtime.buttons_down.insert(button);
+                    runtime.buttons_pressed.insert(button);
                 }
                 ElementState::Released => {
-                    runtime.pressed_buttons.remove(&button);
+                    runtime.buttons_down.remove(&button);
                 }
             },
             WindowEvent::KeyboardInput { event, .. } => {
@@ -220,11 +228,11 @@ impl<F: FnMut(&mut Runtime)> ApplicationHandler for RunningApp<F> {
                 };
                 match event.state {
                     ElementState::Pressed => {
-                        runtime.pressed_keys.insert(key);
-                        runtime.just_pressed_keys.insert(key);
+                        runtime.keys_down.insert(key);
+                        runtime.keys_pressed.insert(key);
                     }
                     ElementState::Released => {
-                        runtime.pressed_keys.remove(&key);
+                        runtime.keys_down.remove(&key);
                     }
                 }
             }
@@ -302,8 +310,8 @@ impl<F: FnMut(&mut Runtime)> ApplicationHandler for RunningApp<F> {
                     println!("Resized to {:?}", runtime.grid_size);
                 }
 
-                runtime.just_pressed_keys.clear();
-                runtime.just_pressed_buttons.clear();
+                runtime.keys_pressed.clear();
+                runtime.buttons_pressed.clear();
                 runtime.mouse_scroll = Vec2::splat(0.0);
 
                 #[cfg(feature = "video")]
@@ -381,6 +389,7 @@ impl App {
             resize: false,
             hide_cursor: false,
             adjust_dpi: false,
+            dither: None,
         }
     }
 }
@@ -394,6 +403,7 @@ pub struct AppBuilder {
     pub resize: bool,
     pub hide_cursor: bool,
     pub adjust_dpi: bool,
+    pub dither: Option<u32>,
 }
 impl AppBuilder {
     pub fn scale(mut self, scale: u32) -> Self {
@@ -427,6 +437,10 @@ impl AppBuilder {
     pub fn finish(self) -> App {
         self.init()
     }
+    pub fn dither(mut self, bayer_size: u32) -> Self {
+        self.dither = Some(bayer_size);
+        self
+    }
     pub fn init(self) -> App {
         keter::init_logger();
 
@@ -442,6 +456,7 @@ impl AppBuilder {
             resize,
             hide_cursor,
             adjust_dpi,
+            dither,
         } = self;
 
         let mut w = grid_size[0] * scale;
@@ -501,6 +516,18 @@ impl AppBuilder {
             1,
         );
 
+        let bayer_matrix = dither.map(|n| {
+            let buffer = DEVICE.create_buffer_from_slice(
+                &utils::bayer(n as usize)
+                    .into_iter()
+                    .map(|x| (x as f32 / (n * n) as f32 - 0.5) / 256.0)
+                    .collect::<Vec<_>>(),
+            );
+            let view = buffer.view(..);
+            std::mem::forget(buffer);
+            (n, view)
+        });
+
         let tonemap_display =
             DEVICE.create_kernel_async::<fn(Tex2d<Vec4<f32>>)>(&track!(|display_texture| {
                 let value = staging_texture.read(dispatch_id().xy());
@@ -513,8 +540,16 @@ impl AppBuilder {
                     for j in 0..scale {
                         let pos = dispatch_id().xy() * scale + Vec2::expr(i, j);
                         let overlay = overlay_texture.read(pos);
-                        display_texture
-                            .write(pos, value.lerp(overlay.xyz(), overlay.w).extend(1.0));
+                        let value = value.lerp(overlay.xyz(), overlay.w);
+                        let value = if let Some((n, bayer_matrix)) = &bayer_matrix {
+                            let pos = pos / 2;
+                            let pos = pos % n;
+                            let index = pos.x + pos.y * n;
+                            value + bayer_matrix.read(index)
+                        } else {
+                            value
+                        };
+                        display_texture.write(pos, value.extend(1.0));
                         overlay_texture.write(pos, Vec4::splat(0.0));
                     }
                 }
@@ -530,10 +565,10 @@ impl AppBuilder {
                 staging_texture,
                 overlay_texture,
                 tonemap_display,
-                pressed_keys: HashSet::new(),
-                just_pressed_keys: HashSet::new(),
-                pressed_buttons: HashSet::new(),
-                just_pressed_buttons: HashSet::new(),
+                keys_down: HashSet::new(),
+                keys_pressed: HashSet::new(),
+                buttons_down: HashSet::new(),
+                buttons_pressed: HashSet::new(),
                 cursor_position: Vec2::splat(f32::NEG_INFINITY),
                 last_cursor_position: Vec2::splat(f32::NEG_INFINITY),
                 mouse_scroll: Vec2::splat(0.0),

@@ -124,7 +124,7 @@ impl Profiler {
                     total_timing += *timing;
                 }
             }
-            report.push_str(&format!("\n{}: {}", section, total_timing));
+            report.push_str(&format!("\n{section}: {total_timing}"));
             if display_subsections {
                 for (name, timing) in &timings {
                     if let Some(name) = name.strip_prefix(section) {
@@ -132,7 +132,7 @@ impl Profiler {
                         if name.is_empty() {
                             continue;
                         }
-                        report.push_str(&format!("\n  {}: {}", name, timing));
+                        report.push_str(&format!("\n  {name}: {timing}"));
                     }
                 }
             }
