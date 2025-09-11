@@ -138,3 +138,77 @@ impl Direction for Expr<f16> {
         Vec2::expr(self.cos(), self.sin())
     }
 }
+
+#[derive(Debug, BindGroup)]
+pub struct Buffer2d<V: Value> {
+    buffer: Buffer<V>,
+    size: Vec2<u32>,
+}
+impl<V: Value> Buffer2d<V> {
+    pub fn new(device: &Device, size: impl Into<Vec2<u32>>) -> Self {
+        let size = size.into();
+        let buffer = device.create_buffer::<V>(size.x as usize * size.y as usize);
+        Self { buffer, size }
+    }
+    pub fn width(&self) -> u32 {
+        self.size.x
+    }
+    pub fn height(&self) -> u32 {
+        self.size.y
+    }
+    pub fn size(&self) -> Vec2<u32> {
+        self.size
+    }
+    pub fn buffer(&self) -> &Buffer<V> {
+        &self.buffer
+    }
+    pub fn var(&self) -> Buffer2dVar<V> {
+        Buffer2dVar {
+            buffer: self.buffer.var(),
+            size: self.size.expr(),
+        }
+    }
+}
+impl<V: Value> Buffer2dVar<V> {
+    pub fn buffer(&self) -> &BufferVar<V> {
+        &self.buffer
+    }
+    pub fn size(&self) -> Expr<Vec2<u32>> {
+        self.size
+    }
+    #[luisa_compute::prelude::tracked]
+    pub fn index(&self, coord: impl AsExpr<Value = Vec2<u32>>) -> Expr<u32> {
+        let coord = coord.as_expr();
+        coord.x * self.size.y.as_expr() + coord.y
+    }
+    #[luisa_compute::prelude::tracked]
+    pub fn index_wrapping(&self, coord: impl AsExpr<Value = Vec2<i32>>) -> Expr<u32> {
+        let coord = coord.as_expr();
+        let size = self.size.as_expr().cast::<i32>();
+        let wrapped_coord = coord.rem_euclid(size).cast_u32();
+        wrapped_coord.x * self.size.y.as_expr() + wrapped_coord.y
+    }
+    pub fn read(&self, coord: impl AsExpr<Value = Vec2<u32>>) -> Expr<V> {
+        self.buffer.read(self.index(coord))
+    }
+    pub fn read_wrapping(&self, coord: impl AsExpr<Value = Vec2<i32>>) -> Expr<V> {
+        self.buffer.read(self.index_wrapping(coord))
+    }
+    pub fn write(&self, coord: impl AsExpr<Value = Vec2<u32>>, value: impl AsExpr<Value = V>) {
+        self.buffer.write(self.index(coord), value.as_expr());
+    }
+    pub fn write_wrapping(
+        &self,
+        coord: impl AsExpr<Value = Vec2<i32>>,
+        value: impl AsExpr<Value = V>,
+    ) {
+        self.buffer
+            .write(self.index_wrapping(coord), value.as_expr());
+    }
+    pub fn atomic(&self, coord: impl AsExpr<Value = Vec2<u32>>) -> AtomicRef<V> {
+        self.buffer.atomic_ref(self.index(coord))
+    }
+    pub fn atomic_wrapping(&self, coord: impl AsExpr<Value = Vec2<i32>>) -> AtomicRef<V> {
+        self.buffer.atomic_ref(self.index_wrapping(coord))
+    }
+}

@@ -152,15 +152,23 @@ impl Runtime {
         if self.encoder.is_some() {
             self.finish_recording();
         }
-        let settings = video_rs::encode::Settings::preset_h264_custom(
-            self.display_texture.width() as usize,
-            self.display_texture.height() as usize,
-            video_rs::frame::PixelFormat::YUV420P,
-            video_rs::Options::from(std::collections::HashMap::from([
-                ("preset".to_string(), "veryslow".to_string()),
-                ("crf".to_string(), "0".to_string()),
-            ])),
-        );
+        let settings = if realtime {
+            video_rs::encode::Settings::preset_h264_yuv420p(
+                self.display_texture.width() as usize,
+                self.display_texture.height() as usize,
+                true,
+            )
+        } else {
+            video_rs::encode::Settings::preset_h264_custom(
+                self.display_texture.width() as usize,
+                self.display_texture.height() as usize,
+                video_rs::frame::PixelFormat::YUV420P,
+                video_rs::Options::from(std::collections::HashMap::from([
+                    ("preset".to_string(), "veryslow".to_string()),
+                    ("crf".to_string(), "0".to_string()),
+                ])),
+            )
+        };
         let path = path.map_or_else(
             || {
                 std::path::Path::new(&format!(
