@@ -14,10 +14,7 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 pub use winit::keyboard::KeyCode;
 use winit::keyboard::PhysicalKey;
 use winit::window::{Window, WindowId};
-
-pub mod agx;
-pub mod color;
-pub mod utils;
+use yesod::agx;
 
 pub struct Runtime {
     swapchain: Swapchain,
@@ -51,7 +48,7 @@ impl Runtime {
         1.0 / self.average_frame_time as f32
     }
     pub fn log_fps(&self) {
-        if self.tick % 60 == 0 {
+        if self.tick.is_multiple_of(60) {
             println!("FPS: {:.2}", self.fps());
         }
     }
@@ -526,7 +523,7 @@ impl AppBuilder {
 
         let bayer_matrix = dither.map(|n| {
             let buffer = DEVICE.create_buffer_from_slice(
-                &utils::bayer(n as usize)
+                &yesod::dither::bayer2(n)
                     .into_iter()
                     .map(|x| (x as f32 / (n * n) as f32 - 0.5) / 256.0)
                     .collect::<Vec<_>>(),

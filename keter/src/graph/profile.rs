@@ -16,6 +16,7 @@ pub struct Timing {
     pub variance: f64,
     pub max: f64,
     pub min: f64,
+    pub count: usize,
 }
 impl Default for Timing {
     fn default() -> Self {
@@ -24,6 +25,7 @@ impl Default for Timing {
             variance: 0.0,
             max: 0.0,
             min: 0.0,
+            count: 0,
         }
     }
 }
@@ -52,6 +54,7 @@ impl Add<Timing> for Timing {
             variance: self.variance + rhs.variance,
             max: self.max + rhs.max,
             min: self.min + rhs.min,
+            count: self.count + rhs.count,
         }
     }
 }
@@ -83,9 +86,7 @@ impl Profiler {
     pub fn reset(&mut self) {
         self.total_time = 0.0;
         self.total_frames = 0;
-        for (_, times) in self.timings.iter_mut() {
-            times.clear();
-        }
+        self.timings.clear();
     }
     pub fn timings(&self) -> Vec<(String, Timing)> {
         self.timings
@@ -103,6 +104,7 @@ impl Profiler {
                         variance,
                         max,
                         min,
+                        count: timings.len(),
                     },
                 )
             })
@@ -123,6 +125,9 @@ impl Profiler {
                 if name.starts_with(section) {
                     total_timing += *timing;
                 }
+            }
+            if total_timing.count == 0 {
+                continue;
             }
             report.push_str(&format!("\n{section}: {total_timing}"));
             if display_subsections {

@@ -1,0 +1,16 @@
+[package]
+name = "yesod"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+keter = { path = "../keter", features = ["glam"] }
+colorous = "1.0.16"
+nalgebra = "0.34.1"
+glam = "0.30.0"
+winit = "0.30.9"
+fragile = { version = "2.0.1", optional = true }
+take_mut = { version = "0.2.2", optional = true }
+
+[features]
+global-print = ["dep:fragile", "dep:take_mut"]

@@ -9,7 +9,7 @@ members = [
     "cuda_device_sys",
     "testbed",
     "keter",
-    "keter_macro",
+    "keter_macro", "yesod",
 ]
 resolver = "2"
 
