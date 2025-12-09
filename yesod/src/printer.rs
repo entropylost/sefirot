@@ -52,7 +52,7 @@ impl PrintBuffer {
             .head
             .atomic_ref(0)
             .fetch_add(print_type.size as u64 + 4);
-        if head + print_type.size as u64 <= self.data.len_expr() {
+        if head + print_type.size as u64 + 4 <= self.data.len_expr() {
             let mut writer = PrintWriter {
                 data: self.data.view(..),
                 head,
@@ -70,13 +70,25 @@ impl PrintBuffer {
         self.data.copy_to(&mut self.host_data.lock().unwrap());
         let mut size = 0;
         self.head.copy_to(std::slice::from_mut(&mut size));
+        if size > self.data.len() as u64 {
+            eprintln!(
+                "Warning: print buffer overflow. Total memory used {} > buffer size {}",
+                size,
+                self.data.len()
+            );
+            size = self.data.len() as u64;
+        }
         let mut printer = Printer::Reader(PrintReader {
             data: self.host_data.clone(),
             head: 0,
         });
-        while printer.as_reader().head < size {
+        while printer.as_reader().head + 4 <= size {
             let type_id = printer.as_reader().pop_type();
-            let output = (self.types.borrow()[type_id as usize].closure)(&mut printer);
+            let print_ty = &self.types.borrow()[type_id as usize];
+            if printer.as_reader().head + print_ty.size as u64 > size {
+                break;
+            }
+            let output = (print_ty.closure)(&mut printer);
             print!("{output}");
         }
         std::io::stdout().flush().unwrap();

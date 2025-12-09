@@ -13,6 +13,7 @@ static CURRENT_PRINTER: Mutex<Option<Fragile<Printer>>> = Mutex::new(None);
 
 pub fn set_capacity(capacity: usize) {
     CAPACITY.store(capacity, Ordering::SeqCst);
+    GLOBAL_PRINT_BUFFER.get();
 }
 
 pub trait PrintExt {
@@ -54,13 +55,13 @@ pub fn device_println(closure: impl Fn() -> String + 'static) {
 #[macro_export]
 macro_rules! device_print {
     ($($arg:tt)*) => {
-        device_print(move || format!($($arg)*))
+        ::yesod::printer::global::device_print(move || format!($($arg)*))
     };
 }
 #[macro_export]
 macro_rules! device_println {
     ($($arg:tt)*) => {
-        device_println(move || format!($($arg)*))
+        ::yesod::printer::global::device_println(move || format!($($arg)*))
     };
 }
 

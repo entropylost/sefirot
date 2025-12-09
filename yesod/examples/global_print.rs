@@ -4,6 +4,7 @@ use yesod::device_println;
 use yesod::printer::global::*;
 
 fn main() {
+    set_capacity(64);
     let test_fn = DEVICE.create_kernel::<fn(f32)>(&track!(|i| {
         let index = dispatch_id().x;
         let val = i * index.cast_f32();
