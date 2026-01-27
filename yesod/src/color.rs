@@ -35,7 +35,7 @@ pub fn sample_gradient<const N: usize>(map: colorous::Gradient, t: Expr<f32>) ->
     });
     let map = map.expr();
 
-    let t = t.clamp(0.0, 0.9999) * N as f32;
+    let t = t.clamp(0.0, 0.9999) * (N - 1) as f32;
     let idx = t.floor();
     let fract = t - idx;
     let idx = idx.cast_u32();

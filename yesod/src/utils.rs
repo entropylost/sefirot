@@ -1,5 +1,11 @@
+use std::any::TypeId;
+use std::collections::HashMap;
+use std::ops::Deref;
+use std::sync::{LazyLock, Mutex};
+
 use keter::lang::types::vector::Vec2;
 use keter::prelude::*;
+use keter::runtime::{KernelSignature, KernelSignature2};
 use nalgebra::SVector as Vector;
 
 #[inline]
@@ -35,4 +41,21 @@ pub fn next_float_down_pos(x: Expr<f32>) -> Expr<f32> {
 #[tracked]
 pub fn next_float_down_pos_2(a: Expr<Vec2<f32>>) -> Expr<Vec2<f32>> {
     Vec2::expr(next_float_down_pos(a.x), next_float_down_pos(a.y))
+}
+
+static MAP: LazyLock<Mutex<HashMap<TypeId, &'static Kernel<fn()>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+pub fn dispatch0_async<T: Fn()>(x: T, size: [u32; 3]) -> Command<'static, 'static> {
+    let map = &*MAP;
+    let mut map = map.lock().unwrap();
+    let t = typeid::of::<T>();
+    let kernel = if let Some(kernel) = map.get(&t) {
+        kernel
+    } else {
+        let kernel = Box::leak(Box::new(DEVICE.create_kernel_async::<fn()>(&x)));
+        map.insert(t, kernel);
+        &&*kernel
+    };
+    kernel.dispatch_async(size)
 }

@@ -21,11 +21,27 @@ pub struct Tex2dHandle<T: IoTexel> {
     pub texture: Tex2d<T>,
     pub sampler: Sampler,
 }
+impl<T: IoTexel> Tex2dHandle<T> {
+    pub fn var(&self) -> Tex2dHandleVar<T> {
+        Tex2dHandleVar {
+            internal: BINDLESS.var().array.tex2d(self.index),
+            _marker: PhantomData,
+        }
+    }
+}
 #[derive(Debug)]
 pub struct Tex3dHandle<T: IoTexel> {
     index: u32,
     pub texture: Tex3d<T>,
     pub sampler: Sampler,
+}
+impl<T: IoTexel> Tex3dHandle<T> {
+    pub fn var(&self) -> Tex3dHandleVar<T> {
+        Tex3dHandleVar {
+            internal: BINDLESS.var().array.tex3d(self.index),
+            _marker: PhantomData,
+        }
+    }
 }
 #[derive(Debug)]
 pub struct BufferHandle<T: Value> {

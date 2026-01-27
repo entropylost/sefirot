@@ -11,6 +11,7 @@ glam = "0.30.0"
 winit = "0.30.9"
 fragile = { version = "2.0.1", optional = true }
 take_mut = { version = "0.2.2", optional = true }
+typeid = "1.0.3"
 
 [features]
 global-print = ["dep:fragile", "dep:take_mut"]

@@ -127,7 +127,8 @@ pub struct PrintReader {
 }
 impl PrintReader {
     fn read<T>(&mut self, size: usize, f: impl FnOnce(&[u8]) -> T) -> T {
-        let output = f(&self.data.lock().unwrap()[self.head as usize..(self.head as usize + size)]);
+        let data = &self.data.lock().unwrap()[self.head as usize..(self.head as usize + size)];
+        let output = f(data);
         self.head += size as u64;
         output
     }
@@ -152,7 +153,8 @@ impl Printer {
             _ => panic!("Printer is not a Reader"),
         }
     }
-    pub fn load<T>(&mut self, value: Expr<T>) -> T
+    // Problem: Computing value can cause segfaults sometimes if not capturing.
+    pub fn load<T>(&mut self, value: impl Fn() -> Expr<T>) -> T
     where
         T: Default + Value,
         Expr<T>: PushBytes,
@@ -163,7 +165,7 @@ impl Printer {
                 T::default()
             }
             Self::Writer(writer) => {
-                value.push_bytes(writer);
+                value().push_bytes(writer);
                 T::default()
             }
             Self::Reader(reader) => reader.read(std::mem::size_of::<T>(), |data| unsafe {

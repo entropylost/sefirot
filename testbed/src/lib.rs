@@ -21,7 +21,8 @@ pub struct Runtime {
     display_texture: Tex2d<Vec4<f32>>,
     staging_texture: Tex2d<Vec3<f32>>,
     overlay_texture: Tex2d<Vec4<f32>>,
-    tonemap_display: Kernel<fn(Tex2d<Vec4<f32>>)>,
+    tonemap_display: Kernel<fn(Tex2d<Vec4<f32>>, bool)>,
+    perform_tonemapping: bool,
     pub mouse_scroll: Vec2<f32>,
     pub keys_down: HashSet<KeyCode>,
     pub keys_pressed: HashSet<KeyCode>,
@@ -51,6 +52,9 @@ impl Runtime {
         if self.tick.is_multiple_of(60) {
             println!("FPS: {:.2}", self.fps());
         }
+    }
+    pub fn tonemap(&mut self, enable: bool) {
+        self.perform_tonemapping = enable;
     }
     // Time of the last frame in seconds.
     pub fn frame_time_f64(&self) -> f64 {
@@ -106,6 +110,13 @@ impl Runtime {
             Vec2::splat(0.0)
         } else {
             self.cursor_position - self.last_cursor_position
+        }
+    }
+    pub fn active_cursor_position(&self) -> Vec2<f32> {
+        if self.cursor_position == Vec2::splat(f32::NEG_INFINITY) {
+            self.last_cursor_position
+        } else {
+            self.cursor_position
         }
     }
     pub fn width(&self) -> u32 {
@@ -268,6 +279,7 @@ impl<F: FnMut(&mut Runtime)> ApplicationHandler for RunningApp<F> {
                 scope.submit([runtime.tonemap_display.dispatch_async(
                     [runtime.grid_size[0], runtime.grid_size[1], 1],
                     &runtime.display_texture,
+                    &runtime.perform_tonemapping,
                 )]);
                 scope.present(&runtime.swapchain, &runtime.display_texture);
                 scope.detach();
@@ -533,11 +545,15 @@ impl AppBuilder {
             (n, view)
         });
 
-        let tonemap_display =
-            DEVICE.create_kernel_async::<fn(Tex2d<Vec4<f32>>)>(&track!(|display_texture| {
+        let tonemap_display = DEVICE.create_kernel_async::<fn(Tex2d<Vec4<f32>>, bool)>(&track!(
+            |display_texture, perform_tonemapping| {
                 let value = staging_texture.read(dispatch_id().xy());
                 let value = if let Some(params) = agx {
-                    agx::agx_tonemap(value, params)
+                    if perform_tonemapping {
+                        agx::agx_tonemap(value, params)
+                    } else {
+                        value.powf(1.0 / gamma)
+                    }
                 } else {
                     value.powf(1.0 / gamma)
                 };
@@ -559,7 +575,8 @@ impl AppBuilder {
                     }
                 }
                 staging_texture.write(dispatch_id().xy(), Vec3::splat(0.0));
-            }));
+            }
+        ));
 
         App {
             event_loop,
@@ -570,6 +587,7 @@ impl AppBuilder {
                 staging_texture,
                 overlay_texture,
                 tonemap_display,
+                perform_tonemapping: true,
                 keys_down: HashSet::new(),
                 keys_pressed: HashSet::new(),
                 buttons_down: HashSet::new(),

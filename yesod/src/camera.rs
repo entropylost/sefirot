@@ -14,6 +14,12 @@ pub struct Camera {
     pub fov: f32,
 }
 impl Camera {
+    pub fn orbit(self, radius: f32) -> Self {
+        Self {
+            pos: self.pos + self.rotation() * FVec3::Z * radius,
+            ..self
+        }
+    }
     pub fn rotation(&self) -> FMat3 {
         let view = FMat3::from_euler(glam::EulerRot::YXZ, self.yaw, self.pitch, 0.0).transpose();
         FMat3::from_cols(view.x_axis, view.z_axis, view.y_axis).transpose()
@@ -21,12 +27,13 @@ impl Camera {
     pub fn view(&self) -> View {
         let view = self.rotation();
         let ratio = (self.fov / 2.0).tan() / (self.screen_size.y / 2.0);
-        let view = FMat3::from_cols(view.x_axis * ratio, -view.y_axis * ratio, view.z_axis);
+        let transform = FMat3::from_cols(view.x_axis, -view.y_axis, view.z_axis);
 
         View {
             screen_size: self.screen_size.into(),
+            scaling: ratio,
             pos: self.pos.into(),
-            transform: view.into(),
+            transform: transform.into(),
         }
     }
     pub fn forward(&self) -> FVec3 {
@@ -73,12 +80,31 @@ impl Camera {
 #[repr(C)]
 pub struct View {
     pub screen_size: Vec2<f32>,
+    pub scaling: f32,
     pub pos: Vec3<f32>,
     pub transform: Mat3,
 }
 impl ViewExpr {
     #[tracked]
+    pub fn facing(&self) -> Expr<Vec3<f32>> {
+        self.transform.col(2)
+    }
+    #[tracked]
     pub fn ray_dir(&self, pixel: Expr<Vec2<f32>>) -> Expr<Vec3<f32>> {
-        self.transform * (pixel - self.screen_size / 2.0).extend(1.0)
+        self.transform * ((pixel - self.screen_size / 2.0) * self.scaling).extend(1.0)
+    }
+    #[tracked]
+    pub fn project3(&self, world_pos: Expr<Vec3<f32>>) -> Expr<Vec3<f32>> {
+        let local_pos = world_pos - self.pos;
+        // TODO: A little bit inefficient.
+        let view_pos = self.transform.transpose() * local_pos;
+        ((view_pos.xy() / view_pos.z) / self.scaling + self.screen_size / 2.0).extend(view_pos.z)
+    }
+    #[tracked]
+    pub fn project(&self, world_pos: Expr<Vec3<f32>>) -> Expr<Vec2<f32>> {
+        let local_pos = world_pos - self.pos;
+        // TODO: A little bit inefficient.
+        let view_pos = self.transform.transpose() * local_pos;
+        (view_pos.xy() / view_pos.z) / self.scaling + self.screen_size / 2.0
     }
 }

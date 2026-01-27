@@ -8,4 +8,5 @@ pub mod dither;
 pub mod drawing;
 pub mod printer;
 pub mod rand;
+pub mod shapes;
 pub mod utils;

@@ -129,3 +129,5 @@ pub fn agx_tonemap(color: Expr<Vec3<f32>>, params: Option<AgXParameters>) -> Exp
     };
     agx_eotf(color)
 }
+
+// For inverse: https://discord.com/channels/318590007881236480/714940749707214890/1454589752987877592

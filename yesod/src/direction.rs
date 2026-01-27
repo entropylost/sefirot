@@ -49,6 +49,7 @@ impl DirectionEncoder for SphericalEncoder {
         let h = uv.x * TAU;
 
         let vcos = uv.y * 2.0 - 1.0;
+        // TODO: Max unnecessary?
         let vsin = keter::max(0.0, 1.0 - vcos * vcos).sqrt();
 
         (h.direction() * vsin).extend(vcos)
