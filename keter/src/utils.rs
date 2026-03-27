@@ -42,6 +42,9 @@ impl<V: Value> Singleton<V> {
     pub fn new(value: V) -> Self {
         Self(DEVICE.create_buffer_from_slice(&[value]))
     }
+    pub fn new_uninit() -> Self {
+        Self(DEVICE.create_buffer::<V>(1))
+    }
     pub fn write_host(&self, value: V) -> NodeConfigs<'static>
     where
         V: Send,

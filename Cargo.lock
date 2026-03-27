@@ -1574,7 +1574,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4979f22fdb869068da03c9f7528f8297c6fd2606bc3a4affe42e6a823fdb8da4"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.6",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -1619,7 +1619,7 @@ checksum = "a7a70ba024b9dc04c27ea2f0c0548feb474ec5c54bba33a7f72f873a39d07b24"
 [[package]]
 name = "luisa_compute"
 version = "0.1.1-alpha.1"
-source = "git+https://github.com/entropylost/luisa-compute-rs?branch=main#466656fa7195cf8e1e9d7dc577946572158a030d"
+source = "git+https://github.com/entropylost/luisa-compute-rs?branch=main#d270b5296f600a3147efedc2823766ff989d1b9e"
 dependencies = [
  "bumpalo",
  "env_logger",
@@ -1647,7 +1647,7 @@ dependencies = [
 [[package]]
 name = "luisa_compute_api_types"
 version = "0.1.1-alpha.1"
-source = "git+https://github.com/entropylost/luisa-compute-rs?branch=main#466656fa7195cf8e1e9d7dc577946572158a030d"
+source = "git+https://github.com/entropylost/luisa-compute-rs?branch=main#d270b5296f600a3147efedc2823766ff989d1b9e"
 dependencies = [
  "bitflags 2.6.0",
  "cbindgen",
@@ -1657,7 +1657,7 @@ dependencies = [
 [[package]]
 name = "luisa_compute_backend"
 version = "0.1.1-alpha.1"
-source = "git+https://github.com/entropylost/luisa-compute-rs?branch=main#466656fa7195cf8e1e9d7dc577946572158a030d"
+source = "git+https://github.com/entropylost/luisa-compute-rs?branch=main#d270b5296f600a3147efedc2823766ff989d1b9e"
 dependencies = [
  "lazy_static",
  "libc",
@@ -1673,7 +1673,7 @@ dependencies = [
 [[package]]
 name = "luisa_compute_derive"
 version = "0.1.1-alpha.1"
-source = "git+https://github.com/entropylost/luisa-compute-rs?branch=main#466656fa7195cf8e1e9d7dc577946572158a030d"
+source = "git+https://github.com/entropylost/luisa-compute-rs?branch=main#d270b5296f600a3147efedc2823766ff989d1b9e"
 dependencies = [
  "luisa_compute_derive_impl",
  "syn 2.0.77",
@@ -1682,7 +1682,7 @@ dependencies = [
 [[package]]
 name = "luisa_compute_derive_impl"
 version = "0.1.1-alpha.1"
-source = "git+https://github.com/entropylost/luisa-compute-rs?branch=main#466656fa7195cf8e1e9d7dc577946572158a030d"
+source = "git+https://github.com/entropylost/luisa-compute-rs?branch=main#d270b5296f600a3147efedc2823766ff989d1b9e"
 dependencies = [
  "prettyplease",
  "proc-macro2",
@@ -1693,7 +1693,7 @@ dependencies = [
 [[package]]
 name = "luisa_compute_ir"
 version = "0.1.1-alpha.1"
-source = "git+https://github.com/entropylost/luisa-compute-rs?branch=main#466656fa7195cf8e1e9d7dc577946572158a030d"
+source = "git+https://github.com/entropylost/luisa-compute-rs?branch=main#d270b5296f600a3147efedc2823766ff989d1b9e"
 dependencies = [
  "base64ct",
  "bincode",
@@ -1715,7 +1715,7 @@ dependencies = [
 [[package]]
 name = "luisa_compute_sys"
 version = "0.1.1-alpha.1"
-source = "git+https://github.com/entropylost/luisa-compute-rs?branch=main#466656fa7195cf8e1e9d7dc577946572158a030d"
+source = "git+https://github.com/entropylost/luisa-compute-rs?branch=main#d270b5296f600a3147efedc2823766ff989d1b9e"
 dependencies = [
  "cmake",
 ]
@@ -1723,7 +1723,7 @@ dependencies = [
 [[package]]
 name = "luisa_compute_track"
 version = "0.1.1-alpha.1"
-source = "git+https://github.com/entropylost/luisa-compute-rs?branch=main#466656fa7195cf8e1e9d7dc577946572158a030d"
+source = "git+https://github.com/entropylost/luisa-compute-rs?branch=main#d270b5296f600a3147efedc2823766ff989d1b9e"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",

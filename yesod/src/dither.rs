@@ -40,6 +40,20 @@ pub fn ign(pixel: Expr<Vec2<u32>>) -> Expr<f32> {
         .fract()
 }
 
+#[tracked]
+pub fn r2dither_uniform(pixel: Expr<Vec2<u32>>) -> Expr<f32> {
+    let ig = 1.0 / crate::rand::GOLDEN_ROOTS[1];
+    let a = Vec2::new(ig as f32, (ig * ig) as f32);
+    pixel.cast_f32().dot(a).fract()
+}
+
+// Uniform distributed dithering has problems.
+#[tracked]
+pub fn r2dither_triangular(pixel: Expr<Vec2<u32>>) -> Expr<f32> {
+    let z = r2dither_uniform(pixel);
+    2.0 * if z < 0.5 { z } else { 1.0 - z }
+}
+
 // JBaker's ordering seems to work better than my attempts; could try enumerating all possible orderings.
 /*
 #[test]

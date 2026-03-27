@@ -56,14 +56,37 @@ impl DirectionEncoder for SphericalEncoder {
     }
 }
 
+/// Project a random point in [0, 1]^2 to a line on the unit sphere.
+#[tracked]
+pub fn project_line(uv: Expr<Vec2<f32>>) -> Expr<Vec3<f32>> {
+    SphericalEncoder::decode(Vec2::expr(uv.x * 0.5, uv.y))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ClarbergEncoder;
 impl DirectionEncoder for ClarbergEncoder {
+    // https://github.com/mmp/pbrt-v4/blob/8c19f304558fd7681e2fef2c395a689d0106fb05/src/pbrt/util/math.cpp#L292
     #[tracked]
     fn encode(dir: Expr<Vec3<f32>>) -> Expr<Vec2<f32>> {
-        let phi = dir.y.atan2(dir.x);
+        let adir = dir.abs();
+        let r = (1.0 - adir.z).sqrt();
+        let a = keter::max(adir.x, adir.y);
+        let b = keter::min(adir.x, adir.y);
+        // let b = if a == 0.0 { 0.0 } else { b / a };
+        let phi = (b.atan2(a) * (2.0 / PI)).var();
 
-        Vec2::splat_expr(0.0)
+        if adir.x < adir.y {
+            *phi = 1.0 - phi;
+        }
+        let v = phi * r;
+        let uv = Vec2::expr(r - v, v).var();
+
+        if dir.z < 0.0 {
+            *uv = 1.0 - uv.yx();
+        }
+        let uv = uv.copysign(dir.xy());
+
+        uv * 0.5 + 0.5
     }
     // https://www.pbr-book.org/4ed/Geometry_and_Transformations/Spherical_Geometry#EqualAreaSquareToSphere
     #[tracked]
@@ -81,6 +104,7 @@ impl DirectionEncoder for ClarbergEncoder {
         }) * (PI / 4.0);
 
         let z = (1.0 - r.sqr()).copysign(signed_dist);
-        (phi.direction().copysign(uv) * r * keter::max(2.0 - r.sqr(), 0.0).sqrt()).extend(z)
+        let horiz = phi.direction().copysign(uv);
+        (horiz * r * keter::max(2.0 - r.sqr(), 0.0).sqrt()).extend(z)
     }
 }

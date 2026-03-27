@@ -40,8 +40,7 @@ impl Camera {
         self.rotation().z_axis
     }
     pub fn forward_horiz(&self) -> FVec3 {
-        let f = self.forward();
-        FVec3::new(f.x, f.y, 0.0).normalize()
+        FVec3::new(self.yaw.sin(), self.yaw.cos(), 0.0)
     }
     pub fn right(&self) -> FVec3 {
         self.rotation().x_axis
