@@ -1,9 +1,10 @@
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
+use std::f32::consts::{GOLDEN_RATIO, TAU};
 use std::sync::{LazyLock, Mutex};
 
 use keter::lang::types::AtomicRef;
-use keter::lang::types::vector::{Vec2, Vec3, Vec4};
+use keter::lang::types::vector::{Mat3, Vec2, Vec3, Vec4};
 use keter::prelude::*;
 use keter::runtime::{AsKernelArg, KernelArg};
 use nalgebra::SVector as Vector;
@@ -81,31 +82,43 @@ pub fn once<T: 'static + Send + Sync, F: FnOnce() -> T>(f: F) -> &'static T {
     memo((), f)
 }
 
-pub fn dispatch0_async<T: Fn()>(x: T, size: [u32; 3]) -> Command<'static, 'static> {
+pub fn dispatch0<T: Fn()>(x: T, size: [u32; 3]) -> Command<'static, 'static> {
     once(|| DEVICE.create_kernel_async::<fn()>(&x)).dispatch_async(size)
 }
-pub fn dispatch1_async<S0: KernelArg + AsKernelArg<Output = S0> + 'static, T: Fn(S0::Parameter)>(
+pub fn dispatch0_blocking<T: Fn()>(x: T, size: [u32; 3]) {
+    DEVICE.default_stream().scope().submit([dispatch0(x, size)]);
+}
+pub fn dispatch1<S0: KernelArg + AsKernelArg<Output = S0> + 'static, T: Fn(S0::Parameter)>(
     x: T,
     size: [u32; 3],
     arg0: S0,
 ) -> Command<'static, 'static> {
     once(|| DEVICE.create_kernel_async::<fn(S0)>(&x)).dispatch_async(size, &arg0)
 }
-pub fn dispatch0<T: Fn()>(x: T, size: [u32; 3]) {
-    DEVICE
-        .default_stream()
-        .scope()
-        .submit([dispatch0_async(x, size)]);
-}
-pub fn dispatch1<S0: KernelArg + AsKernelArg<Output = S0> + 'static, T: Fn(S0::Parameter)>(
+pub fn dispatch1_blocking<
+    S0: KernelArg + AsKernelArg<Output = S0> + 'static,
+    T: Fn(S0::Parameter),
+>(
     x: T,
     size: [u32; 3],
-    arg0: &S0,
+    arg0: S0,
 ) {
     DEVICE
         .default_stream()
         .scope()
-        .submit([once(|| DEVICE.create_kernel_async::<fn(S0)>(&x)).dispatch_async(size, arg0)]);
+        .submit([dispatch1(x, size, arg0)]);
+}
+pub fn dispatch2<
+    S0: KernelArg + AsKernelArg<Output = S0> + 'static,
+    S1: KernelArg + AsKernelArg<Output = S1> + 'static,
+    T: Fn(S0::Parameter, S1::Parameter),
+>(
+    x: T,
+    size: [u32; 3],
+    arg0: S0,
+    arg1: S1,
+) -> Command<'static, 'static> {
+    once(|| DEVICE.create_kernel_async::<fn(S0, S1)>(&x)).dispatch_async(size, &arg0, &arg1)
 }
 
 #[tracked]
@@ -144,9 +157,40 @@ pub fn offset_ray(p: Expr<Vec3<f32>>, n: Expr<Vec3<f32>>) -> Expr<Vec3<f32>> {
     (p.abs() < ORIGIN).select(p + FLOAT_SCALE * n, p_i)
 }
 
+// https://extremelearning.com.au/how-to-evenly-distribute-points-on-a-sphere-more-effectively-than-the-canonical-fibonacci-lattice/
+#[tracked]
+pub fn spherical_fibonacci(i: Expr<u32>, n: Expr<u32>) -> Expr<Vec3<f32>> {
+    let i = i.cast_f32() + 0.5;
+    let theta = i * TAU / GOLDEN_RATIO;
+    let phi_cos = 1.0 - 2.0 * i / n.cast_f32();
+    let phi_sin = (1.0 - phi_cos * phi_cos).sqrt();
+    (theta.direction() * phi_sin).extend(phi_cos)
+}
+
+// a^t b
+#[tracked]
+pub fn outer_product_3(a: Expr<Vec3<f32>>, b: Expr<Vec3<f32>>) -> Expr<Mat3> {
+    Mat3::expr(a.x * b, a.y * b, a.z * b)
+}
+#[tracked]
+pub fn cross_matrix(a: Expr<Vec3<f32>>) -> Expr<Mat3> {
+    Mat3::expr(
+        Vec3::expr(0.0, a.z, -a.y),
+        Vec3::expr(-a.z, 0.0, a.x),
+        Vec3::expr(a.y, -a.x, 0.0),
+    )
+}
+
 pub trait FetchAddVector {
     type Target;
     fn fetch_add(self, target: Self::Target);
+}
+impl FetchAddVector for AtomicRef<Vec2<f32>> {
+    type Target = Expr<Vec2<f32>>;
+    fn fetch_add(self, value: Self::Target) {
+        self.x.fetch_add(value.x);
+        self.y.fetch_add(value.y);
+    }
 }
 impl FetchAddVector for AtomicRef<Vec3<f32>> {
     type Target = Expr<Vec3<f32>>;
@@ -163,6 +207,13 @@ impl FetchAddVector for AtomicRef<Vec4<f32>> {
         self.y.fetch_add(value.y);
         self.z.fetch_add(value.z);
         self.w.fetch_add(value.w);
+    }
+}
+impl FetchAddVector for AtomicRef<Vec2<u32>> {
+    type Target = Expr<Vec2<u32>>;
+    fn fetch_add(self, value: Self::Target) {
+        self.x.fetch_add(value.x);
+        self.y.fetch_add(value.y);
     }
 }
 impl FetchAddVector for AtomicRef<Vec3<u32>> {

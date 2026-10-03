@@ -56,6 +56,24 @@ impl DirectionEncoder for SphericalEncoder {
     }
 }
 
+// https://en.wikipedia.org/wiki/Equirectangular_projection
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EquirectangularEncoder;
+impl DirectionEncoder for EquirectangularEncoder {
+    #[tracked]
+    fn encode(dir: Expr<Vec3<f32>>) -> Expr<Vec2<f32>> {
+        let theta = dir.z.acos();
+        let phi = dir.y.atan2(dir.x);
+        Vec2::expr((phi / TAU).fract(), theta / PI)
+    }
+    #[tracked]
+    fn decode(uv: Expr<Vec2<f32>>) -> Expr<Vec3<f32>> {
+        let phi = uv.x * TAU;
+        let theta = uv.y * PI;
+        (phi.direction() * theta.sin()).extend(theta.cos())
+    }
+}
+
 /// Project a random point in [0, 1]^2 to a line on the unit sphere.
 #[tracked]
 pub fn project_line(uv: Expr<Vec2<f32>>) -> Expr<Vec3<f32>> {

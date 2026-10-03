@@ -25,6 +25,7 @@ pub fn index_matrix<const D: usize>(n: u32, ordering: &[u32]) -> Vec<u32> {
 }
 
 // apparently can be done non-recursively: https://en.wikipedia.org/wiki/Ordered_dithering
+// https://graphics-programming.org/blog/ordered-dithering-is-useful-and-good
 pub fn bayer2(n: u32) -> Vec<u32> {
     index_matrix::<2>(n, &[0, 2, 3, 1])
 }

@@ -10,6 +10,8 @@ winit = "0.30.9"
 ndarray = { version = "0.16.1", optional = true }
 video-rs = { version = "0.9.0", features = ["ndarray"], optional = true }
 take_mut = "0.2.2"
+egui_software_backend = "0.0.3"
+egui = "0.34.1"
 
 [features]
 video = ["dep:video-rs", "dep:ndarray"]

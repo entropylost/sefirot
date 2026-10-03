@@ -3,6 +3,7 @@ use std::ops::{Deref, DerefMut};
 use std::time::Instant;
 
 use agx::AgXParameters;
+use egui_software_backend::{ColorFieldOrder, EguiSoftwareRender};
 use keter::lang::types::vector::{Vec2, Vec3, Vec4};
 use keter::prelude::*;
 use take_mut::take;
@@ -13,7 +14,7 @@ use winit::event::{ElementState, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 pub use winit::keyboard::KeyCode;
 use winit::keyboard::PhysicalKey;
-use winit::window::{Window, WindowId};
+use winit::window::{Fullscreen, Window, WindowId};
 use yesod::agx;
 
 pub struct Runtime {
@@ -21,6 +22,10 @@ pub struct Runtime {
     display_texture: Tex2d<Vec4<f32>>,
     staging_texture: Tex2d<Vec3<f32>>,
     overlay_texture: Tex2d<Vec4<f32>>,
+    ui_texture: Tex2d<Vec4<f32>>,
+    ui_data: Vec<[u8; 4]>,
+    ui_renderer: EguiSoftwareRender,
+    egui_context: egui::Context,
     tonemap_display: Kernel<fn(Tex2d<Vec4<f32>>, bool)>,
     perform_tonemapping: bool,
     pub mouse_scroll: Vec2<f32>,
@@ -406,6 +411,7 @@ impl App {
             resize: false,
             hide_cursor: false,
             adjust_dpi: false,
+            fullscreen: false,
             dither: None,
         }
     }
@@ -420,6 +426,7 @@ pub struct AppBuilder {
     pub resize: bool,
     pub hide_cursor: bool,
     pub adjust_dpi: bool,
+    pub fullscreen: bool,
     pub dither: Option<u32>,
 }
 impl AppBuilder {
@@ -458,6 +465,10 @@ impl AppBuilder {
         self.dither = Some(bayer_size);
         self
     }
+    pub fn fullscreen(mut self) -> Self {
+        self.fullscreen = true;
+        self
+    }
     pub fn init(self) -> App {
         keter::init_logger();
 
@@ -473,6 +484,7 @@ impl AppBuilder {
             resize,
             hide_cursor,
             adjust_dpi,
+            fullscreen,
             dither,
         } = self;
 
@@ -480,7 +492,7 @@ impl AppBuilder {
         let mut h = grid_size[1] * scale;
 
         let event_loop = EventLoop::new().unwrap();
-        let window = Window::default_attributes()
+        let mut window = Window::default_attributes()
             .with_title(name)
             .with_resizable(resize)
             .with_inner_size(if adjust_dpi {
@@ -489,6 +501,9 @@ impl AppBuilder {
                 Size::Physical(PhysicalSize::new(w, h))
             })
             .with_resize_increments(Size::Physical(PhysicalSize::new(scale, scale)));
+        if fullscreen {
+            window.fullscreen = Some(Fullscreen::Borderless(None));
+        }
         #[expect(deprecated)]
         // Safe since we aren't on android.
         // https://docs.rs/winit/latest/winit/application/trait.ApplicationHandler.html
@@ -526,6 +541,7 @@ impl AppBuilder {
         let display_texture = DEVICE.create_tex2d::<Vec4<f32>>(swapchain.pixel_storage(), w, h, 1);
         let overlay_texture =
             DEVICE.create_tex2d::<Vec4<f32>>(PixelStorage::Float4, max_w, max_h, 1);
+        let ui_texture = DEVICE.create_tex2d::<Vec4<f32>>(PixelStorage::Byte4, max_w, max_h, 1);
         let staging_texture = DEVICE.create_tex2d::<Vec3<f32>>(
             PixelStorage::Float4,
             max_w.div_ceil(scale),
@@ -561,7 +577,10 @@ impl AppBuilder {
                     for j in 0..scale {
                         let pos = dispatch_id().xy() * scale + Vec2::expr(i, j);
                         let overlay = overlay_texture.read(pos);
-                        let value = value.lerp(overlay.xyz(), overlay.w);
+                        let ui = ui_texture.read(pos);
+                        let added_radiance =
+                            ui.xyz() * ui.w + overlay.xyz() * overlay.w * (1.0 - ui.w);
+                        let value = value * (1.0 - overlay.w) * (1.0 - ui.w) + added_radiance;
                         let value = if let Some((n, bayer_matrix)) = &bayer_matrix {
                             let pos = pos / 2;
                             let pos = pos % n;
@@ -586,6 +605,10 @@ impl AppBuilder {
                 display_texture,
                 staging_texture,
                 overlay_texture,
+                ui_texture,
+                ui_data: vec![[0; 4]; (max_w * max_h) as usize],
+                ui_renderer: EguiSoftwareRender::new(ColorFieldOrder::Rgba),
+                egui_context: egui::Context::default(),
                 tonemap_display,
                 perform_tonemapping: true,
                 keys_down: HashSet::new(),

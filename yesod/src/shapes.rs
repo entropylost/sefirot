@@ -1,8 +1,6 @@
 use keter::lang::types::vector::{Vec2, Vec3};
 use keter::prelude::*;
 
-// TODO: Add ray offset fix: file:///home/keter/Downloads/unofficial_RayTracingGems_v1.9.pdf#page=120
-
 #[tracked]
 pub fn intersect_aabb(
     start: Expr<Vec3<f32>>,

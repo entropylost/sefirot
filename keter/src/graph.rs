@@ -1,5 +1,5 @@
 use std::fmt::Debug;
-use std::sync::Exclusive;
+use std::sync::SyncView;
 
 use petgraph::algo::toposort;
 use petgraph::dot::Dot;
@@ -48,7 +48,7 @@ pub enum NodeHandle {
 }
 
 pub struct CommandNode<'a> {
-    pub command: Exclusive<Command<'a, 'a>>,
+    pub command: SyncView<Command<'a, 'a>>,
     pub debug_name: String,
 }
 impl Debug for CommandNode<'_> {
@@ -69,7 +69,7 @@ pub struct ComputeGraph<'a> {
     hierarchy: DiGraphMap<NodeHandle, ()>,
     dependency: DiGraphMap<NodeHandle, ()>,
     // Resources to be released after the graph is executed.
-    release: Vec<Exclusive<Box<dyn Send>>>,
+    release: Vec<SyncView<Box<dyn Send>>>,
 }
 assert_impl_all!(ComputeGraph: Send, Sync);
 impl Debug for ComputeGraph<'_> {
@@ -328,7 +328,7 @@ impl<'a> ComputeGraph<'a> {
                     if let Some(command) = config.command.take() {
                         let handle = NodeHandle::Command(self.commands.len());
                         self.commands.push(CommandNode {
-                            command: Exclusive::new(command),
+                            command: SyncView::new(command),
                             debug_name: String::new(),
                         });
                         handle
@@ -438,7 +438,7 @@ pub struct SingleConfig<'a> {
     pub handle: Option<NodeHandle>,
     pub debug_name: Option<String>,
     pub command: Option<Command<'a, 'a>>,
-    pub release: Option<Exclusive<Box<dyn Send>>>,
+    pub release: Option<SyncView<Box<dyn Send>>>,
 }
 
 #[must_use]
@@ -543,7 +543,7 @@ pub trait AsNodes<'a>: Sized {
         else {
             panic!("Cannot release a tuple node.");
         };
-        *r = Some(Exclusive::new(Box::new(release)));
+        *r = Some(SyncView::new(Box::new(release)));
         cfg
     }
     fn release_fn(self, release: impl FnOnce() + Send + 'static) -> NodeConfigs<'a> {

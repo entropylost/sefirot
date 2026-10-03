@@ -3,6 +3,7 @@ use std::ops::Deref;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::LazyLock;
 
+use luisa_compute::lang::types::vector::{Vec2, Vec3};
 use luisa_compute::prelude::*;
 use luisa_compute::runtime::{
     AsKernelArg, KernelArg, KernelArgEncoder, KernelBuilder, KernelParameter,
@@ -28,6 +29,9 @@ impl<T: IoTexel> Tex2dHandle<T> {
             _marker: PhantomData,
         }
     }
+    pub fn size(&self) -> Vec2<u32> {
+        Vec2::new(self.texture.width(), self.texture.height())
+    }
 }
 #[derive(Debug)]
 pub struct Tex3dHandle<T: IoTexel> {
@@ -41,6 +45,13 @@ impl<T: IoTexel> Tex3dHandle<T> {
             internal: BINDLESS.var().array.tex3d(self.index),
             _marker: PhantomData,
         }
+    }
+    pub fn size(&self) -> Vec3<u32> {
+        Vec3::new(
+            self.texture.width(),
+            self.texture.height(),
+            self.texture.depth(),
+        )
     }
 }
 #[derive(Debug)]
