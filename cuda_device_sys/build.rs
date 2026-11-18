@@ -7,6 +7,10 @@ fn main() {
 
     let bindings = bindgen::Builder::default()
         .header("wrapper.h")
+        .blocklist_function("malloc")
+        .blocklist_function("free")
+        .blocklist_function("realloc")
+        .blocklist_function("calloc")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .generate()
         .expect("unable to generate bindings");

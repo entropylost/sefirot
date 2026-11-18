@@ -1,4 +1,3 @@
-#![feature(exclusive_wrapper)]
 #![feature(duration_millis_float)]
 
 use std::sync::LazyLock;
