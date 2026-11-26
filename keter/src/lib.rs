@@ -1,5 +1,3 @@
-#![feature(duration_millis_float)]
-
 use std::sync::LazyLock;
 
 use luisa_compute::runtime::Device;

@@ -149,7 +149,7 @@ pub fn decode_morton2_16(b: Expr<u32>) -> Expr<Vec2<u32>> {
 pub fn offset_ray(p: Expr<Vec3<f32>>, n: Expr<Vec3<f32>>) -> Expr<Vec3<f32>> {
     const ORIGIN: f32 = 1.0 / 32.0;
     const FLOAT_SCALE: f32 = 1.0 / 65536.0;
-    const INT_SCALE: f32 = 65536.0; // originally 256.0 but that causes artifacts.
+    const INT_SCALE: f32 = 256.0;
 
     let of_i = (INT_SCALE * n).cast_i32();
     let p_i = p.bitcast::<Vec3<i32>>() + (p < 0.0_f32).select(-of_i, of_i);
