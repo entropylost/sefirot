@@ -1,8 +1,0 @@
-[package]
-name = "sefirot_grid"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-parking_lot = "0.12.1"
-sefirot = { path = "../sefirot" }

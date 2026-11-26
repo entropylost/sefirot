@@ -1,15 +1,11 @@
 [workspace]
 members = [
-    "sefirot",
-    "bevy_sefirot_macro",
-    "bevy_sefirot",
     "id_newtype",
-    "sefirot_grid",
-    "sefirot_macro",
     "cuda_device_sys",
     "testbed",
     "keter",
-    "keter_macro", "yesod",
+    "keter_macro",
+    "yesod",
 ]
 resolver = "2"
 
